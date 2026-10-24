@@ -6,7 +6,6 @@ import { VideoQuality, type RemoteTrackPublication } from "livekit-client";
 import { AirPlayIcon, FullscreenIcon } from "./Icons";
 import { QualityMenu } from "./QualityMenu";
 import { openTvSheet, useAppleAirPlaySupport, useVideoAirPlay } from "./useAirPlay";
-import { useFullscreenSupport } from "./useFullscreenSupport";
 
 const OPTIONS = [
   { id: "auto", label: "Auto" },
@@ -15,7 +14,6 @@ const OPTIONS = [
 ];
 
 export function ScreenBar({ share, container, onFullscreen }: { share: TrackReference; container: HTMLElement | null; onFullscreen: () => void }) {
-  const canFullscreen = useFullscreenSupport();
   const appleAirPlay = useAppleAirPlaySupport();
   const [quality, setQuality] = useState("auto");
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
@@ -61,7 +59,7 @@ export function ScreenBar({ share, container, onFullscreen }: { share: TrackRefe
             </button>
           )
         )}
-        {canFullscreen && (
+        {(
           <button onClick={onFullscreen} aria-label="Fullscreen" className="flex size-10 items-center justify-center rounded-full text-xl transition hover:bg-white/10 active:scale-95">
             <FullscreenIcon />
           </button>

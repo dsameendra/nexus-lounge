@@ -32,6 +32,7 @@ app.post("/rooms", async (request, reply) => {
 app.get<{ Params: { id: string } }>("/rooms/:id", async (request, reply) => {
   const user = authenticate(request);
   if (!user) return reply.code(401).send({ error: "Unauthorized" });
+  if (!allowAttempt(`lookup:${user.sub}`, 30)) return reply.code(429).send({ error: "Too many attempts. Wait a moment." });
   const room = roomIdSchema.safeParse(request.params.id).success ? getRoom(request.params.id) : undefined;
   if (!room) return reply.code(404).send({ error: "Room not found" });
   return room;

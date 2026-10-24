@@ -1,13 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckIcon, GearIcon, LinkIcon, TvIcon } from "./Icons";
+import { VoiceToolbar } from "./Dock";
+import { CheckIcon, GearIcon, LinkIcon, SidebarIcon, TvIcon } from "./Icons";
 import { Logo } from "./Logo";
 import { RoomSettingsSheet } from "./RoomSettingsSheet";
 import { TvSheet } from "./TvSheet";
 import { useRoom } from "./RoomProvider";
 
-export function RoomHeader() {
+export function RoomHeader({
+  panelOpen,
+  onTogglePanel,
+  unread,
+  deafened,
+  onDeafenedChange,
+  onLeave,
+}: {
+  panelOpen: boolean;
+  onTogglePanel: () => void;
+  unread: number;
+  deafened: boolean;
+  onDeafenedChange: (value: boolean) => void;
+  onLeave: () => void;
+}) {
   const { state, status, isHost } = useRoom();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -43,6 +58,11 @@ export function RoomHeader() {
         {status === "reconnecting" && <span className="text-xs text-warn">Reconnecting…</span>}
       </div>
       <div className="flex items-center gap-2">
+        {!panelOpen && (
+          <div className="mr-1 hidden lg:block">
+            <VoiceToolbar deafened={deafened} onDeafenedChange={onDeafenedChange} onLeave={onLeave} />
+          </div>
+        )}
         {isHost && (
           <button
             onClick={() => setSettingsOpen(true)}
@@ -65,6 +85,20 @@ export function RoomHeader() {
         >
           {copied ? <CheckIcon className="text-live" /> : <LinkIcon />}
           {copied ? "Link copied" : "Invite"}
+        </button>
+        <button
+          onClick={onTogglePanel}
+          aria-label={panelOpen ? "Hide side panel" : "Show side panel"}
+          aria-pressed={!panelOpen}
+          title={`${panelOpen ? "Hide" : "Show"} side panel (\\)`}
+          className="relative hidden size-9 items-center justify-center rounded-full bg-white/10 text-lg transition hover:bg-white/15 active:scale-95 lg:flex"
+        >
+          <SidebarIcon />
+          {!panelOpen && unread > 0 && (
+            <span className="absolute -top-1 -right-1 flex min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] leading-4 font-semibold">
+              {unread > 9 ? "9+" : unread}
+            </span>
+          )}
         </button>
       </div>
       </div>

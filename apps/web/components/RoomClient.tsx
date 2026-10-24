@@ -8,7 +8,9 @@ import type { RoomOptions } from "livekit-client";
 import { joinResponseSchema, type JoinResponse } from "@nexus/shared";
 import { RoomProvider, type Self } from "./RoomProvider";
 import { RoomView } from "./RoomView";
+import { SoundCues } from "./SoundCues";
 import { VoiceAudio } from "./VoiceAudio";
+import { unlockAudio } from "@/lib/sounds";
 import { PushToTalkProvider } from "./PushToTalk";
 import { VoiceSettingsProvider } from "./VoiceSettings";
 
@@ -163,7 +165,14 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
           {self.guest ? " (guest)" : ""}. Your browser will ask for microphone access.
         </p>
         <div className="mt-6">
-          <PrimaryButton onClick={() => setJoined(true)}>Join room</PrimaryButton>
+          <PrimaryButton
+            onClick={() => {
+              unlockAudio();
+              setJoined(true);
+            }}
+          >
+            Join room
+          </PrimaryButton>
         </div>
       </Centered>
     );
@@ -212,6 +221,7 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
         <VoiceSettingsProvider>
           <PushToTalkProvider deafened={deafened}>
           <VoiceAudio deafened={deafened} />
+          <SoundCues deafened={deafened} />
           <RoomView
             deafened={deafened}
             onDeafenedChange={setDeafened}

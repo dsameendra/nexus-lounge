@@ -31,6 +31,13 @@ export const REACTION_EMOJIS = ["🔥", "😂", "😮", "👏", "❤️", "🎉"
 export const reactionEmojiSchema = z.enum(REACTION_EMOJIS);
 export type ReactionEmoji = z.infer<typeof reactionEmojiSchema>;
 
+export function parseRoomCode(input: string): string | null {
+  const text = input.trim().toLowerCase();
+  const fromLink = text.match(/\/room\/([a-z0-9]{8})(?:[/?#]|$)/);
+  const candidate = fromLink?.[1] ?? text.replace(/[^a-z0-9]/g, "");
+  return /^[a-z0-9]{8}$/.test(candidate) ? candidate : null;
+}
+
 export const roomNameSchema = z.string().trim().max(40);
 
 export const roomInfoSchema = z.object({

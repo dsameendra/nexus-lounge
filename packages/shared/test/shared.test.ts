@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  CUES,
+  MAX_CUE_GAIN,
+  MAX_CUE_SECONDS,
   atLiveEdge,
+  cueLength,
   clientMessageSchema,
   computeCorrection,
   defaultRoomSettings,
@@ -17,6 +21,7 @@ import {
   liveEdgeTarget,
   median,
   parseMediaUrl,
+  parseRoomCode,
   reactionEmojiSchema,
   roomSettingsSchema,
   streamKey,
@@ -165,4 +170,32 @@ test("screen ids are per person", () => {
   assert.equal(clientMessageSchema.safeParse({ type: "presence.voice", deafened: true }).success, true);
   assert.equal(clientMessageSchema.safeParse({ type: "share.stop", userId: "x" }).success, true);
   assert.equal(roomSettingsSchema.safeParse({ ...defaultRoomSettings, sharing: "nobody" }).success, false);
+});
+
+test("sound cues are short, quiet and directional", () => {
+  for (const [name, cue] of Object.entries(CUES)) {
+    assert.ok(cue.gain <= MAX_CUE_GAIN, `${name} stays quiet`);
+    assert.ok(cueLength(cue) <= MAX_CUE_SECONDS, `${name} stays short`);
+    for (const note of cue.notes) assert.ok(note.freq >= 200 && note.freq <= 1000, `${name} avoids harsh pitches`);
+  }
+  const first = (name: keyof typeof CUES) => CUES[name].notes.map((note) => note.freq);
+  const isDescending = (values: number[]) => values.every((value, index) => index === 0 || value < values[index - 1]!);
+  const isAscending = (values: number[]) => values.every((value, index) => index === 0 || value > values[index - 1]!);
+  assert.ok(isDescending(first("mute")) && isAscending(first("unmute")), "mute falls, unmute rises");
+  assert.ok(isDescending(first("deafen")) && isAscending(first("undeafen")), "deafen falls, undeafen rises");
+  assert.ok(isAscending(first("join")) && isDescending(first("leave")), "joining rises, leaving falls");
+  assert.equal(CUES.restricted.notes.length, 2, "owner restrictions are a distinct double tone");
+});
+
+test("room codes can be typed, pasted or taken from an invite link", () => {
+  assert.equal(parseRoomCode("abcd1234"), "abcd1234");
+  assert.equal(parseRoomCode("  ABCD 1234 "), "abcd1234");
+  assert.equal(parseRoomCode("abcd-1234"), "abcd1234");
+  assert.equal(parseRoomCode("https://web-production-795645.up.railway.app/room/abcd1234"), "abcd1234");
+  assert.equal(parseRoomCode("https://example.com/room/ABCD1234/tv?x=1"), "abcd1234");
+  assert.equal(parseRoomCode("abcd123"), null, "too short");
+  assert.equal(parseRoomCode("abcd12345"), null, "too long");
+  assert.equal(parseRoomCode("https://example.com/room/abcd123"), null);
+  assert.equal(parseRoomCode(""), null);
+  assert.equal(parseRoomCode("hello world!"), null);
 });

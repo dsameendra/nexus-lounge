@@ -71,6 +71,7 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
   private current: MediaSource | null = null;
   private pendingPlay = false;
   private playedOnce = false;
+  private playTimer: ReturnType<typeof setInterval> | undefined;
   private muted = false;
   private volume = 1;
   private destroyed = false;
@@ -93,10 +94,15 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
       void this.create(source, startAt, autoplay);
       return;
     }
+    if (autoplay) this.player.setMuted(true);
     if (source.isLive) this.player.setChannel(source.id);
     else this.player.setVideo(`v${source.id}`, startAt ?? 0);
-    if (autoplay) this.player.play();
-    else this.player.pause();
+    if (autoplay) {
+      this.player.play();
+      this.ensurePlaying();
+    } else {
+      this.player.pause();
+    }
   }
 
   private async create(source: MediaSource, startAt: number | null, autoplay: boolean) {
@@ -115,7 +121,10 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
       this.player.addEventListener(Twitch.Player.READY, () => {
         this.ready = true;
         this.player?.setVolume(this.volume);
-        if (this.pendingPlay) this.player?.play();
+        if (this.pendingPlay) {
+          this.player?.play();
+          this.ensurePlaying();
+        }
         this.emit("ready");
       });
       this.player.addEventListener(Twitch.Player.PLAYING, () => {
@@ -139,6 +148,20 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
       this.error = "Couldn't load the Twitch player. Check your connection or ad blocker.";
       this.emit("error");
     }
+  }
+
+  private ensurePlaying() {
+    clearInterval(this.playTimer);
+    let attempts = 0;
+    this.playTimer = setInterval(() => {
+      attempts += 1;
+      const player = this.player;
+      if (!player || !this.ready || !this.pendingPlay || attempts > 14 || !player.isPaused()) {
+        clearInterval(this.playTimer);
+        return;
+      }
+      player.play();
+    }, 500);
   }
 
   play() {
@@ -226,6 +249,7 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
   }
 
   destroy() {
+    clearInterval(this.playTimer);
     this.destroyed = true;
     this.mount.remove();
     this.player = null;

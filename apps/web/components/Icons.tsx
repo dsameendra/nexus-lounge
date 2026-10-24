@@ -40,9 +40,14 @@ export const MicIcon = (p: P) => (
 );
 export const MicOffIcon = (p: P) => (
   <Icon {...p}>
-    <path d="M3 3l18 18M9 9v2a3 3 0 0 0 4.7 2.5M15 10.5V6a3 3 0 0 0-5.7-1.3M5.5 11a6.5 6.5 0 0 0 10.6 5M18.5 11a6.4 6.4 0 0 1-.5 2.5M12 17.5V21" />
+    <g opacity={0.5}>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+    </g>
+    <path d="M4 4L20 20" />
   </Icon>
 );
+
 export const HeadphonesIcon = (p: P) => (
   <Icon {...p}>
     <path d="M4 15v-3a8 8 0 0 1 16 0v3" />
@@ -52,11 +57,15 @@ export const HeadphonesIcon = (p: P) => (
 );
 export const HeadphonesOffIcon = (p: P) => (
   <Icon {...p}>
-    <path d="M3 3l18 18M4 15v-3a8 8 0 0 1 12.5-6.6M20 12v3" />
-    <rect x="3.5" y="14" width="4" height="6" rx="1.6" />
-    <rect x="16.5" y="14" width="4" height="6" rx="1.6" />
+    <g opacity={0.5}>
+      <path d="M4 15v-3a8 8 0 0 1 16 0v3" />
+      <rect x="3.5" y="14" width="4" height="6" rx="1.6" />
+      <rect x="16.5" y="14" width="4" height="6" rx="1.6" />
+    </g>
+    <path d="M4 4L20 20" />
   </Icon>
 );
+
 export const ScreenIcon = (p: P) => (
   <Icon {...p}>
     <rect x="3" y="4" width="18" height="12.5" rx="2.4" />
@@ -157,9 +166,9 @@ export const TvIcon = (p: P) => (
   </Icon>
 );
 export const GearIcon = (p: P) => (
-  <Icon {...p}>
-    <circle cx="12" cy="12" r="3" />
-    <path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6" />
+  <Icon {...p} strokeWidth={1.6}>
+    <path d="M9.98 5.40 L10.39 2.84 L13.61 2.84 L14.02 5.40 L15.24 5.91 L17.33 4.38 L19.62 6.67 L18.09 8.76 L18.60 9.98 L21.16 10.39 L21.16 13.61 L18.60 14.02 L18.09 15.24 L19.62 17.33 L17.33 19.62 L15.24 18.09 L14.02 18.60 L13.61 21.16 L10.39 21.16 L9.98 18.60 L8.76 18.09 L6.67 19.62 L4.38 17.33 L5.91 15.24 L5.40 14.02 L2.84 13.61 L2.84 10.39 L5.40 9.98 L5.91 8.76 L4.38 6.67 L6.67 4.38 L8.76 5.91Z" />
+    <circle cx="12" cy="12" r="2.9" />
   </Icon>
 );
 export const AirPlayIcon = (p: P) => (
@@ -188,5 +197,11 @@ export const CaptionsIcon = (p: P) => (
   <Icon {...p}>
     <rect x="3" y="5" width="18" height="14" rx="3.2" />
     <path d="M10.4 10.2a2.4 2.4 0 1 0 0 3.6M17.4 10.2a2.4 2.4 0 1 0 0 3.6" />
+  </Icon>
+);
+export const SidebarIcon = (p: P) => (
+  <Icon {...p}>
+    <rect x="3" y="4.5" width="18" height="15" rx="3.2" />
+    <path d="M15 4.5v15" />
   </Icon>
 );

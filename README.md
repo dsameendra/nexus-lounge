@@ -1,8 +1,31 @@
+<div align="center">
+
+<img src="docs/icon.png" width="112" height="112" alt="Nexus Lounge icon" />
+
 # Nexus Lounge
 
-A web app for watching things together online: a shared room with voice chat, text chat, synced YouTube and Twitch playback, and screen sharing. It installs as an app on phones and desktops, and has a TV mode for the big screen.
+**Watch together, wherever you are.**
+Voice, chat, synced YouTube and Twitch, and screen sharing in one shared room. Installs as an app on phones and desktops.
 
-I built it so my friends and I could watch League of Legends Worlds together, but it's general purpose and works for any virtual watch party: sports, premieres, VODs, movie nights.
+<img src="docs/screenshots/desktop-room.png" alt="A room with a synced video, voice and chat" width="860" />
+
+</div>
+
+I built it so my friends and I could watch League of Legends Worlds together, but it's general purpose: sports, premieres, VODs, movie nights.
+
+## Screenshots
+
+| Phone | Phone: streams | Phone: landscape |
+| :---: | :---: | :---: |
+| <img src="docs/screenshots/mobile-chat.png" width="200" /> | <img src="docs/screenshots/mobile-streams.png" width="200" /> | <img src="docs/screenshots/mobile-landscape-fullscreen.png" width="330" /> |
+
+| Collapsed side panel | People | Room settings |
+| :---: | :---: | :---: |
+| <img src="docs/screenshots/panel-collapsed.png" width="290" /> | <img src="docs/screenshots/people-menu.png" width="290" /> | <img src="docs/screenshots/room-settings.png" width="290" /> |
+
+<details><summary>TV mode</summary>
+<img src="docs/screenshots/tv-mode.png" alt="TV mode shows only the video" />
+</details>
 
 ## What you can do
 
@@ -34,24 +57,42 @@ I built it so my friends and I could watch League of Legends Worlds together, bu
 - Click someone for their profile; right-click for per-person volume and "mute for me". The owner can mute or deafen anyone for everyone.
 - Text chat in the side panel, with an unread badge.
 
+**Phones and tablets**
+- The phone layout keeps the video, tabs and chat visible with a compact voice dock below; nothing covers the content.
+- Fullscreen on every device: the native Fullscreen API where it exists, and an immersive mode on iPhone (which has none) that fills the screen and locks to landscape where the browser allows.
+- Installable PWA with an offline page, app shortcuts and install screenshots.
+
+**Desktop**
+- Hide the side panel (button or the `\` key) to be fully immersed. Voice controls move into the header and an unread badge keeps you posted on chat.
+
 **Any screen**
 - Responsive on phone, tablet, laptop and desktop (including landscape phones).
 - Installable as a PWA.
 - TV mode: open the TV view on a TV browser (enter the code it shows in your room) or cast a browser tab. It shows only the video, with no controls.
 
-## Layout
+## Architecture
+
+```mermaid
+flowchart LR
+  B[Browser<br/>Next.js app] -- HTTPS --> W[web<br/>Next.js + Auth.js]
+  W -- signed token --> S[server<br/>Fastify + ws]
+  B -- WebSocket ticket --> S
+  B -- WebRTC --> L[(LiveKit)]
+  S -- grants and tokens --> L
+```
 
 ```
 apps/web         Next.js app (UI, Discord login via Auth.js, thin API routes)
 apps/server      Fastify + ws (rooms in memory, LiveKit tokens, sync WebSocket)
 packages/shared  zod schemas, types and the sync maths shared by both
+docs/            Railway notes and screenshots
 ```
 
-## Requirements
+## Getting started
 
-Node 22.18+ (the server runs TypeScript directly), pnpm 10+, and Docker only if you self-host LiveKit locally.
+**Requirements:** Node 22.18+ (the server runs TypeScript directly), pnpm 10+, and Docker only if you self-host LiveKit locally.
 
-## Setup
+**Setup**
 
 1. `pnpm install`
 2. `cp .env.example .env` and fill it in (below).
@@ -96,31 +137,16 @@ Node 22.18+ (the server runs TypeScript directly), pnpm 10+, and Docker only if 
 ## Tests
 
 ```
-pnpm --filter @nexus/shared test   # URL parsing, drift maths, live-edge helpers, tokens
+pnpm typecheck
+pnpm --filter @nexus/shared test   # URL parsing, drift maths, live-edge helpers, tokens, sound cues
 pnpm --filter @nexus/server test   # spawns the server; permissions, guest approval, removal, moderation,
                                    # late joiners, passwords, tickets, TV pairing over real WebSockets
-pnpm typecheck
 ```
+
+CI runs the same checks plus a production build on every push.
 
 ## Deploy on Railway
 
-Two services built from the Dockerfiles in `apps/server` and `apps/web` (the build context is the repo root, so the shared package is included). LiveKit must be [LiveKit Cloud](https://cloud.livekit.io), since Railway doesn't support UDP.
-
-```
-railway login
-railway link --project <your project>
-railway add --service server --variables RAILWAY_DOCKERFILE_PATH=apps/server/Dockerfile
-railway add --service web    --variables RAILWAY_DOCKERFILE_PATH=apps/web/Dockerfile
-railway domain --service server && railway domain --service web
-```
-
-Variables (set with `railway variables --service <name> --set KEY=VALUE`):
-
-| Service | Variables |
-| --- | --- |
-| `server` | `AUTH_SECRET`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` |
-| `web` | `AUTH_SECRET` (same value as the server), `AUTH_URL` (the web domain), `NEXT_PUBLIC_SERVER_WS_URL` (`wss://<server domain>/ws`), `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` |
-
-Railway sets `PORT` itself. Add `https://<web domain>/api/auth/callback/discord` as a redirect in the Discord developer portal. Deploy with `railway up --service server --ci` and `railway up --service web --ci`, or connect the GitHub repo to each service in the Railway dashboard for deploys on push (set the Dockerfile path variable as above).
+Two services built from the Dockerfiles in `apps/server` and `apps/web`, auto-deployed from `main`. LiveKit must be [LiveKit Cloud](https://cloud.livekit.io), since Railway doesn't support UDP. Step-by-step instructions and config templates are in [docs/railway-deploy.md](docs/railway-deploy.md).
 
 Every server deploy or restart ends all rooms, because they live in memory. Keep the server at a single instance.

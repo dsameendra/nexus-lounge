@@ -3,6 +3,7 @@ import { auth, signOut } from "@/auth";
 import { CreateRoomButton } from "@/components/CreateRoomButton";
 import { Logo } from "@/components/Logo";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { JoinRoomForm } from "@/components/JoinRoomForm";
 
 export default async function HomePage() {
   const session = await auth();
@@ -22,12 +23,18 @@ export default async function HomePage() {
         </div>
         <div className="rounded-[var(--radius-sheet)] bg-panel p-5">
           {guest ? (
-            <p className="py-2 text-center text-sm text-label-2">
-              Guests can join rooms from an invite link. Sign in with Discord to create your own room.
-            </p>
+            <p className="mb-4 text-center text-sm text-label-2">Guests can join rooms. Sign in with Discord to create your own.</p>
           ) : (
-            <CreateRoomButton />
+            <>
+              <CreateRoomButton />
+              <div className="my-4 flex items-center gap-3 text-xs text-label-3">
+                <span className="h-px flex-1 bg-line" />
+                or join a room
+                <span className="h-px flex-1 bg-line" />
+              </div>
+            </>
           )}
+          <JoinRoomForm />
         </div>
         <InstallPrompt />
         <form

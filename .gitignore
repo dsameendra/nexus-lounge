@@ -7,3 +7,6 @@ dist
 .DS_Store
 .env.railway
 .tmp-*
+
+.env*
+!.env.example

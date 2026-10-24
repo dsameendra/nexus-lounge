@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { FloatingReactions, ReactionBar, ReactionStrip } from "./Reactions";
+import { FloatingReactions, ReactionBar, ReactionPicker, ReactionStrip } from "./Reactions";
 import { ScreenBar } from "./ScreenBar";
 import { isScreenId, screenIdentity } from "@nexus/shared";
 import { Pill, ProviderBadge } from "./Badges";
@@ -10,6 +10,7 @@ import { BroadcastIcon, FilmIcon, PlusIcon, SyncIcon } from "./Icons";
 import { useRoom } from "./RoomProvider";
 import { StreamPlayer } from "./StreamPlayer";
 import { shareName, useEffectiveSource } from "./useEffectiveSource";
+import { useStageFullscreen } from "./useStageFullscreen";
 import { WatchArea } from "./WatchArea";
 
 export function Stage({ onAdd }: { onAdd: () => void }) {
@@ -17,18 +18,7 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
   const { effectiveId, stream, share, shares, featuredId, isFollowing } = useEffectiveSource();
   const boxRef = useRef<HTMLDivElement>(null);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
-  const [fullscreen, setFullscreen] = useState(false);
-
-  useEffect(() => {
-    const update = () => setFullscreen(document.fullscreenElement === boxRef.current);
-    document.addEventListener("fullscreenchange", update);
-    return () => document.removeEventListener("fullscreenchange", update);
-  }, []);
-
-  function toggleFullscreen() {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void boxRef.current?.requestFullscreen?.();
-  }
+  const { active: fullscreen, immersive, toggle: toggleFullscreen } = useStageFullscreen(boxRef);
 
   const showingScreen = Boolean(share);
   const twitchLive = stream?.source.type === "twitch" && stream.source.isLive;
@@ -42,7 +32,16 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
 
   return (
     <section aria-label="Now watching">
-      <div ref={boxRef} className={fullscreen ? "flex h-full w-full flex-col bg-black" : "bg-black lg:bg-transparent"}>
+      <div
+        ref={boxRef}
+        className={
+          immersive
+            ? "fixed inset-0 z-[70] flex flex-col bg-black pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]"
+            : fullscreen
+              ? "flex h-full w-full flex-col bg-black"
+              : "bg-black lg:bg-transparent"
+        }
+      >
       <div
         className={`relative w-full overflow-hidden bg-black ${
           fullscreen
@@ -104,7 +103,13 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
               </div>
               <h1 className="line-clamp-2 text-base leading-snug font-semibold sm:text-lg">{heading}</h1>
             </div>
-            {isController && effectiveId && featuredId !== effectiveId && (
+            <div className="flex shrink-0 items-center gap-2">
+              {effectiveId && reactionsOn && (
+                <div className="lg:hidden">
+                  <ReactionPicker />
+                </div>
+              )}
+              {isController && effectiveId && featuredId !== effectiveId && (
               <button
                 onClick={() => send({ type: "stream.feature", streamId: effectiveId })}
                 className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-4 text-sm font-medium transition hover:bg-white/15 active:scale-95"
@@ -112,10 +117,15 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
                 <BroadcastIcon /> Show to everyone
               </button>
             )}
+            </div>
           </div>
         )}
 
-        {effectiveId && reactionsOn && <ReactionBar />}
+        {effectiveId && reactionsOn && (
+          <div className="hidden lg:block">
+            <ReactionBar />
+          </div>
+        )}
 
         {roomIsElsewhere && (
           <div className="animate-fade flex items-center justify-between gap-3 rounded-2xl bg-accent/15 px-4 py-3">
@@ -132,9 +142,8 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
         )}
 
         {twitchLive && (
-          <p className="rounded-2xl bg-warn/12 px-4 py-3 text-sm leading-relaxed text-warn">
-            Twitch live streams can't be time-synced, so everyone sees them at their own delay. For a frame-accurate shared view, have one person share
-            this tab with <span className="font-semibold">Share screen</span>.
+          <p className="rounded-2xl bg-warn/12 px-4 py-3 text-sm leading-relaxed text-warn max-sm:py-2 max-sm:text-xs">
+            Twitch live streams can't be time-synced, so everyone sees them at their own delay.<span className="max-sm:hidden"> For a frame-accurate shared view, have one person share this tab with <span className="font-semibold">Share screen</span>.</span>
           </p>
         )}
       </div>

@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { isAllowedPttKey, isTypingTarget, keyLabel } from "@nexus/shared";
 import { useConnectionState, useLocalParticipant } from "@livekit/components-react";
 import { ConnectionState } from "livekit-client";
+import { cuesEnabled, playCue, setCuesEnabled } from "@/lib/sounds";
 import { useRoom } from "./RoomProvider";
 import { Sheet } from "./Sheet";
 import { Switch } from "./Switch";
@@ -116,6 +117,7 @@ export function usePushToTalk() {
 export function VoiceSettingsSheet({ onClose }: { onClose: () => void }) {
   const ptt = usePushToTalk();
   const [capturing, setCapturing] = useState(false);
+  const [cues, setCues] = useState(cuesEnabled);
 
   useEffect(() => {
     if (!capturing) return;
@@ -151,6 +153,18 @@ export function VoiceSettingsSheet({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         )}
+      </div>
+      <div className="mt-4 overflow-hidden rounded-2xl bg-panel-2">
+        <Switch
+          checked={cues}
+          onChange={(enabled) => {
+            setCues(enabled);
+            setCuesEnabled(enabled);
+            if (enabled) playCue("join");
+          }}
+          label="Sound cues"
+          description="Soft tones when you mute or deafen, when the owner mutes you, and when someone joins or leaves."
+        />
       </div>
       <p className="mt-3 px-1 text-xs leading-relaxed text-label-2">
         The shortcut works while this tab is focused and is ignored while you type in the chat. Press Esc to cancel changing it.

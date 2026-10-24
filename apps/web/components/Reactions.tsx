@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Popover } from "./Popover";
 import { REACTION_EMOJIS } from "@nexus/shared";
 import type { ReactionEvent } from "@/lib/use-room-connection";
 import { useRoom } from "./RoomProvider";
@@ -89,5 +90,46 @@ export function ReactionStrip() {
         </span>
       ))}
     </div>
+  );
+}
+
+export function ReactionPicker() {
+  const { state, send } = useRoom();
+  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
+  if (!state.room.settings.reactions) return null;
+
+  return (
+    <>
+      <button
+        onClick={(event) => {
+          const box = event.currentTarget.getBoundingClientRect();
+          setAnchor(anchor ? null : { x: Math.max(8, box.right - 216), y: box.top - 8 });
+        }}
+        aria-label="Send a reaction"
+        aria-expanded={Boolean(anchor)}
+        className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-lg transition active:scale-90"
+      >
+        😀
+      </button>
+      {anchor && (
+        <Popover x={anchor.x} y={anchor.y} placement="above" width="w-[13.5rem]" label="Reactions" onClose={() => setAnchor(null)}>
+          <div className="grid grid-cols-4 gap-1 p-2">
+            {REACTION_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => {
+                  send({ type: "reaction.send", emoji });
+                  setAnchor(null);
+                }}
+                aria-label={`React ${emoji}`}
+                className="flex size-11 items-center justify-center rounded-xl text-2xl transition hover:bg-white/10 active:scale-90"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </Popover>
+      )}
+    </>
   );
 }

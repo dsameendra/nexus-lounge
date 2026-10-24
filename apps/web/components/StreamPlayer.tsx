@@ -11,7 +11,6 @@ import { PlayerControls, type SyncStatus } from "./PlayerControls";
 import { useRoom } from "./RoomProvider";
 import { StreamArt } from "./StreamArt";
 import { openTvSheet, useAppleAirPlaySupport } from "./useAirPlay";
-import { useFullscreenSupport } from "./useFullscreenSupport";
 
 function sourceUrl(stream: Stream) {
   const { type, id, isLive } = stream.source;
@@ -81,7 +80,7 @@ export function StreamPlayer({
   fullscreen?: boolean;
   controlsSlot?: HTMLElement | null;
 }) {
-  const canFullscreen = useFullscreenSupport();
+  const canFullscreen = true;
   const appleAirPlay = useAppleAirPlaySupport();
   const { clock, send, canControlStream, state: roomState, isController } = useRoom();
   const advancedFor = useRef<string | null>(null);
@@ -139,15 +138,29 @@ export function StreamPlayer({
     [patch],
   );
 
+  const resetTwitch = useCallback(() => {
+    const existing = adapters.current.twitch;
+    if (!existing) return;
+    existing.destroy();
+    delete adapters.current.twitch;
+  }, []);
+
   const tick = useCallback(() => {
     const { stream, visible, volume, muted } = latest.current;
     const m = mem.current;
 
     for (const type of ["youtube", "twitch"] as const) {
       const other = adapters.current[type];
-      if (other?.ready && (!stream || !visible || stream.source.type !== type) && other.getState() === "playing") other.pause();
+      const inactive = !stream || !visible || stream.source.type !== type;
+      if (type === "twitch" && other && inactive) {
+        resetTwitch();
+        continue;
+      }
+      if (other?.ready && inactive && other.getState() === "playing") other.pause();
     }
     if (!stream || !visible) return;
+
+    if (stream.source.type === "twitch" && m.loadedId !== null && m.loadedId !== stream.id) resetTwitch();
 
     const adapter = ensureAdapter(stream.source.type);
     if (!adapter || !clock.ready || (!adapter.ready && stream.source.type === "youtube")) {
@@ -297,7 +310,7 @@ export function StreamPlayer({
       adapter.setRate(1);
       m.rate = 1;
     }
-  }, [clock, ensureAdapter, patch, send]);
+  }, [clock, ensureAdapter, patch, resetTwitch, send]);
 
   useEffect(() => {
     const id = setInterval(tick, 400);
@@ -408,6 +421,7 @@ export function StreamPlayer({
   }
 
   function retry() {
+    if (stream?.source.type === "twitch") resetTwitch();
     mem.current.loadedId = null;
     patch({ stalled: false, error: null, loading: true });
   }
