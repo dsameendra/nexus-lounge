@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { LiveKitRoom, RoomAudioRenderer } from "@livekit/components-react";
+import type { RoomOptions } from "livekit-client";
 import { livekitTokenResponseSchema, type LivekitTokenResponse } from "@nexus/shared";
 import { RoomView } from "./RoomView";
+
+const roomOptions: RoomOptions = { adaptiveStream: true, dynacast: true };
 
 type State =
   | { status: "loading" }
@@ -129,6 +132,7 @@ export function RoomClient({ roomId, selfName }: { roomId: string; selfName: str
       connect
       audio={{ echoCancellation: true, noiseSuppression: true, autoGainControl: true }}
       video={false}
+      options={roomOptions}
       onDisconnected={() => setJoined(false)}
       className="h-dvh"
     >

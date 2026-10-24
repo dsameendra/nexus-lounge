@@ -1,6 +1,7 @@
 "use client";
 
 import { useLocalParticipant } from "@livekit/components-react";
+import { ShareButton } from "./ShareButton";
 
 export function MuteBar({
   deafened,
@@ -34,6 +35,7 @@ export function MuteBar({
       <button onClick={toggleDeafen} className={`${base} ${deafened ? "bg-danger/20 text-danger" : "bg-panel-2 hover:brightness-125"}`}>
         {deafened ? "Undeafen" : "Deafen"}
       </button>
+      <ShareButton />
     </div>
   );
 }

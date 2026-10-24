@@ -6,6 +6,7 @@ import { Chat } from "./Chat";
 import { MuteBar } from "./MuteBar";
 import { ParticipantList } from "./ParticipantList";
 import { RoomHeader } from "./RoomHeader";
+import { WatchArea } from "./WatchArea";
 
 type Tab = "chat" | "people";
 
@@ -24,10 +25,8 @@ export function RoomView({
     <div className="flex h-full flex-col">
       <RoomHeader roomId={room.id} />
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <section className="flex aspect-video w-full shrink-0 items-center justify-center border-b border-line bg-black/40 lg:aspect-auto lg:flex-1 lg:border-b-0 lg:border-r">
-          <p className="px-6 text-center text-sm text-slate-500">
-            The watch area will appear here. Screen share arrives in the next milestone.
-          </p>
+        <section className="flex aspect-video w-full shrink-0 items-center justify-center overflow-hidden border-b border-line bg-black/40 lg:aspect-auto lg:flex-1 lg:border-b-0 lg:border-r">
+          <WatchArea />
         </section>
 
         <aside className="flex min-h-0 flex-1 flex-col bg-panel lg:w-96 lg:flex-none">
