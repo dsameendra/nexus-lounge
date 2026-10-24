@@ -80,7 +80,7 @@ export function StreamPlayer({
     if (!stream || !visible) return;
 
     const adapter = ensureAdapter(stream.source.type);
-    if (!adapter?.ready || !clock.ready) {
+    if (!adapter || !clock.ready || (!adapter.ready && stream.source.type === "youtube")) {
       patch({ loading: true });
       return;
     }
@@ -96,6 +96,11 @@ export function StreamPlayer({
       adapter.setMuted(muted);
       adapter.load(stream.source, expected, syncable ? playback.playing : true);
       patch({ loading: true, blocked: false, time: 0, duration: 0 });
+      return;
+    }
+
+    if (!adapter.ready) {
+      patch({ loading: true });
       return;
     }
 
