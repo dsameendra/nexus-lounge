@@ -3,7 +3,7 @@ import { signSessionToken, verifySessionToken } from "@nexus/shared/session-toke
 import { createRoomRequestSchema, joinRoomRequestSchema, roomIdSchema } from "@nexus/shared";
 import { config } from "./config.ts";
 import { createLivekitToken } from "./livekit.ts";
-import { checkRoomAccess, createRoom, getRoom } from "./rooms.ts";
+import { checkRoomAccess, createRoom, getRoom, micBlocked } from "./rooms.ts";
 import { sweepEmptyRooms } from "./rooms.ts";
 import { attachWebSocket } from "./ws.ts";
 
@@ -45,7 +45,7 @@ app.post<{ Params: { id: string } }>("/rooms/:id/livekit-token", async (request,
   const access = checkRoomAccess(room.id, user.sub, body.data.password);
   if (access === "password_required" || access === "wrong_password") return reply.code(403).send({ error: access });
   const wsTicket = signSessionToken({ ...user, room: room.id }, config.AUTH_SECRET, 6 * 60 * 60);
-  return { token: await createLivekitToken(room.id, user), url: config.LIVEKIT_URL, room, wsTicket };
+  return { token: await createLivekitToken(room.id, user, micBlocked(room.id, user.sub)), url: config.LIVEKIT_URL, room, wsTicket };
 });
 
 attachWebSocket(app.server);

@@ -159,6 +159,35 @@ test("guests cannot create rooms", async () => {
   assert.equal(response.status, 403);
 });
 
+test("only the host can mute or deafen, and it sticks across reconnects", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const alice = await join(id, "alice");
+  const guest = await join(id, "guest-2", true);
+
+  alice.send({ type: "moderation.set", userId: "guest-2", muted: true });
+  await alice.until(() => alice.errors.length > 0);
+  assert.deepEqual(host.state!.restrictions, {});
+
+  host.send({ type: "moderation.set", userId: "host", muted: true });
+  await host.until(() => host.errors.length > 0);
+
+  host.send({ type: "moderation.set", userId: "alice", muted: true });
+  await guest.until(() => guest.state!.restrictions["alice"]?.muted === true);
+  host.send({ type: "moderation.set", userId: "alice", deafened: true });
+  await alice.until(() => alice.state!.restrictions["alice"]?.deafened === true);
+  assert.equal(alice.state!.restrictions["alice"]!.muted, true, "patching one flag keeps the other");
+
+  alice.socket.close();
+  await host.until(() => host.state!.members.length === 2);
+  const again = await join(id, "alice");
+  assert.equal(again.state!.restrictions["alice"]?.muted, true, "restriction survives reconnect");
+
+  host.send({ type: "moderation.set", userId: "alice", muted: false, deafened: false });
+  await again.until(() => again.state!.restrictions["alice"] === undefined);
+  [host, again, guest].forEach((client) => client.socket.close());
+});
+
 test("late joiner receives current state; leaving updates members", async () => {
   const { id } = await createRoom("host");
   const host = await join(id, "host");

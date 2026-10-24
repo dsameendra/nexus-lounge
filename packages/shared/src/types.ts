@@ -55,11 +55,15 @@ export const memberSchema = z.object({
 });
 export type Member = z.infer<typeof memberSchema>;
 
+export const restrictionSchema = z.object({ muted: z.boolean(), deafened: z.boolean() });
+export type Restriction = z.infer<typeof restrictionSchema>;
+
 export const roomStateSchema = z.object({
   room: roomInfoSchema,
   streams: z.array(streamSchema),
   featuredId: z.string().nullable(),
   members: z.array(memberSchema),
+  restrictions: z.record(z.string(), restrictionSchema),
   serverTime: z.number(),
 });
 export type RoomState = z.infer<typeof roomStateSchema>;

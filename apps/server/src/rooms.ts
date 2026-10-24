@@ -5,6 +5,7 @@ import {
   streamKey,
   type MediaSource,
   type Member,
+  type Restriction,
   type RoomInfo,
   type RoomState,
   type ServerMessage,
@@ -28,6 +29,7 @@ interface StoredRoom {
   streams: Stream[];
   featuredId: string | null;
   connections: Map<string, Connection>;
+  restrictions: Map<string, Restriction>;
   emptySince: number | null;
 }
 
@@ -53,6 +55,7 @@ export function createRoom(hostId: string, password?: string): RoomInfo {
     streams: [],
     featuredId: null,
     connections: new Map(),
+    restrictions: new Map(),
     emptySince: Date.now(),
   });
   return info;
@@ -77,6 +80,7 @@ function snapshot(room: StoredRoom): RoomState {
     streams: room.streams,
     featuredId: room.featuredId,
     members: Array.from(room.connections.values(), (connection) => connection.member),
+    restrictions: Object.fromEntries(room.restrictions),
     serverTime: Date.now(),
   };
 }
@@ -245,6 +249,35 @@ export function setWatching(roomId: string, userId: string, streamId: string | n
   if (streamId !== null && streamId !== SCREEN_ID && !room.streams.some((stream) => stream.id === streamId)) return ok;
   if (connection.member.watching === streamId) return ok;
   connection.member.watching = streamId;
+  broadcast(roomId);
+  return ok;
+}
+
+export function micBlocked(roomId: string, userId: string) {
+  const restriction = rooms.get(roomId)?.restrictions.get(userId);
+  return Boolean(restriction && (restriction.muted || restriction.deafened));
+}
+
+export function isGuest(roomId: string, userId: string) {
+  return rooms.get(roomId)?.connections.get(userId)?.member.guest ?? false;
+}
+
+export function setModeration(
+  roomId: string,
+  user: SessionPayload,
+  targetId: string,
+  patch: { muted?: boolean; deafened?: boolean },
+): Result {
+  const room = rooms.get(roomId);
+  if (!room) return fail("Room not found");
+  if (room.info.hostId !== user.sub) return fail("Only the room owner can mute or deafen people");
+  if (targetId === user.sub) return fail("Use your own controls to mute yourself");
+  if (!room.connections.has(targetId) && !room.restrictions.has(targetId)) return fail("That person isn't in the room");
+
+  const current = room.restrictions.get(targetId) ?? { muted: false, deafened: false };
+  const next = { muted: patch.muted ?? current.muted, deafened: patch.deafened ?? current.deafened };
+  if (next.muted || next.deafened) room.restrictions.set(targetId, next);
+  else room.restrictions.delete(targetId);
   broadcast(roomId);
   return ok;
 }

@@ -17,6 +17,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("stream.establish"), streamId, position: z.number().min(0).max(86400 * 2) }),
   z.object({ type: z.literal("stream.feature"), streamId: streamId.nullable() }),
   z.object({ type: z.literal("role.setController"), userId: z.string(), enabled: z.boolean() }),
+  z.object({ type: z.literal("moderation.set"), userId: z.string(), muted: z.boolean().optional(), deafened: z.boolean().optional() }),
   z.object({ type: z.literal("presence.watch"), streamId: streamId.nullable() }),
 ]);
 export type ClientMessage = z.infer<typeof clientMessageSchema>;

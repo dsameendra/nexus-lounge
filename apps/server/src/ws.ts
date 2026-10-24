@@ -3,6 +3,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { verifySessionToken, type SessionPayload } from "@nexus/shared/session-token";
 import { clientMessageSchema, type ClientMessage, type ServerMessage } from "@nexus/shared";
 import { config } from "./config.ts";
+import { applyMicRestriction } from "./livekit.ts";
 import * as rooms from "./rooms.ts";
 
 const MESSAGES_PER_SECOND = 30;
@@ -25,6 +26,13 @@ function handle(roomId: string, user: SessionPayload, message: Exclude<ClientMes
       return rooms.featureStream(roomId, user, message.streamId);
     case "role.setController":
       return rooms.setController(roomId, user, message.userId, message.enabled);
+    case "moderation.set": {
+      const result = rooms.setModeration(roomId, user, message.userId, { muted: message.muted, deafened: message.deafened });
+      if (result.ok) {
+        void applyMicRestriction(roomId, message.userId, rooms.isGuest(roomId, message.userId), rooms.micBlocked(roomId, message.userId));
+      }
+      return result;
+    }
     case "presence.watch":
       return rooms.setWatching(roomId, user.sub, message.streamId);
   }

@@ -9,6 +9,7 @@ import { joinResponseSchema, type JoinResponse } from "@nexus/shared";
 import { RoomProvider, type Self } from "./RoomProvider";
 import { RoomView } from "./RoomView";
 import { VoiceAudio } from "./VoiceAudio";
+import { VoiceSettingsProvider } from "./VoiceSettings";
 
 const roomOptions: RoomOptions = { adaptiveStream: true, dynacast: true };
 
@@ -155,8 +156,10 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
         onDisconnected={() => setJoined(false)}
         className="h-dvh"
       >
-        <VoiceAudio deafened={deafened} />
-        <RoomView deafened={deafened} onDeafenedChange={setDeafened} onLeave={() => router.push("/")} />
+        <VoiceSettingsProvider>
+          <VoiceAudio deafened={deafened} />
+          <RoomView deafened={deafened} onDeafenedChange={setDeafened} onLeave={() => router.push("/")} />
+        </VoiceSettingsProvider>
       </LiveKitRoom>
     </RoomProvider>
   );

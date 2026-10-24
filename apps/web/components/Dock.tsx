@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocalParticipant } from "@livekit/components-react";
 import { HeadphonesIcon, HeadphonesOffIcon, LeaveIcon, MicIcon, MicOffIcon, ScreenIcon } from "./Icons";
 import { useRoom } from "./RoomProvider";
@@ -46,12 +46,19 @@ export function Dock({
   onDeafenedChange: (value: boolean) => void;
   onLeave: () => void;
 }) {
-  const { self } = useRoom();
+  const { self, state } = useRoom();
+  const restriction = state.restrictions[self.id];
+  const serverMuted = Boolean(restriction?.muted || restriction?.deafened);
+  const serverDeafened = Boolean(restriction?.deafened);
   const { localParticipant, isMicrophoneEnabled, isScreenShareEnabled } = useLocalParticipant();
   const supported = useScreenShareSupport();
   const shares = useScreenShares();
   const otherSharer = shares.find((share) => !share.participant.isLocal)?.participant;
   const [shareError, setShareError] = useState(false);
+
+  useEffect(() => {
+    if (serverMuted && isMicrophoneEnabled) void localParticipant.setMicrophoneEnabled(false);
+  }, [serverMuted, isMicrophoneEnabled, localParticipant]);
 
   function toggleMute() {
     if (deafened) onDeafenedChange(false);
@@ -82,11 +89,21 @@ export function Dock({
   return (
     <div className="flex flex-col items-center gap-2 px-4 py-3">
       <div className="material flex items-center gap-3 rounded-full border border-line px-3 py-2 shadow-xl">
-        <RoundButton label={isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"} danger={!isMicrophoneEnabled} onClick={toggleMute}>
+        <RoundButton
+          label={serverMuted ? "Muted by the room owner" : isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"}
+          danger={!isMicrophoneEnabled}
+          disabled={serverMuted}
+          onClick={toggleMute}
+        >
           {isMicrophoneEnabled ? <MicIcon /> : <MicOffIcon />}
         </RoundButton>
-        <RoundButton label={deafened ? "Undeafen" : "Deafen"} danger={deafened} onClick={toggleDeafen}>
-          {deafened ? <HeadphonesOffIcon /> : <HeadphonesIcon />}
+        <RoundButton
+          label={serverDeafened ? "Deafened by the room owner" : deafened ? "Undeafen" : "Deafen"}
+          danger={deafened || serverDeafened}
+          disabled={serverDeafened}
+          onClick={toggleDeafen}
+        >
+          {deafened || serverDeafened ? <HeadphonesOffIcon /> : <HeadphonesIcon />}
         </RoundButton>
         {canShare && (
           <RoundButton
@@ -104,6 +121,7 @@ export function Dock({
         </RoundButton>
       </div>
       {shareError && <p className="text-xs text-danger">Couldn't start screen share.</p>}
+      {serverMuted && <p className="text-xs text-warn">{serverDeafened ? "The room owner deafened you." : "The room owner muted you."}</p>}
     </div>
   );
 }
