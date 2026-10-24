@@ -116,6 +116,7 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
         this.emit("state");
       });
     } catch {
+      this.error = "Couldn't load the Twitch player. Check your connection or ad blocker.";
       this.emit("error");
     }
   }

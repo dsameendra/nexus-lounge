@@ -54,6 +54,7 @@ export function StreamPlayer({
     lastWant: false,
     rate: 1,
     establishAt: 0,
+    waitSince: 0,
     seenUpdate: 0,
     drifts: [] as number[],
     lastSample: 0,
@@ -107,7 +108,8 @@ export function StreamPlayer({
 
     const adapter = ensureAdapter(stream.source.type);
     if (!adapter || !clock.ready || (!adapter.ready && stream.source.type === "youtube")) {
-      patch({ loading: true });
+      if (m.waitSince === 0) m.waitSince = Date.now();
+      patch({ loading: true, error: adapter?.error ?? null, stalled: Date.now() - m.waitSince > 10000 });
       return;
     }
 
@@ -139,9 +141,11 @@ export function StreamPlayer({
     }
 
     if (!adapter.ready) {
-      patch({ loading: true });
+      if (m.waitSince === 0) m.waitSince = now;
+      patch({ loading: true, error: adapter.error, stalled: now - m.waitSince > 10000 });
       return;
     }
+    m.waitSince = 0;
 
     const state = adapter.getState();
     const live = adapter.isLive() || stream.source.isLive;
@@ -271,8 +275,14 @@ export function StreamPlayer({
 
   useEffect(() => {
     const current = adapters.current;
+    const memory = mem.current;
     return () => {
-      for (const adapter of Object.values(current)) adapter?.destroy();
+      for (const type of Object.keys(current) as Provider[]) {
+        current[type]?.destroy();
+        delete current[type];
+      }
+      memory.loadedId = null;
+      memory.waitSince = 0;
       clearTimeout(hideTimer.current);
     };
   }, []);

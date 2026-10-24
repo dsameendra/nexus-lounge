@@ -122,6 +122,7 @@ export class YouTubeAdapter extends Emitter implements PlayerAdapter {
         },
       });
     } catch {
+      this.error = "Couldn't load the YouTube player. Check your connection or ad blocker.";
       this.emit("error");
     }
   }
