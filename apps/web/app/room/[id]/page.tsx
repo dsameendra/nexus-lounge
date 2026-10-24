@@ -6,5 +6,10 @@ export default async function RoomPage({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const session = await auth();
   if (!session?.user) redirect(`/login?callbackUrl=${encodeURIComponent(`/room/${id}`)}`);
-  return <RoomClient roomId={id} selfName={session.user.name ?? "You"} />;
+  return (
+    <RoomClient
+      roomId={id}
+      self={{ id: session.user.id, name: session.user.name ?? "You", image: session.user.image ?? null, guest: session.user.id.startsWith("guest-") }}
+    />
+  );
 }

@@ -1,27 +1,35 @@
 "use client";
 
 import { useState } from "react";
+import { CheckIcon, LinkIcon } from "./Icons";
+import { useRoom } from "./RoomProvider";
 
-export function RoomHeader({ roomId }: { roomId: string }) {
+export function RoomHeader() {
+  const { state, status } = useRoom();
   const [copied, setCopied] = useState(false);
+  const roomId = state.room.id;
 
   async function copyInvite() {
-    await navigator.clipboard.writeText(`${window.location.origin}/room/${roomId}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/room/${roomId}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {}
   }
 
   return (
-    <header className="flex items-center justify-between border-b border-line bg-panel px-4 py-3">
-      <div className="flex items-center gap-3">
-        <span className="bg-gradient-to-r from-accent to-accent-2 bg-clip-text font-bold text-transparent">Nexus Lounge</span>
-        <span className="rounded bg-panel-2 px-2 py-0.5 font-mono text-xs text-slate-400">{roomId}</span>
+    <header className="material z-30 flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="text-[15px] font-semibold tracking-tight">Nexus Lounge</span>
+        <span className="rounded-md bg-white/10 px-2 py-0.5 font-mono text-xs text-label-2">{roomId}</span>
+        {status === "reconnecting" && <span className="text-xs text-warn">Reconnecting…</span>}
       </div>
       <button
         onClick={copyInvite}
-        className="rounded-lg border border-line bg-panel-2 px-3 py-1.5 text-sm transition hover:border-accent"
+        className="flex h-9 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-medium transition hover:bg-white/15 active:scale-95"
       >
-        {copied ? "Copied!" : "Copy invite link"}
+        {copied ? <CheckIcon className="text-live" /> : <LinkIcon />}
+        {copied ? "Link copied" : "Invite"}
       </button>
     </header>
   );

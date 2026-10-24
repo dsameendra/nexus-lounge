@@ -23,20 +23,21 @@ export function Chat() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ul className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+      <ul className="scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+        {chatMessages.length === 0 && <li className="py-8 text-center text-sm text-label-2">No messages yet. Say hi 👋</li>}
         {chatMessages.map((message) => {
           const name = message.from?.name || message.from?.identity || "Unknown";
           return (
             <li key={message.id} className="flex gap-3">
-              <Avatar name={name} image={parseImage(message.from?.metadata)} className="size-8 shrink-0" />
+              <Avatar name={name} image={parseImage(message.from?.metadata)} className="size-8" />
               <div className="min-w-0">
                 <div className="flex items-baseline gap-2">
                   <span className="text-sm font-semibold">{name}</span>
-                  <time className="text-[11px] text-slate-500">
+                  <time className="text-[11px] text-label-3">
                     {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </time>
                 </div>
-                <p className="text-sm break-words text-slate-300">{message.message}</p>
+                <p className="text-[15px] leading-snug break-words text-white/90">{message.message}</p>
               </div>
             </li>
           );
@@ -48,12 +49,12 @@ export function Chat() {
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           maxLength={500}
-          placeholder="Message the room"
-          className="min-w-0 flex-1 rounded-lg border border-line bg-bg px-3 py-2 text-base outline-none focus:border-accent sm:text-sm"
+          placeholder="Message"
+          className="h-11 min-w-0 flex-1 rounded-full bg-panel-2 px-4 text-base outline-none placeholder:text-label-3 focus:ring-2 focus:ring-accent"
         />
         <button
           disabled={isSending || !draft.trim()}
-          className="rounded-lg bg-accent px-4 text-sm font-semibold transition hover:brightness-110 disabled:opacity-50"
+          className="h-11 rounded-full bg-accent px-5 text-sm font-semibold transition hover:brightness-110 active:scale-95 disabled:opacity-40"
         >
           Send
         </button>

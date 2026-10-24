@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { LiveKitRoom, RoomAudioRenderer } from "@livekit/components-react";
+import { useRouter } from "next/navigation";
+import { LiveKitRoom } from "@livekit/components-react";
 import type { RoomOptions } from "livekit-client";
-import { livekitTokenResponseSchema, type LivekitTokenResponse } from "@nexus/shared";
+import { joinResponseSchema, type JoinResponse } from "@nexus/shared";
+import { RoomProvider, type Self } from "./RoomProvider";
 import { RoomView } from "./RoomView";
+import { VoiceAudio } from "./VoiceAudio";
 
 const roomOptions: RoomOptions = { adaptiveStream: true, dynacast: true };
 
@@ -13,7 +16,7 @@ type State =
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "password"; wrong: boolean }
-  | { status: "ready"; data: LivekitTokenResponse };
+  | { status: "ready"; data: JoinResponse };
 
 const passwordKey = (roomId: string) => `room-password:${roomId}`;
 
@@ -25,7 +28,8 @@ function readStoredPassword(roomId: string) {
   }
 }
 
-export function RoomClient({ roomId, selfName }: { roomId: string; selfName: string }) {
+export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
+  const router = useRouter();
   const [state, setState] = useState<State>({ status: "loading" });
   const [joined, setJoined] = useState(false);
   const [deafened, setDeafened] = useState(false);
@@ -51,7 +55,7 @@ export function RoomClient({ roomId, selfName }: { roomId: string; selfName: str
             sessionStorage.setItem(passwordKey(roomId), password);
           } catch {}
         }
-        setState({ status: "ready", data: livekitTokenResponseSchema.parse(await response.json()) });
+        setState({ status: "ready", data: joinResponseSchema.parse(await response.json()) });
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setState({ status: "error", message: "Could not reach the server." });
@@ -66,9 +70,7 @@ export function RoomClient({ roomId, selfName }: { roomId: string; selfName: str
     return () => controller.abort();
   }, [roomId, requestToken]);
 
-  if (state.status === "loading") {
-    return <Centered>Loading room…</Centered>;
-  }
+  if (state.status === "loading") return <Centered>Loading room…</Centered>;
 
   if (state.status === "error") {
     return (
@@ -84,9 +86,9 @@ export function RoomClient({ roomId, selfName }: { roomId: string; selfName: str
   if (state.status === "password") {
     return (
       <Centered>
-        <h1 className="text-2xl font-bold">Password required</h1>
+        <h1 className="text-xl font-semibold">Password required</h1>
         <form
-          className="mt-4 space-y-3"
+          className="mt-5 space-y-3"
           onSubmit={(event) => {
             event.preventDefault();
             void requestToken(passwordDraft);
@@ -99,12 +101,10 @@ export function RoomClient({ roomId, selfName }: { roomId: string; selfName: str
             onChange={(event) => setPasswordDraft(event.target.value)}
             maxLength={64}
             placeholder="Room password"
-            className="w-full rounded-lg border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent"
+            className="h-12 w-full rounded-xl bg-panel-2 px-4 text-base outline-none placeholder:text-label-3 focus:ring-2 focus:ring-accent"
           />
           {state.wrong && <p className="text-sm text-danger">Wrong password.</p>}
-          <button className="w-full rounded-lg bg-gradient-to-r from-accent to-accent-2 px-4 py-3 font-semibold transition hover:brightness-110">
-            Continue
-          </button>
+          <PrimaryButton>Continue</PrimaryButton>
         </form>
       </Centered>
     );
@@ -113,39 +113,70 @@ export function RoomClient({ roomId, selfName }: { roomId: string; selfName: str
   if (!joined) {
     return (
       <Centered>
-        <h1 className="text-2xl font-bold">Room {roomId}</h1>
-        <p className="mt-2 text-sm text-slate-400">Joining as {selfName}. Your browser will ask for microphone access.</p>
-        <button
-          onClick={() => setJoined(true)}
-          className="mt-6 rounded-lg bg-gradient-to-r from-accent to-accent-2 px-8 py-3 font-semibold transition hover:brightness-110"
-        >
-          Join room
-        </button>
+        <h1 className="text-xl font-semibold">Join room {roomId}</h1>
+        <p className="mt-2 text-sm text-label-2">
+          You'll join as {self.name}
+          {self.guest ? " (guest)" : ""}. Your browser will ask for microphone access.
+        </p>
+        <div className="mt-6">
+          <PrimaryButton onClick={() => setJoined(true)}>Join room</PrimaryButton>
+        </div>
       </Centered>
     );
   }
 
+  const { data } = state;
   return (
-    <LiveKitRoom
-      token={state.data.token}
-      serverUrl={state.data.url}
-      connect
-      audio={{ echoCancellation: true, noiseSuppression: true, autoGainControl: true }}
-      video={false}
-      options={roomOptions}
-      onDisconnected={() => setJoined(false)}
-      className="h-dvh"
+    <RoomProvider
+      roomId={roomId}
+      ticket={data.wsTicket}
+      wsUrl={data.wsUrl}
+      self={self}
+      fallback={(status) =>
+        status === "failed" ? (
+          <Centered>
+            <p className="text-danger">Couldn't connect to the room.</p>
+            <Link href="/" className="mt-4 inline-block text-accent hover:underline">
+              Back home
+            </Link>
+          </Centered>
+        ) : (
+          <Centered>Connecting…</Centered>
+        )
+      }
     >
-      <RoomAudioRenderer muted={deafened} />
-      <RoomView room={state.data.room} deafened={deafened} onDeafenedChange={setDeafened} />
-    </LiveKitRoom>
+      <LiveKitRoom
+        token={data.token}
+        serverUrl={data.url}
+        connect
+        audio={{ echoCancellation: true, noiseSuppression: true, autoGainControl: true }}
+        video={false}
+        options={roomOptions}
+        onDisconnected={() => setJoined(false)}
+        className="h-dvh"
+      >
+        <VoiceAudio deafened={deafened} />
+        <RoomView deafened={deafened} onDeafenedChange={setDeafened} onLeave={() => router.push("/")} />
+      </LiveKitRoom>
+    </RoomProvider>
+  );
+}
+
+function PrimaryButton({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="h-12 w-full rounded-xl bg-accent px-6 font-semibold transition hover:brightness-110 active:scale-[0.99]"
+    >
+      {children}
+    </button>
   );
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
     <main className="flex min-h-dvh items-center justify-center p-6">
-      <div className="w-full max-w-sm rounded-2xl border border-line bg-panel p-8 text-center">{children}</div>
+      <div className="w-full max-w-sm rounded-[var(--radius-sheet)] bg-panel p-8 text-center">{children}</div>
     </main>
   );
 }

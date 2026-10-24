@@ -1,9 +1,10 @@
 import Fastify, { type FastifyRequest } from "fastify";
-import { verifySessionToken } from "@nexus/shared/session-token";
+import { signSessionToken, verifySessionToken } from "@nexus/shared/session-token";
 import { createRoomRequestSchema, joinRoomRequestSchema, roomIdSchema } from "@nexus/shared";
 import { config } from "./config.ts";
 import { createLivekitToken } from "./livekit.ts";
 import { checkRoomAccess, createRoom, getRoom } from "./rooms.ts";
+import { sweepEmptyRooms } from "./rooms.ts";
 import { attachWebSocket } from "./ws.ts";
 
 const app = Fastify({ logger: true });
@@ -11,7 +12,8 @@ const app = Fastify({ logger: true });
 function authenticate(request: FastifyRequest) {
   const header = request.headers.authorization;
   if (!header?.startsWith("Bearer ")) return null;
-  return verifySessionToken(header.slice(7), config.AUTH_SECRET);
+  const user = verifySessionToken(header.slice(7), config.AUTH_SECRET);
+  return user && !user.room ? user : null;
 }
 
 app.get("/health", async () => ({ ok: true }));
@@ -19,6 +21,7 @@ app.get("/health", async () => ({ ok: true }));
 app.post("/rooms", async (request, reply) => {
   const user = authenticate(request);
   if (!user) return reply.code(401).send({ error: "Unauthorized" });
+  if (user.guest) return reply.code(403).send({ error: "Sign in with Discord to create a room" });
   const body = createRoomRequestSchema.safeParse(request.body ?? {});
   if (!body.success) return reply.code(400).send({ error: "Invalid request" });
   return reply.code(201).send(createRoom(user.sub, body.data.password));
@@ -41,9 +44,11 @@ app.post<{ Params: { id: string } }>("/rooms/:id/livekit-token", async (request,
   if (!body.success) return reply.code(400).send({ error: "Invalid request" });
   const access = checkRoomAccess(room.id, user.sub, body.data.password);
   if (access === "password_required" || access === "wrong_password") return reply.code(403).send({ error: access });
-  return { token: await createLivekitToken(room.id, user), url: config.LIVEKIT_URL, room };
+  const wsTicket = signSessionToken({ ...user, room: room.id }, config.AUTH_SECRET, 6 * 60 * 60);
+  return { token: await createLivekitToken(room.id, user), url: config.LIVEKIT_URL, room, wsTicket };
 });
 
 attachWebSocket(app.server);
+setInterval(sweepEmptyRooms, 5 * 60 * 1000).unref();
 
 await app.listen({ port: config.PORT, host: "0.0.0.0" });

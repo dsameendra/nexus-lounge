@@ -8,7 +8,12 @@ export async function getSessionToken() {
   const session = await auth();
   if (!session?.user?.id) return null;
   return signSessionToken(
-    { sub: session.user.id, name: session.user.name ?? "Unknown", image: session.user.image ?? null },
+    {
+      sub: session.user.id,
+      name: session.user.name ?? "Unknown",
+      image: session.user.image ?? null,
+      guest: session.user.id.startsWith("guest-"),
+    },
     process.env.AUTH_SECRET!,
   );
 }

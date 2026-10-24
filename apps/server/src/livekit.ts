@@ -1,4 +1,4 @@
-import { AccessToken } from "livekit-server-sdk";
+import { AccessToken, TrackSource } from "livekit-server-sdk";
 import type { ParticipantMetadata } from "@nexus/shared";
 import type { SessionPayload } from "@nexus/shared/session-token";
 import { config } from "./config.ts";
@@ -11,6 +11,13 @@ export async function createLivekitToken(roomId: string, user: SessionPayload) {
     metadata: JSON.stringify(metadata),
     ttl: "6h",
   });
-  token.addGrant({ room: roomId, roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: true });
+  token.addGrant({
+    room: roomId,
+    roomJoin: true,
+    canPublish: true,
+    canSubscribe: true,
+    canPublishData: true,
+    canPublishSources: user.guest ? [TrackSource.MICROPHONE] : undefined,
+  });
   return token.toJwt();
 }

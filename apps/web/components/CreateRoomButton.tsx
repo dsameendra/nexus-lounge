@@ -29,23 +29,23 @@ export function CreateRoomButton() {
   }
 
   return (
-    <div className="mt-6">
+    <div className="space-y-3">
       <input
         type="password"
         value={password}
         onChange={(event) => setPassword(event.target.value)}
         maxLength={64}
         placeholder="Room password (optional)"
-        className="mb-3 w-full rounded-lg border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent"
+        className="h-12 w-full rounded-xl bg-panel-2 px-4 text-base outline-none placeholder:text-label-3 focus:ring-2 focus:ring-accent"
       />
       <button
         onClick={create}
         disabled={busy}
-        className="w-full rounded-lg bg-gradient-to-r from-accent to-accent-2 px-4 py-3 font-semibold transition hover:brightness-110 disabled:opacity-60"
+        className="h-12 w-full rounded-xl bg-accent font-semibold transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
       >
         {busy ? "Creating…" : "Create room"}
       </button>
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
     </div>
   );
 }

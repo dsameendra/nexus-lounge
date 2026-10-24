@@ -2,7 +2,7 @@
 
 Watch League of Legends streams with friends in a shared room: Discord-style voice chat, text chat, and (in later milestones) screen share and synced YouTube/Twitch playback.
 
-Status: **Milestone 2** — Discord or guest login, optional room passwords, rooms with invite links, LiveKit voice, text chat, participant list with speaking indicators, and tab/screen sharing with audio.
+Status: **Milestone 3** — Discord or guest login, optional room passwords, rooms with invite links, LiveKit voice, text chat, participant list with speaking indicators, and tab/screen sharing with audio.
 
 ## Layout
 
@@ -35,6 +35,20 @@ Node 22.18+ (the server runs TypeScript directly), pnpm 10+, and Docker only if 
 
 - **Local (default in `.env.example`)**: `pnpm livekit` runs LiveKit in dev mode with key `devkey` and secret `secret`, at `ws://localhost:7880`.
 - **LiveKit Cloud**: create a project at [cloud.livekit.io](https://cloud.livekit.io), then copy the WebSocket URL (`wss://….livekit.cloud`) into `LIVEKIT_URL` and an API key/secret pair from **Settings → Keys** into `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET`.
+
+## Watching together
+
+- **Streams library:** anyone signed in with Discord can paste a YouTube or Twitch link (video, live stream, channel or past broadcast) into **Add**. Every stream keeps its own shared clock on the server, so people can watch different streams at the same time and switch between them without losing sync.
+- **Featured ("On air") stream:** the host and controllers pick what the room watches. Guests always follow it; Discord users follow it by default and can pick any other stream, then **Join them** to come back.
+- **Controls:** play, pause and seek on a stream are limited to the host, controllers, and whoever added that stream. The host can promote other Discord users to controller from the People tab.
+- **Guests** can talk, chat and watch the featured stream. They can't add streams, share their screen, create rooms or pick another stream (enforced on the server and in the LiveKit token).
+- **Sync:** each client estimates the server clock (median of ping samples) and compares its player to `position + elapsed`. Drift over 1s hard-seeks, 0.15-1s nudges the playback rate to 0.95/1.05 where the player supports it (YouTube; Twitch has no rate control and uses a 0.5s seek threshold instead), under 0.15s does nothing.
+- **Twitch live** cannot be seeked by embeds, so it can't be time-synced; the UI says so and suggests screen share.
+- **Titles:** YouTube titles are fetched server-side from YouTube's public oEmbed endpoint (no key needed); everything else falls back to the channel name or id.
+
+## Tests
+
+`pnpm --filter @nexus/shared test` (URL parsing, drift maths, tokens) and `pnpm --filter @nexus/server test` (spawns the server and checks permissions, late joiners, tickets and passwords over real WebSockets).
 
 ## How it works
 
