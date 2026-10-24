@@ -1,0 +1,12 @@
+{
+  "name": "nexus-lounge",
+  "private": true,
+  "packageManager": "pnpm@12.15.0",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter \"./apps/*\" dev",
+    "build": "pnpm -r --filter \"./apps/*\" build",
+    "typecheck": "pnpm -r typecheck",
+    "livekit": "docker compose up livekit"
+  }
+}
