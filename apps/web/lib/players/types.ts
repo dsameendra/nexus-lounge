@@ -6,6 +6,7 @@ export interface PlayerAdapter {
   readonly type: MediaSource["type"];
   readonly ready: boolean;
   readonly fineRate: boolean;
+  readonly error: string | null;
   load(source: MediaSource, startAt: number | null, autoplay: boolean): void;
   play(): void;
   pause(): void;

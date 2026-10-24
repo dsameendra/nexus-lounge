@@ -27,7 +27,7 @@ interface YTNamespace {
       width: string;
       height: string;
       playerVars: Record<string, string | number>;
-      events: { onReady: () => void; onStateChange: () => void; onError: () => void };
+      events: { onReady: () => void; onStateChange: () => void; onError: (event: { data: number }) => void };
     },
   ) => YTPlayer;
 }
@@ -57,11 +57,20 @@ function loadApi() {
   return apiPromise;
 }
 
+const YT_ERRORS: Record<number, string> = {
+  2: "That YouTube link isn't valid.",
+  5: "YouTube couldn't play this video in the embedded player.",
+  100: "This video was removed or is private.",
+  101: "The owner of this video doesn't allow it to be played outside YouTube.",
+  150: "The owner of this video doesn't allow it to be played outside YouTube.",
+};
+
 const STATES: Record<number, PlayerState> = { [-1]: "idle", 0: "ended", 1: "playing", 2: "paused", 3: "buffering", 5: "paused" };
 
 export class YouTubeAdapter extends Emitter implements PlayerAdapter {
   readonly type = "youtube" as const;
   ready = false;
+  error: string | null = null;
   private player: YTPlayer | null = null;
   private wanted: { source: MediaSource; startAt: number | null; autoplay: boolean } | null = null;
   private loadedId: string | null = null;
@@ -106,7 +115,10 @@ export class YouTubeAdapter extends Emitter implements PlayerAdapter {
             this.emit("ready");
           },
           onStateChange: () => this.emit("state"),
-          onError: () => this.emit("error"),
+          onError: (event) => {
+            this.error = YT_ERRORS[event.data] ?? "This video couldn't be played.";
+            this.emit("error");
+          },
         },
       });
     } catch {
@@ -119,6 +131,7 @@ export class YouTubeAdapter extends Emitter implements PlayerAdapter {
     const { source, startAt, autoplay } = this.wanted;
     this.wanted = null;
     this.loadedId = source.id;
+    this.error = null;
     const options = { videoId: source.id, ...(startAt !== null ? { startSeconds: startAt } : {}) };
     if (autoplay) this.player.loadVideoById(options);
     else this.player.cueVideoById(options);

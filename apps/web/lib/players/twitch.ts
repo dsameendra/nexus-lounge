@@ -52,6 +52,7 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
   readonly type = "twitch" as const;
   readonly fineRate = false;
   ready = false;
+  error: string | null = null;
   private player: TwitchPlayer | null = null;
   private current: MediaSource | null = null;
   private pendingPlay = false;
@@ -70,6 +71,7 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
 
   load(source: MediaSource, startAt: number | null, autoplay: boolean) {
     this.current = source;
+    this.error = null;
     this.pendingPlay = autoplay;
     if (!this.player) {
       void this.create(source, startAt, autoplay);
@@ -105,6 +107,14 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
         this.player.addEventListener(name, () => this.emit("state"));
       }
       this.player.addEventListener(Twitch.Player.PLAYBACK_BLOCKED, () => this.emit("blocked"));
+      this.player.addEventListener(Twitch.Player.OFFLINE, () => {
+        this.error = "This channel is offline right now.";
+        this.emit("error");
+      });
+      this.player.addEventListener(Twitch.Player.ONLINE, () => {
+        this.error = null;
+        this.emit("state");
+      });
     } catch {
       this.emit("error");
     }
