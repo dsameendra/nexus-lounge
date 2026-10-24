@@ -50,6 +50,7 @@ class Client {
   state: RoomState | null = null;
   errors: string[] = [];
   kicked = false;
+  reactions: { emoji: string; from: { id: string } }[] = [];
   private waiters: (() => void)[] = [];
 
   constructor() {
@@ -58,6 +59,7 @@ class Client {
       if (message.type === "state") this.state = message.state;
       if (message.type === "error") this.errors.push(message.message);
       if (message.type === "kicked") this.kicked = true;
+      if (message.type === "reaction") this.reactions.push(message);
       this.waiters.splice(0).forEach((wake) => wake());
     });
   }
@@ -383,4 +385,232 @@ test("owner can remove people, who then cannot come back", async () => {
   await guest.until(() => guest.kicked);
   assert.equal((await ticketFor(id, "guest-k", true)).status, 403, "removed guests cannot re-knock");
   [host, sneaky].forEach((client) => client.socket.close());
+});
+
+const vid = (letter: string) => ({ type: "youtube", id: letter.repeat(11), isLive: false });
+const vidId = (letter: string) => `youtube:${letter.repeat(11)}`;
+
+test("room settings: owner only, guest policy and lock", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const alice = await join(id, "alice");
+  assert.equal(host.state!.room.name, "");
+  assert.deepEqual(host.state!.room.settings, { guests: "ask", sharing: "everyone", locked: false, autoplayNext: true, reactions: true });
+
+  alice.send({ type: "settings.update", locked: true });
+  await alice.until(() => alice.errors.length > 0);
+  assert.equal(host.state!.room.settings.locked, false, "non-owners cannot change settings");
+
+  host.send({ type: "settings.update", name: "  Worlds night  " });
+  await alice.until(() => alice.state!.room.name === "Worlds night");
+
+  host.send({ type: "settings.update", guests: "closed" });
+  await host.until(() => host.state!.room.settings.guests === "closed");
+  const closed = await ticketFor(id, "guest-c", true);
+  assert.equal(closed.status, 403);
+  assert.equal((await ticketFor(id, "alice")).status, 200, "Discord users are unaffected by the guest policy");
+
+  host.send({ type: "settings.update", guests: "open" });
+  await host.until(() => host.state!.room.settings.guests === "open");
+  assert.equal((await ticketFor(id, "guest-o", true)).status, 200, "open rooms need no approval");
+
+  host.send({ type: "settings.update", guests: "ask" });
+  await host.until(() => host.state!.room.settings.guests === "ask");
+  assert.equal((await ticketFor(id, "guest-q", true)).status, 202);
+  await host.until(() => host.state!.pending.length === 1);
+  host.send({ type: "settings.update", guests: "open" });
+  await host.until(() => host.state!.pending.length === 0);
+  assert.equal((await ticketFor(id, "guest-q", true)).status, 200, "opening the room admits people already waiting");
+
+  host.send({ type: "settings.update", locked: true });
+  await host.until(() => host.state!.room.settings.locked);
+  assert.equal((await ticketFor(id, "newbie")).status, 403, "a locked room turns new people away");
+  assert.equal((await ticketFor(id, "alice")).status, 200, "people who were already in can come back");
+  assert.equal((await ticketFor(id, "host")).status, 200);
+  host.send({ type: "settings.update", locked: false });
+  await host.until(() => !host.state!.room.settings.locked);
+  assert.equal((await ticketFor(id, "newbie")).status, 200);
+  [host, alice].forEach((client) => client.socket.close());
+});
+
+test("queue: reorder, play next, auto-advance", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const alice = await join(id, "alice");
+  for (const letter of ["a", "b", "c"]) host.send({ type: "stream.add", source: vid(letter) });
+  await host.until(() => host.state!.streams.length === 3);
+  const order = () => host.state!.streams.map((stream) => stream.id);
+  const letters = () => order().map((value) => value.slice(8, 9)).join("");
+  host.send({ type: "stream.feature", streamId: vidId("a") });
+  await host.until(() => host.state!.featuredId === vidId("a"));
+
+  alice.send({ type: "stream.move", streamId: vidId("c"), direction: "up" });
+  await alice.until(() => alice.errors.length > 0);
+  assert.equal(letters(), "abc", "only controllers reorder");
+
+  host.send({ type: "stream.move", streamId: vidId("c"), direction: "next" });
+  await host.until(() => letters() === "acb");
+  host.send({ type: "stream.move", streamId: vidId("b"), direction: "up" });
+  await host.until(() => letters() === "abc");
+  host.send({ type: "stream.move", streamId: vidId("a"), direction: "down" });
+  await host.until(() => letters() === "bac");
+  host.send({ type: "stream.move", streamId: vidId("b"), direction: "up" });
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  assert.equal(letters(), "bac", "moving the first item up is a no-op");
+
+  alice.send({ type: "queue.advance", fromStreamId: vidId("a") });
+  await alice.until(() => alice.errors.length > 1);
+  host.send({ type: "queue.advance", fromStreamId: vidId("b") });
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  assert.equal(host.state!.featuredId, vidId("a"), "advance only applies to the featured stream");
+
+  host.send({ type: "queue.advance", fromStreamId: vidId("a") });
+  await host.until(() => host.state!.featuredId === vidId("c"));
+  const next = host.state!.streams.find((stream) => stream.id === vidId("c"))!;
+  assert.equal(next.playback.playing, true);
+  assert.equal(next.playback.position, 0);
+  host.send({ type: "queue.advance", fromStreamId: vidId("a") });
+  host.send({ type: "queue.advance", fromStreamId: vidId("c") });
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  assert.equal(host.state!.featuredId, vidId("c"), "stale or last-item advances do nothing");
+
+  host.send({ type: "settings.update", autoplayNext: false });
+  await host.until(() => !host.state!.room.settings.autoplayNext);
+  host.send({ type: "stream.feature", streamId: vidId("b") });
+  await host.until(() => host.state!.featuredId === vidId("b"));
+  host.send({ type: "queue.advance", fromStreamId: vidId("b") });
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  assert.equal(host.state!.featuredId, vidId("b"), "auto-play next can be turned off");
+
+  host.send({ type: "settings.update", autoplayNext: true });
+  host.send({ type: "stream.add", source: { type: "twitch", id: "examplechannel", isLive: true } });
+  await host.until(() => host.state!.streams.length === 4);
+  host.send({ type: "stream.move", streamId: "twitch:live:examplechannel", direction: "next" });
+  await host.until(() => host.state!.streams[host.state!.streams.findIndex((stream) => stream.id === vidId("b")) + 1]?.id === "twitch:live:examplechannel");
+  host.send({ type: "queue.advance", fromStreamId: vidId("b") });
+  await host.until(() => host.state!.featuredId === "twitch:live:examplechannel");
+  const live = host.state!.streams.find((stream) => stream.id === "twitch:live:examplechannel")!;
+  assert.equal(live.playback.playing, false, "twitch live is never given a shared clock");
+  [host, alice].forEach((client) => client.socket.close());
+});
+
+test("reactions: broadcast, whitelist, rate limit, owner switch", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const alice = await join(id, "alice");
+
+  alice.send({ type: "reaction.send", emoji: "🔥" });
+  await host.until(() => host.reactions.length === 1);
+  await alice.until(() => alice.reactions.length === 1);
+  assert.equal(host.reactions[0]!.from.id, "alice");
+
+  alice.send({ type: "reaction.send", emoji: "💩" });
+  await alice.until(() => alice.errors.includes("Invalid message"));
+
+  for (let i = 0; i < 14; i++) alice.send({ type: "reaction.send", emoji: "👏" });
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.ok(host.reactions.length <= 8, `rate limited, got ${host.reactions.length}`);
+
+  host.send({ type: "settings.update", reactions: false });
+  await host.until(() => !host.state!.room.settings.reactions);
+  const before = host.reactions.length;
+  const errors = alice.errors.length;
+  alice.send({ type: "reaction.send", emoji: "🎉" });
+  await alice.until(() => alice.errors.length > errors);
+  assert.equal(host.reactions.length, before);
+  [host, alice].forEach((client) => client.socket.close());
+});
+
+test("multiple screen shares: per-person ids can be featured and watched", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const alice = await join(id, "alice");
+
+  host.send({ type: "stream.feature", streamId: "screen:alice" });
+  await alice.until(() => alice.state!.featuredId === "screen:alice");
+  host.send({ type: "stream.feature", streamId: "screen:host" });
+  await alice.until(() => alice.state!.featuredId === "screen:host");
+  host.send({ type: "stream.feature", streamId: "screen:not valid!" });
+  await host.until(() => host.errors.length > 0);
+  assert.equal(host.state!.featuredId, "screen:host", "malformed screen ids are refused");
+
+  alice.send({ type: "presence.watch", streamId: "screen:host" });
+  await host.until(() => host.state!.members.find((m) => m.id === "alice")?.watching === "screen:host");
+
+  alice.send({ type: "stream.feature", streamId: "screen:alice" });
+  await alice.until(() => alice.errors.length > 0);
+  assert.equal(host.state!.featuredId, "screen:host", "non-controllers cannot put a screen on air");
+  [host, alice].forEach((client) => client.socket.close());
+});
+
+test("owner and controllers can stop someone's screen share; nobody else can", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const alice = await join(id, "alice");
+  const bob = await join(id, "bob");
+  const guest = await join(id, "guest-s", true, host);
+
+  bob.send({ type: "share.stop", userId: "alice" });
+  await bob.until(() => bob.errors.length > 0);
+  guest.send({ type: "share.stop", userId: "alice" });
+  await guest.until(() => guest.errors.length > 0);
+
+  host.send({ type: "role.setController", userId: "bob", enabled: true });
+  await bob.until(() => bob.state!.room.controllerIds.includes("bob"));
+  const errors = bob.errors.length;
+  bob.send({ type: "share.stop", userId: "alice" });
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(bob.errors.length, errors, "controllers can stop a share");
+
+  bob.send({ type: "share.stop", userId: "host" });
+  await bob.until(() => bob.errors.length > errors, 2000);
+  host.send({ type: "share.stop", userId: "nobody-here" });
+  await host.until(() => host.errors.length > 0);
+  [host, alice, bob, guest].forEach((client) => client.socket.close());
+});
+
+test("sharing policy setting and deafen status are shared with everyone", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const alice = await join(id, "alice");
+  assert.equal(host.state!.room.settings.sharing, "everyone");
+
+  alice.send({ type: "settings.update", sharing: "controllers" });
+  await alice.until(() => alice.errors.length > 0);
+  host.send({ type: "settings.update", sharing: "controllers" });
+  await alice.until(() => alice.state!.room.settings.sharing === "controllers");
+  host.send({ type: "settings.update", sharing: "nobody" as never });
+  await host.until(() => host.errors.length > 0);
+
+  alice.send({ type: "presence.voice", deafened: true });
+  await host.until(() => host.state!.members.find((m) => m.id === "alice")?.deafened === true);
+  alice.send({ type: "presence.voice", deafened: false });
+  await host.until(() => host.state!.members.find((m) => m.id === "alice")?.deafened === false);
+  [host, alice].forEach((client) => client.socket.close());
+});
+
+test("tv sessions obey the room lock and the guest policy", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const member = await join(id, "member");
+  const tvSession = (sub: string, guest = false) =>
+    fetch(`${base}/rooms/${id}/tv/session`, { method: "POST", headers: bearer(sub, guest), body: "{}" });
+
+  assert.equal((await tvSession("stranger")).status, 200, "an open room lets any signed-in user cast");
+  host.send({ type: "settings.update", locked: true });
+  await host.until(() => host.state!.room.settings.locked);
+  assert.equal((await tvSession("stranger-2")).status, 403, "a locked room refuses new people, TV or not");
+  assert.equal((await tvSession("member")).status, 200, "people already in can still cast");
+  assert.equal((await tvSession("host")).status, 200);
+
+  host.send({ type: "settings.update", locked: false, guests: "closed" });
+  await host.until(() => host.state!.room.settings.guests === "closed");
+  const closed = await tvSession("guest-tv", true);
+  assert.equal(closed.status, 403);
+  host.send({ type: "settings.update", guests: "ask" });
+  await host.until(() => host.state!.room.settings.guests === "ask");
+  const pending = await tvSession("guest-tv-2", true);
+  assert.equal(pending.status, 403, "a guest who hasn't been let in cannot cast");
+  assert.equal(host.state!.pending.length, 0, "and asking for a TV session does not create a join request");
+  [host, member].forEach((client) => client.socket.close());
 });

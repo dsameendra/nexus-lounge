@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { atLiveEdge, computeCorrection, expectedPosition, liveEdgeTarget, median, type Stream } from "@nexus/shared";
+import { SILENT_BELOW, atLiveEdge, computeCorrection, expectedPosition, isSilent, liveEdgeTarget, median, sliderToGain, type Stream } from "@nexus/shared";
 import { YouTubeAdapter } from "@/lib/players/youtube";
 import { TwitchAdapter } from "@/lib/players/twitch";
 import type { PlayerAdapter } from "@/lib/players/types";
@@ -10,6 +10,7 @@ import { PlayIcon } from "./Icons";
 import { PlayerControls, type SyncStatus } from "./PlayerControls";
 import { useRoom } from "./RoomProvider";
 import { StreamArt } from "./StreamArt";
+import { openTvSheet, useAppleAirPlaySupport } from "./useAirPlay";
 import { useFullscreenSupport } from "./useFullscreenSupport";
 
 function sourceUrl(stream: Stream) {
@@ -30,13 +31,40 @@ interface UiState {
   live: boolean;
   atEdge: boolean;
   error: string | null;
+  qualityCount: number;
+  qualityValue: string;
+  captionKey: string;
   muteBlocked: boolean;
   ended: boolean;
+  endedFor: string | null;
   stalled: boolean;
   debug: string;
 }
 
-const INITIAL_UI: UiState = { status: "syncing", blocked: false, loading: true, playing: false, time: 0, duration: 0, live: false, atEdge: false, error: null, muteBlocked: false, ended: false, stalled: false, debug: "" };
+const VOLUME_KEY = "nexus-player-volume";
+
+function loadVolume() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(VOLUME_KEY) ?? "{}") as { volume?: number; muted?: boolean };
+    const volume = Number(raw.volume ?? 1);
+    return { volume: Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 1, muted: Boolean(raw.muted) };
+  } catch {
+    return { volume: 1, muted: false };
+  }
+}
+
+function captionKeyOf(adapter: PlayerAdapter) {
+  const captions = adapter.captions?.();
+  return captions ? `${captions.tracks.map((track) => track.id).join(",")}|${captions.active ?? ""}|${captions.size}` : "";
+}
+
+function applyVolume(adapter: PlayerAdapter | undefined, volume: number, muted: boolean) {
+  if (!adapter) return;
+  adapter.setVolume(sliderToGain(volume));
+  adapter.setMuted(muted || isSilent(volume));
+}
+
+const INITIAL_UI: UiState = { status: "syncing", blocked: false, loading: true, playing: false, time: 0, duration: 0, live: false, atEdge: false, error: null, qualityCount: 0, qualityValue: "auto", captionKey: "", muteBlocked: false, ended: false, endedFor: null, stalled: false, debug: "" };
 
 export function StreamPlayer({
   stream,
@@ -54,7 +82,9 @@ export function StreamPlayer({
   controlsSlot?: HTMLElement | null;
 }) {
   const canFullscreen = useFullscreenSupport();
-  const { clock, send, canControlStream } = useRoom();
+  const appleAirPlay = useAppleAirPlaySupport();
+  const { clock, send, canControlStream, state: roomState, isController } = useRoom();
+  const advancedFor = useRef<string | null>(null);
   const hostRefs = { youtube: useRef<HTMLDivElement>(null), twitch: useRef<HTMLDivElement>(null) };
   const adapters = useRef<Partial<Record<Provider, PlayerAdapter>>>({});
   const mem = useRef({
@@ -76,10 +106,11 @@ export function StreamPlayer({
     lead: { youtube: 0.5, twitch: 1 } as Record<Provider, number>,
   });
   const debugRef = useRef(typeof window !== "undefined" && new URLSearchParams(window.location.search).has("debug"));
-  const latest = useRef({ stream, visible, volume: 1, muted: false });
+  const [initialVolume] = useState(loadVolume);
+  const latest = useRef({ stream, visible, volume: initialVolume.volume, muted: initialVolume.muted });
   const [ui, setUi] = useState<UiState>(INITIAL_UI);
-  const [volume, setVolume] = useState(1);
-  const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(initialVolume.volume);
+  const [muted, setMuted] = useState(initialVolume.muted);
   const [controlsShown, setControlsShown] = useState(true);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -145,10 +176,9 @@ export function StreamPlayer({
         learn: false,
         seenUpdate: playback.updatedAt,
       });
-      adapter.setVolume(volume);
-      adapter.setMuted(muted);
+      applyVolume(adapter, volume, muted);
       adapter.load(stream.source, expected === null ? null : expected + lead, syncable ? playback.playing : true);
-      patch({ loading: true, blocked: false, time: 0, duration: 0 });
+      patch({ loading: true, blocked: false, time: 0, duration: 0, ended: false, endedFor: null });
       return;
     }
 
@@ -162,7 +192,7 @@ export function StreamPlayer({
     const state = adapter.getState();
     const live = adapter.isLive() || stream.source.isLive;
     const stalled = state === "idle" && !adapter.error && now - m.loadedAt > 8000;
-    patch({ playing: state === "playing" || state === "buffering", loading: state === "idle", live, error: adapter.error, stalled, muteBlocked: Boolean(adapter.muteBlocked) });
+    patch({ playing: state === "playing" || state === "buffering", loading: state === "idle", live, error: adapter.error, stalled, muteBlocked: Boolean(adapter.muteBlocked), qualityCount: adapter.qualities().length, qualityValue: adapter.quality(), captionKey: captionKeyOf(adapter) });
     if (debugRef.current) {
       const exp = syncable ? expectedPosition(playback, clock.now()) : null;
       patch({
@@ -187,10 +217,10 @@ export function StreamPlayer({
     const past = !live && length > 0 && expected !== null && expected >= length - 0.5;
     if (past) {
       if (state === "playing") adapter.pause();
-      patch({ ended: true, blocked: false, status: "synced" });
+      patch({ ended: true, endedFor: stream.id, blocked: false, status: "synced" });
       return;
     }
-    patch({ ended: false });
+    patch({ ended: false, endedFor: null });
 
     if (want && state === "paused" && now - m.lastPlayCmd > 1200) {
       adapter.play();
@@ -279,10 +309,22 @@ export function StreamPlayer({
   }, [stream?.id, stream?.playback, visible, tick]);
 
   useEffect(() => {
-    for (const adapter of Object.values(adapters.current)) {
-      adapter?.setVolume(volume);
-      adapter?.setMuted(muted);
+    if (!ui.ended) {
+      advancedFor.current = null;
+      return;
     }
+    if (!stream || ui.endedFor !== stream.id || bare || !isController) return;
+    if (stream.id !== roomState.featuredId || !roomState.room.settings.autoplayNext) return;
+    if (advancedFor.current === stream.id) return;
+    advancedFor.current = stream.id;
+    send({ type: "queue.advance", fromStreamId: stream.id });
+  }, [ui.ended, ui.endedFor, stream, bare, isController, roomState.featuredId, roomState.room.settings.autoplayNext, send]);
+
+  useEffect(() => {
+    for (const adapter of Object.values(adapters.current)) applyVolume(adapter, volume, muted);
+    try {
+      localStorage.setItem(VOLUME_KEY, JSON.stringify({ volume, muted }));
+    } catch {}
   }, [volume, muted]);
 
   useEffect(() => {
@@ -324,7 +366,7 @@ export function StreamPlayer({
   const activeAdapter = stream ? adapters.current[stream.source.type] : undefined;
   const syncable = Boolean(stream && !(stream.source.type === "twitch" && stream.source.isLive));
   const canControl = Boolean(stream && syncable && canControlStream(stream));
-  const passthrough = stream?.source.type === "twitch" && (ui.blocked || ui.muteBlocked);
+  const isTwitch = stream?.source.type === "twitch";
   const showControls = controlsShown || !ui.playing || ui.blocked;
 
   function togglePlay() {
@@ -376,10 +418,25 @@ export function StreamPlayer({
     activeAdapter?.play();
   }
 
+  const showBar = !(isTwitch && !syncable) || ui.qualityCount > 0 || appleAirPlay;
+
+  const twitchNote =
+    stream && isTwitch
+      ? ui.error
+        ? ui.error
+        : ui.ended
+          ? "This broadcast has ended."
+          : ui.muteBlocked
+            ? "Sound is off. Click the video once to turn it on."
+            : ui.blocked || ui.stalled
+              ? "Click the play button inside the video to start."
+              : null
+      : null;
+
   const controls = stream && (
           <PlayerControls
-      variant={fullscreen ? "overlay" : "bar"}
-      visible={fullscreen ? showControls : true}
+      variant={fullscreen && !isTwitch ? "overlay" : "bar"}
+      visible={fullscreen && !isTwitch ? showControls : true}
       playing={ui.playing}
       time={ui.time}
       duration={ui.duration}
@@ -393,7 +450,7 @@ export function StreamPlayer({
       onPlayPause={togglePlay}
       onSeek={(seconds) => send({ type: "stream.control", streamId: stream.id, action: "seek", position: seconds })}
       onVolume={(value) => {
-        setVolume(value);
+        setVolume(value <= SILENT_BELOW ? 0 : value);
         setMuted(false);
       }}
       onMute={() => setMuted((value) => !value)}
@@ -401,6 +458,25 @@ export function StreamPlayer({
       onResync={resync}
       onGoLive={goLive}
       canFullscreen={canFullscreen}
+      minimal={isTwitch && !syncable}
+      qualityOptions={activeAdapter?.qualities() ?? []}
+      quality={ui.qualityValue}
+      qualityNote={activeAdapter?.qualityNote}
+      qualityLink={stream ? { href: sourceUrl(stream), label: "Open on YouTube to choose a quality" } : undefined}
+      onQuality={(id) => {
+        activeAdapter?.setQuality(id);
+        patch({ qualityValue: id });
+      }}
+      onAirPlay={appleAirPlay ? openTvSheet : undefined}
+      captions={activeAdapter?.captions?.() ?? null}
+      onCaptionTrack={(id) => {
+        activeAdapter?.setCaptionTrack?.(id);
+        patch({ captionKey: `set:${Math.random()}` });
+      }}
+      onCaptionSize={(size) => {
+        activeAdapter?.setCaptionSize?.(size);
+        patch({ captionKey: `size:${Math.random()}` });
+      }}
     />
   );
 
@@ -411,13 +487,9 @@ export function StreamPlayer({
 
       {visible && stream && (
         <>
-          <div className={`absolute inset-0 z-10 ${passthrough ? "pointer-events-none" : ""}`} onClick={revealControls} />
-
-          {passthrough && !ui.error && (
-            <div className="material animate-fade pointer-events-none absolute top-3 left-1/2 z-30 max-w-[90%] -translate-x-1/2 rounded-full px-4 py-2 text-center text-sm">
-              {ui.muteBlocked ? "Click the video once to turn the sound on" : "Click the play button in the video to start"}
-            </div>
-          )}
+          {!isTwitch && (
+            <>
+          <div className="absolute inset-0 z-10" onClick={revealControls} />
 
           {ui.loading && !ui.blocked && !ui.error && (
             <div className="animate-fade absolute inset-0 z-10 flex items-center justify-center bg-black">
@@ -458,7 +530,7 @@ export function StreamPlayer({
             </div>
           )}
 
-          {ui.blocked && !passthrough && !ui.error && (
+          {ui.blocked && !ui.error && (
             <button
               autoFocus={bare}
               onClick={startPlayback}
@@ -471,7 +543,38 @@ export function StreamPlayer({
             </button>
           )}
 
-          {!bare && (fullscreen ? controls : controlsSlot ? createPortal(controls, controlsSlot) : null)}
+            </>
+          )}
+
+          {!bare &&
+            (fullscreen && !isTwitch ? (
+              controls
+            ) : controlsSlot ? (
+              createPortal(
+                <>
+                  {showBar && controls}
+                  {isTwitch && (twitchNote || (ui.debug && debugRef.current)) && (
+                    <div className="px-3 pt-2 text-sm text-label-2 lg:px-0" role="status">
+                      {twitchNote}
+                      {twitchNote && ui.error && stream && (
+                        <>
+                          {" "}
+                          <button onClick={retry} className="text-accent hover:underline">
+                            Try again
+                          </button>
+                          {" · "}
+                          <a href={sourceUrl(stream)} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                            Open on Twitch
+                          </a>
+                        </>
+                      )}
+                      {ui.debug && debugRef.current && <pre className="mt-1 font-mono text-[10px] whitespace-pre-wrap text-live">{ui.debug}</pre>}
+                    </div>
+                  )}
+                </>,
+                controlsSlot,
+              )
+            ) : null)}
         </>
       )}
     </div>

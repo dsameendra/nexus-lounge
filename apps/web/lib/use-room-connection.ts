@@ -1,10 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { serverMessageSchema, type ClientMessage, type RoomState } from "@nexus/shared";
+import { serverMessageSchema, type ClientMessage, type ReactionEmoji, type RoomState } from "@nexus/shared";
 import { ClockSync } from "./clock";
 
 export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "failed" | "kicked";
+
+export interface ReactionEvent {
+  id: string;
+  emoji: ReactionEmoji;
+  from: { id: string; name: string };
+}
 
 export interface RoomConnection {
   state: RoomState | null;
@@ -12,6 +18,7 @@ export interface RoomConnection {
   clock: ClockSync;
   send: (message: ClientMessage) => void;
   lastError: { message: string; at: number } | null;
+  onReaction: (listener: (reaction: ReactionEvent) => void) => () => void;
 }
 
 const INITIAL_PINGS = 8;
@@ -23,6 +30,14 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
   const [lastError, setLastError] = useState<RoomConnection["lastError"]>(null);
   const clockRef = useRef<ClockSync>(new ClockSync());
   const socketRef = useRef<WebSocket | null>(null);
+  const reactionListeners = useRef(new Set<(reaction: ReactionEvent) => void>());
+
+  const onReaction = useCallback((listener: (reaction: ReactionEvent) => void) => {
+    reactionListeners.current.add(listener);
+    return () => {
+      reactionListeners.current.delete(listener);
+    };
+  }, []);
 
   const send = useCallback((message: ClientMessage) => {
     const socket = socketRef.current;
@@ -67,6 +82,7 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
           setState(message.state);
           setStatus("open");
         }
+        if (message.type === "reaction") reactionListeners.current.forEach((listener) => listener(message));
         if (message.type === "kicked") {
           closed = true;
           setStatus("kicked");
@@ -100,5 +116,5 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
     };
   }, [roomId, ticket, wsUrl]);
 
-  return { state, status, clock: clockRef.current, send, lastError };
+  return { state, status, clock: clockRef.current, send, lastError, onReaction };
 }

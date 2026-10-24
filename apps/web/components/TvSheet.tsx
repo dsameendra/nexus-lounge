@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAppleAirPlaySupport } from "./useAirPlay";
 import { CheckIcon, LinkIcon, TvIcon } from "./Icons";
 import { useRoom } from "./RoomProvider";
 import { Sheet } from "./Sheet";
@@ -13,6 +14,7 @@ export function TvSheet({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [copied, setCopied] = useState(false);
+  const appleAirPlay = useAppleAirPlaySupport();
   const tvUrl = `${typeof window === "undefined" ? "" : window.location.origin}/room/${roomId}/tv`;
 
   async function connect(event: React.FormEvent) {
@@ -86,6 +88,24 @@ export function TvSheet({ onClose }: { onClose: () => void }) {
           {connected && <p className="flex items-center gap-2 text-sm text-live"><CheckIcon /> Your TV is connected. Press OK on its remote to start.</p>}
         </div>
       </section>
+
+      {appleAirPlay && (
+        <section className="mb-4">
+          <h3 className="mb-1.5 px-1 text-xs font-semibold tracking-wide text-label-2 uppercase">AirPlay</h3>
+          <div className="rounded-2xl bg-panel-2 p-4 text-sm text-label-2">
+            <p>
+              YouTube and Twitch play inside their own players, which can&apos;t be sent to AirPlay directly. Mirror a clean full-screen view instead:
+            </p>
+            <ol className="mt-2 list-decimal space-y-1 pl-5">
+              <li>Open the TV view below on this device.</li>
+              <li>
+                Open <span className="text-white">Control Center</span>, tap <span className="text-white">Screen Mirroring</span> and choose your Apple TV.
+              </li>
+            </ol>
+            <p className="mt-2">Screen shares can be sent to AirPlay from their AirPlay button when your browser offers it.</p>
+          </div>
+        </section>
+      )}
 
       <section>
         <h3 className="mb-1.5 px-1 text-xs font-semibold tracking-wide text-label-2 uppercase">Cast a tab</h3>

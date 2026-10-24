@@ -1,14 +1,16 @@
 "use client";
 
-import { SCREEN_ID } from "@nexus/shared";
-import { useConnectionQualityIndicator, useIsSpeaking } from "@livekit/components-react";
+import { isScreenId, screenId, screenIdentity } from "@nexus/shared";
+import { useConnectionQualityIndicator, useLocalParticipant } from "@livekit/components-react";
 import { ConnectionQuality, type Participant } from "livekit-client";
 import { Avatar, parseImage } from "./Avatar";
 import { Pill, ProviderBadge } from "./Badges";
 import { MuteForMeRow, OwnerRows, VolumeRow } from "./PersonControls";
 import { useRoom } from "./RoomProvider";
 import { Sheet } from "./Sheet";
+import { SpeakingRing, useSpeaking } from "./Speaking";
 import { StreamArt } from "./StreamArt";
+import { useParticipantMedia } from "./useParticipantMedia";
 
 const QUALITY: Record<string, { label: string; tone: string }> = {
   [ConnectionQuality.Excellent]: { label: "Excellent", tone: "text-live" },
@@ -35,9 +37,19 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
+function ActionRow({ label, tone = "accent", onClick }: { label: string; tone?: "accent" | "danger"; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className={`flex w-full items-center justify-center gap-2 px-4 py-3 text-[15px] font-medium transition hover:bg-white/5 ${tone === "danger" ? "text-danger" : "text-accent"}`}>
+      {label}
+    </button>
+  );
+}
+
 export function UserSheet({ participant, onClose }: { participant: Participant; onClose: () => void }) {
-  const { state, isHost, self, memberById, select } = useRoom();
-  const speaking = useIsSpeaking(participant);
+  const { state, send, isHost, isController, self, memberById, select } = useRoom();
+  const { localParticipant } = useLocalParticipant();
+  const speaking = useSpeaking(participant);
+  const { micOn, sharing } = useParticipantMedia(participant);
   const { quality } = useConnectionQualityIndicator({ participant });
   const userId = participant.identity;
   const name = participant.name || userId;
@@ -45,35 +57,38 @@ export function UserSheet({ participant, onClose }: { participant: Participant; 
   const isMe = userId === self.id || participant.isLocal;
   const restriction = state.restrictions[userId];
   const isRoomHost = userId === state.room.hostId;
-  const isController = state.room.controllerIds.includes(userId);
+  const isCtrl = state.room.controllerIds.includes(userId);
   const watchingId = member?.watching ?? null;
-  const watchingStream = watchingId && watchingId !== SCREEN_ID ? state.streams.find((stream) => stream.id === watchingId) : undefined;
+  const watchingStream = watchingId && !isScreenId(watchingId) ? state.streams.find((stream) => stream.id === watchingId) : undefined;
+  const watchingScreenName = watchingId && isScreenId(watchingId) ? (memberById(screenIdentity(watchingId))?.name ?? "someone") : null;
   const showOwner = isHost && !isMe;
+  const canStopTheirShare = sharing && !isMe && isController && (!isRoomHost || isHost);
 
   const status = restriction?.deafened
     ? { text: "Deafened by the room owner", tone: "text-warn" }
     : restriction?.muted
       ? { text: "Muted by the room owner", tone: "text-warn" }
-      : !participant.isMicrophoneEnabled
-        ? { text: "Microphone off", tone: "text-danger" }
-        : speaking
-          ? { text: "Speaking", tone: "text-live" }
-          : { text: "Listening", tone: "text-label-2" };
+      : member?.deafened
+        ? { text: "Deafened", tone: "text-danger" }
+        : !micOn
+          ? { text: "Microphone off", tone: "text-label-2" }
+          : speaking
+            ? { text: "Speaking", tone: "text-live" }
+            : { text: "Listening", tone: "text-label-2" };
   const connection = QUALITY[quality] ?? { label: "Unknown", tone: "text-label-2" };
 
   return (
     <Sheet title={name} onClose={onClose}>
       <div className="mb-5 flex flex-col items-center text-center">
-        <span className={`rounded-full p-[3px] transition-colors ${speaking ? "bg-live" : "bg-transparent"}`}>
-          <span className="block rounded-full bg-panel p-[2px]">
-            <Avatar name={name} image={member?.image ?? parseImage(participant.metadata)} className="size-20 text-3xl" />
-          </span>
-        </span>
+        <SpeakingRing speaking={speaking}>
+          <Avatar name={name} image={member?.image ?? parseImage(participant.metadata)} className="size-20 text-3xl" />
+        </SpeakingRing>
         <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
           {isMe && <Pill>You</Pill>}
           {isRoomHost && <Pill tone="warn">Room owner</Pill>}
-          {isController && <Pill tone="accent">Controller</Pill>}
+          {isCtrl && <Pill tone="accent">Controller</Pill>}
           {member?.guest && <Pill>Guest</Pill>}
+          {sharing && <Pill tone="accent">Sharing screen</Pill>}
         </div>
       </div>
 
@@ -89,8 +104,8 @@ export function UserSheet({ participant, onClose }: { participant: Participant; 
                 <StreamArt stream={watchingStream} className="size-full" />
               </span>
             </span>
-          ) : watchingId === SCREEN_ID ? (
-            "Screen share"
+          ) : watchingScreenName ? (
+            `${watchingScreenName}'s screen`
           ) : (
             <span className="text-label-2">Nothing</span>
           )}
@@ -110,10 +125,32 @@ export function UserSheet({ participant, onClose }: { participant: Participant; 
             className="flex w-full items-center justify-center gap-2 px-4 py-3 text-[15px] font-medium text-accent transition hover:bg-white/5"
           >
             {watchingStream && <ProviderBadge source={watchingStream.source} />}
-            Watch what they're watching
+            Watch what they&apos;re watching
           </button>
         )}
       </Group>
+
+      {sharing && (
+        <Group title="Screen share">
+          {!isMe && !self.guest && (
+            <ActionRow
+              label="Watch their screen"
+              onClick={() => {
+                select(screenId(userId));
+                onClose();
+              }}
+            />
+          )}
+          {isController && (
+            <ActionRow
+              label={state.featuredId === screenId(userId) ? "Stop showing to everyone" : "Show their screen to everyone"}
+              onClick={() => send({ type: "stream.feature", streamId: state.featuredId === screenId(userId) ? null : screenId(userId) })}
+            />
+          )}
+          {isMe && <ActionRow label="Stop sharing" tone="danger" onClick={() => void localParticipant.setScreenShareEnabled(false)} />}
+          {canStopTheirShare && <ActionRow label="Stop their screen share" tone="danger" onClick={() => send({ type: "share.stop", userId })} />}
+        </Group>
+      )}
 
       {!isMe && (
         <Group title="Just for you">

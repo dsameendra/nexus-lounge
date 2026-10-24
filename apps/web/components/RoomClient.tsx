@@ -9,6 +9,7 @@ import { joinResponseSchema, type JoinResponse } from "@nexus/shared";
 import { RoomProvider, type Self } from "./RoomProvider";
 import { RoomView } from "./RoomView";
 import { VoiceAudio } from "./VoiceAudio";
+import { PushToTalkProvider } from "./PushToTalk";
 import { VoiceSettingsProvider } from "./VoiceSettings";
 
 const roomOptions: RoomOptions = { adaptiveStream: true, dynacast: true };
@@ -57,6 +58,8 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
           const { error } = (await response.json()) as { error: string };
           if (error === "removed") return setState({ status: "denied", message: "You were removed from this room by the owner." });
           if (error === "declined") return setState({ status: "denied", message: "The room owner didn't let you in." });
+          if (error === "locked") return setState({ status: "denied", message: "This room is locked by the owner." });
+          if (error === "closed") return setState({ status: "denied", message: "This room doesn't allow guests. Sign in with Discord to join." });
           return setState({ status: "password", wrong: error === "wrong_password" });
         }
         if (!response.ok) return setState({ status: "error", message: "Could not reach the server." });
@@ -207,6 +210,7 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
         className="h-dvh"
       >
         <VoiceSettingsProvider>
+          <PushToTalkProvider deafened={deafened}>
           <VoiceAudio deafened={deafened} />
           <RoomView
             deafened={deafened}
@@ -218,6 +222,7 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
               setVoiceKey((key) => key + 1);
             }}
           />
+          </PushToTalkProvider>
         </VoiceSettingsProvider>
       </LiveKitRoom>
     </RoomProvider>

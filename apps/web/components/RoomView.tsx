@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useChat, useParticipants } from "@livekit/components-react";
 import { AddStreamSheet } from "./AddStreamSheet";
 import { Chat } from "./Chat";
 import { ChatIcon, FilmIcon, PeopleIcon } from "./Icons";
 import { VoicePanel } from "./Dock";
 import { JoinRequests } from "./JoinRequests";
+import { ShareNotices } from "./ShareNotices";
 import { PeoplePanel } from "./PeoplePanel";
 import { RoomHeader } from "./RoomHeader";
 import { useRoom } from "./RoomProvider";
@@ -33,11 +35,18 @@ export function RoomView({
   const { effectiveId } = useEffectiveSource();
   const [tab, setTab] = useState<Tab>("chat");
   const [adding, setAdding] = useState(false);
+  const { chatMessages } = useChat();
+  const participantCount = useParticipants().length;
+  const [seenChat, setSeenChat] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "open") send({ type: "presence.watch", streamId: effectiveId });
   }, [effectiveId, status, send]);
+
+  useEffect(() => {
+    if (status === "open") send({ type: "presence.voice", deafened });
+  }, [deafened, status, send]);
 
   useEffect(() => {
     if (!lastError) return;
@@ -47,6 +56,11 @@ export function RoomView({
   }, [lastError]);
 
   const sideTab = tab === "people" ? "people" : "chat";
+  const unread = tab === "chat" ? 0 : chatMessages.slice(seenChat).filter((message) => !message.from?.isLocal).length;
+
+  useEffect(() => {
+    if (tab === "chat") setSeenChat(chatMessages.length);
+  }, [tab, chatMessages.length]);
   const openAdd = () => setAdding(true);
 
   return (
@@ -75,9 +89,9 @@ export function RoomView({
               value={tab}
               onChange={setTab}
               options={[
-                { value: "chat", label: "Chat", icon: <ChatIcon /> },
+                { value: "chat", label: "Chat", icon: <ChatIcon />, badge: unread },
                 { value: "streams", label: "Streams", icon: <FilmIcon /> },
-                { value: "people", label: "People", icon: <PeopleIcon /> },
+                { value: "people", label: "People", icon: <PeopleIcon />, badge: participantCount, badgeTone: "quiet" as const },
               ]}
             />
           </div>
@@ -86,8 +100,8 @@ export function RoomView({
               value={sideTab}
               onChange={setTab}
               options={[
-                { value: "chat", label: "Chat", icon: <ChatIcon /> },
-                { value: "people", label: "People", icon: <PeopleIcon /> },
+                { value: "chat", label: "Chat", icon: <ChatIcon />, badge: unread },
+                { value: "people", label: "People", icon: <PeopleIcon />, badge: participantCount, badgeTone: "quiet" as const },
               ]}
             />
           </div>
@@ -110,6 +124,7 @@ export function RoomView({
       </div>
 
       <JoinRequests />
+      <ShareNotices />
 
       {adding && <AddStreamSheet onClose={() => setAdding(false)} />}
 

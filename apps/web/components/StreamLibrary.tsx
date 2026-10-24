@@ -1,20 +1,24 @@
 "use client";
 
-import { SCREEN_ID, type Stream } from "@nexus/shared";
+import { screenId, type Stream } from "@nexus/shared";
+import { useLocalParticipant } from "@livekit/components-react";
 import { Avatar } from "./Avatar";
 import { Pill, ProviderBadge } from "./Badges";
-import { BroadcastIcon, PlusIcon, ScreenIcon, TrashIcon } from "./Icons";
+import { BroadcastIcon, ChevronDownIcon, ChevronUpIcon, PlusIcon, QueueNextIcon, ScreenIcon, TrashIcon } from "./Icons";
 import { MenuButton, type MenuItem } from "./Menu";
 import { useRoom } from "./RoomProvider";
 import { StreamArt } from "./StreamArt";
-import { useEffectiveSource } from "./useEffectiveSource";
+import { shareName, useEffectiveSource } from "./useEffectiveSource";
 
 export function StreamLibrary({ onAdd }: { onAdd: () => void }) {
-  const { state, self, select, send, isController, canControlStream, canAdd } = useRoom();
-  const { effectiveId, featuredId, screenActive } = useEffectiveSource();
+  const { state, self, select, send, isController, isHost, canControlStream, canAdd } = useRoom();
+  const { effectiveId, featuredId, shares } = useEffectiveSource();
+  const { localParticipant } = useLocalParticipant();
 
+  const featuredIndex = state.streams.findIndex((stream) => stream.id === featuredId);
+  const upNextId = state.room.settings.autoplayNext && featuredIndex >= 0 ? state.streams[featuredIndex + 1]?.id : undefined;
   const watchers = (id: string) => state.members.filter((member) => member.watching === id);
-  const empty = state.streams.length === 0 && !screenActive;
+  const empty = state.streams.length === 0 && shares.length === 0;
 
   return (
     <section aria-label="Streams" className="px-4 pt-5 pb-6 lg:px-0 lg:pt-7">
@@ -43,45 +47,57 @@ export function StreamLibrary({ onAdd }: { onAdd: () => void }) {
       )}
 
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-        {screenActive && (
-          <li>
-            <Card
-              active={effectiveId === SCREEN_ID}
-              clickable={!self.guest}
-              onClick={() => select(SCREEN_ID)}
-              art={
-                <div className="flex size-full items-center justify-center bg-gradient-to-br from-accent/40 to-panel-2 text-3xl text-white/80">
-                  <ScreenIcon />
-                </div>
-              }
-              title="Screen share"
-              subtitle="Live from someone in the room"
-              badges={
-                <>
-                  <Pill tone="live">Live</Pill>
-                  {featuredId === SCREEN_ID && <Pill tone="accent">On air</Pill>}
-                </>
-              }
-              viewers={watchers(SCREEN_ID)}
-              menu={
-                isController
-                  ? [
-                      featuredId === SCREEN_ID
-                        ? { label: "Stop showing to everyone", icon: <BroadcastIcon />, onSelect: () => send({ type: "stream.feature", streamId: null }) }
-                        : { label: "Show to everyone", icon: <BroadcastIcon />, onSelect: () => send({ type: "stream.feature", streamId: SCREEN_ID }) },
-                    ]
-                  : []
-              }
-            />
-          </li>
-        )}
+        {shares.map((share) => {
+          const id = screenId(share.participant.identity);
+          const mine = share.participant.isLocal;
+          const protectedOwner = share.participant.identity === state.room.hostId && !isHost;
+          const menu = [
+            ...(isController
+              ? [
+                  featuredId === id
+                    ? { label: "Stop showing to everyone", icon: <BroadcastIcon />, onSelect: () => send({ type: "stream.feature", streamId: null }) }
+                    : { label: "Show to everyone", icon: <BroadcastIcon />, onSelect: () => send({ type: "stream.feature", streamId: id }) },
+                ]
+              : []),
+            ...(mine
+              ? [{ label: "Stop sharing", icon: <TrashIcon />, danger: true, onSelect: () => void localParticipant.setScreenShareEnabled(false) }]
+              : isController && !protectedOwner
+                ? [{ label: "Stop their screen share", icon: <TrashIcon />, danger: true, onSelect: () => send({ type: "share.stop", userId: share.participant.identity }) }]
+                : []),
+          ];
+          return (
+            <li key={id}>
+              <Card
+                active={effectiveId === id}
+                clickable={!self.guest}
+                onClick={() => select(id)}
+                art={
+                  <div className="flex size-full items-center justify-center bg-gradient-to-br from-accent/40 to-panel-2 text-3xl text-white/80">
+                    <ScreenIcon />
+                  </div>
+                }
+                title={`${shareName(share)}'s screen`}
+                subtitle={mine ? "You're sharing" : "Live screen share"}
+                badges={
+                  <>
+                    <Pill tone="live">Live</Pill>
+                    {featuredId === id && <Pill tone="accent">On air</Pill>}
+                  </>
+                }
+                viewers={watchers(id)}
+                menu={menu}
+              />
+            </li>
+          );
+        })}
 
-        {state.streams.map((stream) => (
+        {state.streams.map((stream, index) => (
           <li key={stream.id}>
             <StreamCard
               stream={stream}
               active={effectiveId === stream.id}
               onAir={featuredId === stream.id}
+              upNext={stream.id === upNextId}
               viewers={watchers(stream.id)}
               clickable={!self.guest}
               onSelect={() => select(stream.id)}
@@ -92,6 +108,15 @@ export function StreamLibrary({ onAdd }: { onAdd: () => void }) {
                         ? { label: "Stop showing to everyone", icon: <BroadcastIcon />, onSelect: () => send({ type: "stream.feature", streamId: null }) }
                         : { label: "Show to everyone", icon: <BroadcastIcon />, onSelect: () => send({ type: "stream.feature", streamId: stream.id }) },
                     ]
+                  : []),
+                ...(isController && featuredId !== stream.id && index !== featuredIndex + 1
+                  ? [{ label: "Play next", icon: <QueueNextIcon />, onSelect: () => send({ type: "stream.move", streamId: stream.id, direction: "next" }) }]
+                  : []),
+                ...(isController && index > 0
+                  ? [{ label: "Move up", icon: <ChevronUpIcon />, onSelect: () => send({ type: "stream.move", streamId: stream.id, direction: "up" }) }]
+                  : []),
+                ...(isController && index < state.streams.length - 1
+                  ? [{ label: "Move down", icon: <ChevronDownIcon />, onSelect: () => send({ type: "stream.move", streamId: stream.id, direction: "down" }) }]
                   : []),
                 ...(canControlStream(stream)
                   ? [{ label: "Remove", icon: <TrashIcon />, danger: true, onSelect: () => send({ type: "stream.remove", streamId: stream.id }) }]
@@ -109,6 +134,7 @@ function StreamCard({
   stream,
   active,
   onAir,
+  upNext,
   viewers,
   clickable,
   onSelect,
@@ -117,6 +143,7 @@ function StreamCard({
   stream: Stream;
   active: boolean;
   onAir: boolean;
+  upNext: boolean;
   viewers: ReturnType<typeof useRoom>["state"]["members"];
   clickable: boolean;
   onSelect: () => void;
@@ -136,6 +163,7 @@ function StreamCard({
           <ProviderBadge source={stream.source} />
           {live && <Pill tone="live">Live</Pill>}
           {onAir && <Pill tone="accent">On air</Pill>}
+          {upNext && <Pill>Up next</Pill>}
         </>
       }
       viewers={viewers}
@@ -169,15 +197,13 @@ function Card({
     <div
       className={`relative flex gap-3 rounded-2xl bg-panel p-2.5 transition ${
         active ? "ring-2 ring-accent" : clickable ? "hover:bg-panel-2" : ""
-      } ${clickable ? "cursor-pointer active:scale-[0.99]" : ""}`}
-      onClick={clickable ? onClick : undefined}
-      role={clickable ? "button" : undefined}
-      tabIndex={clickable ? 0 : undefined}
-      onKeyDown={(event) => clickable && (event.key === "Enter" || event.key === " ") && (event.preventDefault(), onClick())}
-      aria-pressed={clickable ? active : undefined}
+      } ${clickable ? "active:scale-[0.99]" : ""}`}
     >
-      <div className="aspect-video w-28 shrink-0 overflow-hidden rounded-xl bg-panel-2 sm:w-32">{art}</div>
-      <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
+      {clickable && (
+        <button type="button" onClick={onClick} aria-pressed={active} aria-label={`Watch ${title}`} className="absolute inset-0 rounded-2xl" />
+      )}
+      <div className="pointer-events-none aspect-video w-28 shrink-0 overflow-hidden rounded-xl bg-panel-2 sm:w-32">{art}</div>
+      <div className="pointer-events-none flex min-w-0 flex-1 flex-col justify-between py-0.5">
         <div className={`min-w-0 ${menu.length > 0 ? "pr-8" : ""}`}>
           <p className="line-clamp-2 text-sm leading-snug font-medium">{title}</p>
           <p className="mt-0.5 truncate text-xs text-label-2">{subtitle}</p>
@@ -197,7 +223,7 @@ function Card({
         </div>
       </div>
       {menu.length > 0 && (
-        <div className="absolute top-1.5 right-1.5">
+        <div className="absolute top-1.5 right-1.5 z-10">
           <MenuButton items={menu} />
         </div>
       )}

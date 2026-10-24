@@ -3,31 +3,32 @@
 import { useEffect, useState } from "react";
 import { AudioTrack, isTrackReference, useTracks } from "@livekit/components-react";
 import { Track } from "livekit-client";
-import { SCREEN_ID } from "@nexus/shared";
+import { screenId } from "@nexus/shared";
 import { ProviderBadge } from "./Badges";
+import { FloatingReactions } from "./Reactions";
 import { FilmIcon } from "./Icons";
 import { useRoom } from "./RoomProvider";
 import { StreamPlayer } from "./StreamPlayer";
 import { useEffectiveSource } from "./useEffectiveSource";
 import { WatchArea } from "./WatchArea";
 
-function ScreenAudio({ active }: { active: boolean }) {
+function ScreenAudio({ effectiveId }: { effectiveId: string | null }) {
   const tracks = useTracks([Track.Source.ScreenShareAudio], { onlySubscribed: true }).filter(isTrackReference);
   return (
     <div style={{ display: "none" }}>
       {tracks.map((track) => (
-        <AudioTrack key={track.participant.identity} trackRef={track} muted={!active} />
+        <AudioTrack key={track.participant.identity} trackRef={track} muted={effectiveId !== screenId(track.participant.identity)} />
       ))}
     </div>
   );
 }
 
 export function TvRoom() {
-  const { send, status } = useRoom();
-  const { effectiveId, stream } = useEffectiveSource();
+  const { send, status, state } = useRoom();
+  const { effectiveId, stream, share } = useEffectiveSource();
   const [toast, setToast] = useState(false);
-  const showingScreen = effectiveId === SCREEN_ID;
-  const title = stream?.title ?? (showingScreen ? "Screen share" : null);
+  const showingScreen = Boolean(share);
+  const title = stream?.title ?? (share ? `${share.participant.name || share.participant.identity}'s screen` : null);
 
   useEffect(() => {
     if (status === "open") send({ type: "presence.watch", streamId: effectiveId });
@@ -42,15 +43,17 @@ export function TvRoom() {
 
   return (
     <div className="fixed inset-0 cursor-none overflow-hidden bg-black">
-      <ScreenAudio active={showingScreen} />
+      <ScreenAudio effectiveId={effectiveId} />
       <div className="absolute inset-0">
         <StreamPlayer stream={stream} visible={Boolean(stream) && !showingScreen} onFullscreen={() => {}} bare />
       </div>
-      {showingScreen && (
+      {share && (
         <div className="absolute inset-0 z-10">
-          <WatchArea />
+          <WatchArea share={share} />
         </div>
       )}
+
+      {state.room.settings.reactions && effectiveId && stream?.source.type !== "twitch" && <FloatingReactions />}
 
       {!effectiveId && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 text-center">

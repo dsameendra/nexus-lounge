@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/auth";
+import { Logo } from "@/components/Logo";
 
 function safeCallback(value: string | undefined) {
   return value && value.startsWith("/") && !value.startsWith("//") ? value : "/";
@@ -12,8 +13,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <main className="flex min-h-dvh items-center justify-center p-6">
       <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold tracking-tight">Nexus Lounge</h1>
+        <div className="mb-8 flex flex-col items-center text-center">
+          <Logo size={84} />
+          <h1 className="mt-5 text-4xl font-bold tracking-tight">Nexus Lounge</h1>
           <p className="mt-2 text-label-2">Watch together. Talk like you're in the same room.</p>
         </div>
         <div className="rounded-[var(--radius-sheet)] bg-panel p-5">

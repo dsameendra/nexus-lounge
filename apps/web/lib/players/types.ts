@@ -1,5 +1,16 @@
 import type { MediaSource } from "@nexus/shared";
 
+export interface QualityOption {
+  id: string;
+  label: string;
+}
+
+export interface CaptionState {
+  tracks: QualityOption[];
+  active: string | null;
+  size: number;
+}
+
 export type PlayerState = "idle" | "playing" | "paused" | "buffering" | "ended";
 
 export interface PlayerAdapter {
@@ -8,6 +19,13 @@ export interface PlayerAdapter {
   readonly rates: number[];
   readonly error: string | null;
   readonly muteBlocked?: boolean;
+  readonly qualityNote?: string;
+  qualities(): QualityOption[];
+  quality(): string;
+  setQuality(id: string): void;
+  captions?(): CaptionState | null;
+  setCaptionTrack?(id: string | null): void;
+  setCaptionSize?(size: number): void;
   load(source: MediaSource, startAt: number | null, autoplay: boolean): void;
   play(): void;
   pause(): void;

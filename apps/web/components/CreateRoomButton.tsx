@@ -8,6 +8,7 @@ export function CreateRoomButton() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function create() {
@@ -17,7 +18,7 @@ export function CreateRoomButton() {
       const response = await fetch("/api/rooms", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(password ? { password } : {}),
+        body: JSON.stringify({ ...(password ? { password } : {}), ...(name.trim() ? { name: name.trim() } : {}) }),
       });
       if (!response.ok) throw new Error();
       const room = roomInfoSchema.parse(await response.json());
@@ -30,6 +31,13 @@ export function CreateRoomButton() {
 
   return (
     <div className="space-y-3">
+      <input
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        maxLength={40}
+        placeholder="Room name (optional)"
+        className="h-12 w-full rounded-xl bg-panel-2 px-4 text-base outline-none placeholder:text-label-3 focus:ring-2 focus:ring-accent"
+      />
       <input
         type="password"
         value={password}

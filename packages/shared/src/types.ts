@@ -1,11 +1,42 @@
 import { z } from "zod";
 
-export const SCREEN_ID = "screen";
+export const SCREEN_PREFIX = "screen:";
+
+export function screenId(identity: string) {
+  return `${SCREEN_PREFIX}${identity}`;
+}
+
+export function isScreenId(id: string | null | undefined): id is `screen:${string}` {
+  return typeof id === "string" && /^screen:[A-Za-z0-9_.-]{1,80}$/.test(id);
+}
+
+export function screenIdentity(id: string) {
+  return id.slice(SCREEN_PREFIX.length);
+}
 
 export const roomIdSchema = z.string().regex(/^[a-z0-9]{8}$/);
 
+export const roomSettingsSchema = z.object({
+  guests: z.enum(["ask", "open", "closed"]),
+  sharing: z.enum(["everyone", "controllers"]),
+  locked: z.boolean(),
+  autoplayNext: z.boolean(),
+  reactions: z.boolean(),
+});
+export type RoomSettings = z.infer<typeof roomSettingsSchema>;
+
+export const defaultRoomSettings: RoomSettings = { guests: "ask", sharing: "everyone", locked: false, autoplayNext: true, reactions: true };
+
+export const REACTION_EMOJIS = ["🔥", "😂", "😮", "👏", "❤️", "🎉", "😢", "🤯"] as const;
+export const reactionEmojiSchema = z.enum(REACTION_EMOJIS);
+export type ReactionEmoji = z.infer<typeof reactionEmojiSchema>;
+
+export const roomNameSchema = z.string().trim().max(40);
+
 export const roomInfoSchema = z.object({
   id: roomIdSchema,
+  name: z.string(),
+  settings: roomSettingsSchema,
   hostId: z.string(),
   controllerIds: z.array(z.string()),
   createdAt: z.number(),
@@ -19,7 +50,7 @@ export const participantMetadataSchema = z.object({
 export type ParticipantMetadata = z.infer<typeof participantMetadataSchema>;
 
 export const roomPasswordSchema = z.string().min(1).max(64);
-export const createRoomRequestSchema = z.object({ password: roomPasswordSchema.optional() });
+export const createRoomRequestSchema = z.object({ password: roomPasswordSchema.optional(), name: roomNameSchema.optional() });
 export const joinRoomRequestSchema = z.object({ password: z.string().max(64).optional() });
 
 export const mediaSourceSchema = z.object({
@@ -51,6 +82,7 @@ export const memberSchema = z.object({
   name: z.string(),
   image: z.string().nullable(),
   guest: z.boolean(),
+  deafened: z.boolean(),
   watching: z.string().nullable(),
 });
 export type Member = z.infer<typeof memberSchema>;

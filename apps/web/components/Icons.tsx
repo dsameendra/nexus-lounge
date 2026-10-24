@@ -156,3 +156,37 @@ export const TvIcon = (p: P) => (
     <path d="M8.5 21h7M12 17.5V21" />
   </Icon>
 );
+export const GearIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6" />
+  </Icon>
+);
+export const AirPlayIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M7 17H5.5A2.5 2.5 0 0 1 3 14.5v-8A2.5 2.5 0 0 1 5.5 4h13A2.5 2.5 0 0 1 21 6.5v8a2.5 2.5 0 0 1-2.5 2.5H17" />
+    <path d="M12 14.5 17 21H7l5-6.5Z" fill="currentColor" />
+  </Icon>
+);
+export const ChevronUpIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M6 14.5l6-6 6 6" />
+  </Icon>
+);
+export const ChevronDownIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M6 9.5l6 6 6-6" />
+  </Icon>
+);
+export const QueueNextIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M4 7h11M4 12h7M4 17h7" />
+    <path d="M16 13.5v6l5-3-5-3Z" fill="currentColor" />
+  </Icon>
+);
+export const CaptionsIcon = (p: P) => (
+  <Icon {...p}>
+    <rect x="3" y="5" width="18" height="14" rx="3.2" />
+    <path d="M10.4 10.2a2.4 2.4 0 1 0 0 3.6M17.4 10.2a2.4 2.4 0 1 0 0 3.6" />
+  </Icon>
+);

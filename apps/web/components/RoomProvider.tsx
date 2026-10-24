@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
-import type { Member, RoomState, Stream } from "@nexus/shared";
+import { isScreenId, type Member, type RoomState, type Stream } from "@nexus/shared";
 import { useRoomConnection, type RoomConnection } from "@/lib/use-room-connection";
 
 export interface Self {
@@ -50,7 +50,7 @@ export function RoomProvider({
     if (!state) return null;
     const isHost = state.room.hostId === self.id;
     const isController = isHost || state.room.controllerIds.includes(self.id);
-    const selectedId = selection && (selection === "screen" || state.streams.some((s) => s.id === selection)) ? selection : null;
+    const selectedId = selection && (isScreenId(selection) || state.streams.some((s) => s.id === selection)) ? selection : null;
     return {
       ...connection,
       state,

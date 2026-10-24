@@ -1,17 +1,20 @@
 "use client";
 
-import { useState } from "react";
-import { SCREEN_ID } from "@nexus/shared";
-import { useIsSpeaking, useParticipants } from "@livekit/components-react";
+import { useMemo, useState } from "react";
+import { isScreenId, screenIdentity } from "@nexus/shared";
+import { useParticipants } from "@livekit/components-react";
 import type { Participant } from "livekit-client";
 import { Avatar, parseImage } from "./Avatar";
 import { Pill } from "./Badges";
-import { CrownIcon, MicOffIcon, MoreIcon, VolumeIcon, VolumeOffIcon } from "./Icons";
+import { CrownIcon, HeadphonesOffIcon, MicOffIcon, MoreIcon, ScreenIcon, VolumeIcon, VolumeOffIcon } from "./Icons";
 import { MuteForMeRow, OwnerRows, VolumeRow } from "./PersonControls";
 import { Popover } from "./Popover";
 import { useRoom } from "./RoomProvider";
+import { SpeakingRing, useSpeaking } from "./Speaking";
 import { UserSheet } from "./UserSheet";
+import { useParticipantMedia } from "./useParticipantMedia";
 import { useVoiceSettings } from "./VoiceSettings";
+import { isSilent } from "@nexus/shared";
 
 interface MenuState {
   identity: string;
@@ -19,10 +22,70 @@ interface MenuState {
   y: number;
 }
 
-function Row({ participant, onOpen, onMenu }: { participant: Participant; onOpen: () => void; onMenu: (x: number, y: number) => void }) {
+function useWatchingLabel(participants: Participant[]) {
+  const { state } = useRoom();
+  return (watching: string | null | undefined) => {
+    if (!watching) return null;
+    if (isScreenId(watching)) {
+      const sharer = participants.find((participant) => participant.identity === screenIdentity(watching));
+      return `${sharer ? sharer.name || sharer.identity : "someone"}'s screen`;
+    }
+    return state.streams.find((stream) => stream.id === watching)?.title ?? null;
+  };
+}
+
+export function VoiceStatusIcon({ participant, className = "text-lg" }: { participant: Participant; className?: string }) {
+  const { state, memberById } = useRoom();
+  const { micOn } = useParticipantMedia(participant);
+  const restriction = state.restrictions[participant.identity];
+  const member = memberById(participant.identity);
+
+  if (restriction?.deafened) {
+    return (
+      <span title="Deafened by the room owner" className={`${className} text-warn`}>
+        <HeadphonesOffIcon />
+      </span>
+    );
+  }
+  if (restriction?.muted) {
+    return (
+      <span title="Muted by the room owner" className={`${className} text-warn`}>
+        <MicOffIcon />
+      </span>
+    );
+  }
+  if (member?.deafened) {
+    return (
+      <span title="Deafened" className={`${className} text-danger`}>
+        <HeadphonesOffIcon />
+      </span>
+    );
+  }
+  if (!micOn) {
+    return (
+      <span title="Muted" className={`${className} text-label-2`}>
+        <MicOffIcon />
+      </span>
+    );
+  }
+  return null;
+}
+
+function Row({
+  participant,
+  watchingLabel,
+  onOpen,
+  onMenu,
+}: {
+  participant: Participant;
+  watchingLabel: (watching: string | null | undefined) => string | null;
+  onOpen: () => void;
+  onMenu: (x: number, y: number) => void;
+}) {
   const { state, memberById } = useRoom();
   const voice = useVoiceSettings();
-  const speaking = useIsSpeaking(participant);
+  const speaking = useSpeaking(participant);
+  const { sharing } = useParticipantMedia(participant);
   const name = participant.name || participant.identity;
   const member = memberById(participant.identity);
   const isRoomHost = participant.identity === state.room.hostId;
@@ -30,14 +93,7 @@ function Row({ participant, onOpen, onMenu }: { participant: Participant; onOpen
   const restriction = state.restrictions[participant.identity];
   const personal = voice.get(participant.identity);
   const quietForMe = !participant.isLocal && (personal.muted || personal.volume < 1);
-  const ownerMuted = Boolean(restriction?.muted || restriction?.deafened);
-
-  const watching =
-    member?.watching === SCREEN_ID
-      ? "Screen share"
-      : member?.watching
-        ? (state.streams.find((stream) => stream.id === member.watching)?.title ?? null)
-        : null;
+  const watching = watchingLabel(member?.watching);
 
   return (
     <li className="group relative">
@@ -50,11 +106,9 @@ function Row({ participant, onOpen, onMenu }: { participant: Participant; onOpen
         aria-label={`${name}, open profile`}
         className="flex w-full items-center gap-3 rounded-xl py-2 pr-12 pl-2 text-left transition hover:bg-white/5 active:bg-white/10"
       >
-        <span className={`rounded-full p-[2.5px] transition-colors duration-150 ${speaking ? "bg-live" : "bg-transparent"}`}>
-          <span className="block rounded-full bg-bg p-[1.5px]">
-            <Avatar name={name} image={member?.image ?? parseImage(participant.metadata)} className="size-10" />
-          </span>
-        </span>
+        <SpeakingRing speaking={speaking}>
+          <Avatar name={name} image={member?.image ?? parseImage(participant.metadata)} className="size-10" />
+        </SpeakingRing>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="truncate text-sm font-medium">
@@ -69,18 +123,31 @@ function Row({ participant, onOpen, onMenu }: { participant: Participant; onOpen
             {isCtrl && <Pill tone="accent">Controller</Pill>}
             {member?.guest && <Pill>Guest</Pill>}
           </div>
-          <p className="truncate text-xs text-label-2">{watching ? `Watching ${watching}` : "Not watching anything"}</p>
+          <p className="truncate text-xs text-label-2">
+            {restriction?.deafened ? (
+              <span className="text-warn">Deafened by the owner</span>
+            ) : restriction?.muted ? (
+              <span className="text-warn">Muted by the owner</span>
+            ) : sharing ? (
+              <span className="text-accent">Sharing their screen</span>
+            ) : watching ? (
+              `Watching ${watching}`
+            ) : (
+              "Not watching anything"
+            )}
+          </p>
         </div>
         {quietForMe && (
-          <span title={personal.muted ? "Muted for you" : `Volume ${Math.round(personal.volume * 100)}%`} className="text-lg text-label-2">
-            {personal.muted ? <VolumeOffIcon /> : <VolumeIcon />}
+          <span title={personal.muted || isSilent(personal.volume) ? "Muted for you" : `Volume ${Math.round(personal.volume * 100)}%`} className="text-lg text-label-2">
+            {personal.muted || isSilent(personal.volume) ? <VolumeOffIcon /> : <VolumeIcon />}
           </span>
         )}
-        {(!participant.isMicrophoneEnabled || ownerMuted) && (
-          <span title={ownerMuted ? "Muted by the room owner" : "Muted"} className={`text-lg ${ownerMuted ? "text-warn" : "text-danger"}`}>
-            <MicOffIcon />
+        {sharing && (
+          <span title="Sharing their screen" className="text-lg text-accent">
+            <ScreenIcon />
           </span>
         )}
+        <VoiceStatusIcon participant={participant} />
       </button>
       <button
         aria-label={`${name}: volume and controls`}
@@ -136,9 +203,18 @@ function QuickMenu({ participant, x, y, onClose, onProfile }: { participant: Par
 }
 
 export function PeoplePanel() {
-  const participants = useParticipants();
+  const { state } = useRoom();
+  const everyone = useParticipants();
+  const watchingLabel = useWatchingLabel(everyone);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
+
+  const participants = useMemo(() => {
+    const rank = (participant: Participant) =>
+      participant.isLocal ? 0 : participant.identity === state.room.hostId ? 1 : state.room.controllerIds.includes(participant.identity) ? 2 : 3;
+    return [...everyone].sort((a, b) => rank(a) - rank(b) || (a.name || a.identity).localeCompare(b.name || b.identity));
+  }, [everyone, state.room.hostId, state.room.controllerIds]);
+
   const profile = participants.find((participant) => participant.identity === profileId);
   const menuTarget = menu ? participants.find((participant) => participant.identity === menu.identity) : undefined;
 
@@ -150,6 +226,7 @@ export function PeoplePanel() {
           <Row
             key={participant.identity}
             participant={participant}
+            watchingLabel={watchingLabel}
             onOpen={() => setProfileId(participant.identity)}
             onMenu={(x, y) => setMenu({ identity: participant.identity, x, y })}
           />
@@ -157,13 +234,7 @@ export function PeoplePanel() {
       </ul>
       <p className="px-4 pb-2 text-[11px] text-label-3">Click a person for their profile. Right-click for volume and mute.</p>
       {menu && menuTarget && (
-        <QuickMenu
-          participant={menuTarget}
-          x={menu.x}
-          y={menu.y}
-          onClose={() => setMenu(null)}
-          onProfile={() => setProfileId(menu.identity)}
-        />
+        <QuickMenu participant={menuTarget} x={menu.x} y={menu.y} onClose={() => setMenu(null)} onProfile={() => setProfileId(menu.identity)} />
       )}
       {profile && <UserSheet participant={profile} onClose={() => setProfileId(null)} />}
     </div>

@@ -5,21 +5,26 @@ import { config } from "./config.ts";
 
 const rooms = new RoomServiceClient(config.LIVEKIT_URL.replace(/^ws/, "http"), config.LIVEKIT_API_KEY, config.LIVEKIT_API_SECRET);
 
-function publishPermission(guest: boolean, micBlocked: boolean) {
-  if (!micBlocked) return { canPublish: true, canPublishSources: guest ? [TrackSource.MICROPHONE] : [] };
-  if (guest) return { canPublish: false, canPublishSources: [] };
-  return { canPublish: true, canPublishSources: [TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO, TrackSource.CAMERA] };
+export interface PublishInputs {
+  guest: boolean;
+  micBlocked: boolean;
+  canShare: boolean;
 }
 
-export async function applyMicRestriction(roomId: string, identity: string, guest: boolean, micBlocked: boolean) {
+function grantFor({ guest, micBlocked, canShare }: PublishInputs) {
+  const sources: TrackSource[] = [];
+  if (!micBlocked) sources.push(TrackSource.MICROPHONE);
+  if (canShare && !guest) sources.push(TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO);
+  return sources.length > 0 ? { canPublish: true, canPublishSources: sources } : { canPublish: false, canPublishSources: [] as TrackSource[] };
+}
+
+export async function applyPermissions(roomId: string, identity: string, inputs: PublishInputs) {
   try {
-    await rooms.updateParticipant(roomId, identity, {
-      permission: { canSubscribe: true, canPublishData: true, ...publishPermission(guest, micBlocked) },
-    });
+    await rooms.updateParticipant(roomId, identity, { permission: { canSubscribe: true, canPublishData: true, ...grantFor(inputs) } });
   } catch {}
 }
 
-export async function createLivekitToken(roomId: string, user: SessionPayload, micBlocked = false) {
+export async function createLivekitToken(roomId: string, user: SessionPayload, inputs: PublishInputs) {
   const metadata: ParticipantMetadata = { image: user.image };
   const token = new AccessToken(config.LIVEKIT_API_KEY, config.LIVEKIT_API_SECRET, {
     identity: user.sub,
@@ -27,13 +32,7 @@ export async function createLivekitToken(roomId: string, user: SessionPayload, m
     metadata: JSON.stringify(metadata),
     ttl: "6h",
   });
-  token.addGrant({
-    room: roomId,
-    roomJoin: true,
-    canSubscribe: true,
-    canPublishData: true,
-    ...publishPermission(user.guest, micBlocked),
-  });
+  token.addGrant({ room: roomId, roomJoin: true, canSubscribe: true, canPublishData: true, ...grantFor(inputs) });
   return token.toJwt();
 }
 

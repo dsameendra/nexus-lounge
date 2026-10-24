@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
 import { CreateRoomButton } from "@/components/CreateRoomButton";
+import { Logo } from "@/components/Logo";
 import { InstallPrompt } from "@/components/InstallPrompt";
 
 export default async function HomePage() {
@@ -11,8 +12,9 @@ export default async function HomePage() {
   return (
     <main className="flex min-h-dvh items-center justify-center p-6">
       <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold tracking-tight">Nexus Lounge</h1>
+        <div className="mb-8 flex flex-col items-center text-center">
+          <Logo size={84} />
+          <h1 className="mt-5 text-4xl font-bold tracking-tight">Nexus Lounge</h1>
           <p className="mt-2 text-label-2">
             Signed in as <span className="text-white">{session.user.name}</span>
             {guest && " (guest)"}

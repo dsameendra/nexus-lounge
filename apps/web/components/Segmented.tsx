@@ -7,7 +7,7 @@ export function Segmented<T extends string>({
   className = "",
 }: {
   value: T;
-  options: { value: T; label: string; icon?: React.ReactNode }[];
+  options: { value: T; label: string; icon?: React.ReactNode; badge?: number; badgeTone?: "alert" | "quiet" }[];
   onChange: (value: T) => void;
   className?: string;
 }) {
@@ -25,6 +25,15 @@ export function Segmented<T extends string>({
         >
           {option.icon}
           {option.label}
+          {option.badge !== undefined && option.badge > 0 && (
+            <span
+              className={`min-w-5 rounded-full px-1.5 py-0.5 text-[11px] leading-none font-semibold tabular-nums ${
+                option.badgeTone === "quiet" ? "bg-white/10 text-label-2" : "bg-danger text-white"
+              }`}
+            >
+              {option.badge > 99 ? "99+" : option.badge}
+            </span>
+          )}
         </button>
       ))}
     </div>

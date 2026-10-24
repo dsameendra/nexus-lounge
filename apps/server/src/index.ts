@@ -4,7 +4,7 @@ import { createRoomRequestSchema, joinRoomRequestSchema, roomIdSchema, tvCodeSch
 import { z } from "zod";
 import { config } from "./config.ts";
 import { createLivekitToken } from "./livekit.ts";
-import { checkRoomAccess, createRoom, getRoom, isAdmitted, isMember, micBlocked, pruneStalePending, requestEntry } from "./rooms.ts";
+import { checkEntry, checkRoomAccess, createRoom, getRoom, isMember, pruneReactionHistory, pruneStalePending, publishInputs, requestEntry } from "./rooms.ts";
 import { allowAttempt, approvePairing, createPairing, mintCredentials, pollPairing } from "./tv.ts";
 import { sweepEmptyRooms } from "./rooms.ts";
 import { attachWebSocket } from "./ws.ts";
@@ -26,7 +26,7 @@ app.post("/rooms", async (request, reply) => {
   if (user.guest) return reply.code(403).send({ error: "Sign in with Discord to create a room" });
   const body = createRoomRequestSchema.safeParse(request.body ?? {});
   if (!body.success) return reply.code(400).send({ error: "Invalid request" });
-  return reply.code(201).send(createRoom(user.sub, body.data.password));
+  return reply.code(201).send(createRoom(user.sub, body.data.password, body.data.name));
 });
 
 app.get<{ Params: { id: string } }>("/rooms/:id", async (request, reply) => {
@@ -47,10 +47,10 @@ app.post<{ Params: { id: string } }>("/rooms/:id/livekit-token", async (request,
   const access = checkRoomAccess(room.id, user.sub, body.data.password);
   if (access === "password_required" || access === "wrong_password") return reply.code(403).send({ error: access });
   const entry = requestEntry(room.id, user);
-  if (entry === "removed" || entry === "declined") return reply.code(403).send({ error: entry });
+  if (entry === "removed" || entry === "declined" || entry === "locked" || entry === "closed") return reply.code(403).send({ error: entry });
   if (entry === "pending") return reply.code(202).send({ status: "pending" });
   const wsTicket = signSessionToken({ ...user, room: room.id }, config.AUTH_SECRET, 6 * 60 * 60);
-  return { token: await createLivekitToken(room.id, user, micBlocked(room.id, user.sub)), url: config.LIVEKIT_URL, room, wsTicket };
+  return { token: await createLivekitToken(room.id, user, publishInputs(room.id, user)), url: config.LIVEKIT_URL, room, wsTicket };
 });
 
 app.post("/tv/pairings", async (request, reply) => {
@@ -93,12 +93,15 @@ app.post<{ Params: { id: string } }>("/rooms/:id/tv/session", async (request, re
   if (!body.success) return reply.code(400).send({ error: "Invalid request" });
   const access = checkRoomAccess(room.id, user.sub, body.data.password);
   if (access === "password_required" || access === "wrong_password") return reply.code(403).send({ error: access });
-  if (!isAdmitted(room.id, user)) return reply.code(403).send({ error: "not_admitted" });
+  const entry = checkEntry(room.id, user);
+  if (entry === "pending") return reply.code(403).send({ error: "not_admitted" });
+  if (entry !== "ok") return reply.code(403).send({ error: entry });
   return mintCredentials(room.id, user.name);
 });
 
 attachWebSocket(app.server);
 setInterval(sweepEmptyRooms, 5 * 60 * 1000).unref();
 setInterval(pruneStalePending, 5000).unref();
+setInterval(pruneReactionHistory, 30_000).unref();
 
 await app.listen({ port: config.PORT, host: "0.0.0.0" });

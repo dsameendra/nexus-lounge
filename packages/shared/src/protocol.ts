@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { mediaSourceSchema, roomIdSchema, roomStateSchema } from "./types.ts";
+import { mediaSourceSchema, reactionEmojiSchema, roomIdSchema, roomNameSchema, roomSettingsSchema, roomStateSchema } from "./types.ts";
 
 const streamId = z.string().min(1).max(100);
 
@@ -20,6 +20,12 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("moderation.set"), userId: z.string(), muted: z.boolean().optional(), deafened: z.boolean().optional() }),
   z.object({ type: z.literal("moderation.kick"), userId: z.string() }),
   z.object({ type: z.literal("join.respond"), userId: z.string(), allow: z.boolean() }),
+  z.object({ type: z.literal("settings.update") }).extend(roomSettingsSchema.partial().shape).extend({ name: roomNameSchema.optional() }),
+  z.object({ type: z.literal("stream.move"), streamId, direction: z.enum(["up", "down", "next"]) }),
+  z.object({ type: z.literal("queue.advance"), fromStreamId: streamId }),
+  z.object({ type: z.literal("reaction.send"), emoji: reactionEmojiSchema }),
+  z.object({ type: z.literal("presence.voice"), deafened: z.boolean() }),
+  z.object({ type: z.literal("share.stop"), userId: z.string() }),
   z.object({ type: z.literal("presence.watch"), streamId: streamId.nullable() }),
 ]);
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
@@ -27,6 +33,7 @@ export type ClientMessage = z.infer<typeof clientMessageSchema>;
 export const serverMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("state"), state: roomStateSchema }),
   z.object({ type: z.literal("kicked") }),
+  z.object({ type: z.literal("reaction"), id: z.string(), emoji: reactionEmojiSchema, from: z.object({ id: z.string(), name: z.string() }) }),
   z.object({ type: z.literal("pong"), clientTime: z.number(), serverTime: z.number() }),
   z.object({ type: z.literal("error"), message: z.string(), fatal: z.boolean().optional() }),
 ]);

@@ -3,7 +3,8 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { verifySessionToken, type SessionPayload } from "@nexus/shared/session-token";
 import { clientMessageSchema, type ClientMessage, type ServerMessage } from "@nexus/shared";
 import { config } from "./config.ts";
-import { applyMicRestriction, removeFromVoice } from "./livekit.ts";
+import { removeFromVoice } from "./livekit.ts";
+import { stopScreenShare, syncAllPermissions, syncPermissions } from "./permissions.ts";
 import * as rooms from "./rooms.ts";
 
 const MESSAGES_PER_SECOND = 30;
@@ -24,13 +25,14 @@ function handle(roomId: string, user: SessionPayload, message: Exclude<ClientMes
       return rooms.establishStream(roomId, message.streamId, message.position);
     case "stream.feature":
       return rooms.featureStream(roomId, user, message.streamId);
-    case "role.setController":
-      return rooms.setController(roomId, user, message.userId, message.enabled);
+    case "role.setController": {
+      const result = rooms.setController(roomId, user, message.userId, message.enabled);
+      if (result.ok) void syncPermissions(roomId, { sub: message.userId, guest: rooms.isGuest(roomId, message.userId) });
+      return result;
+    }
     case "moderation.set": {
       const result = rooms.setModeration(roomId, user, message.userId, { muted: message.muted, deafened: message.deafened });
-      if (result.ok) {
-        void applyMicRestriction(roomId, message.userId, rooms.isGuest(roomId, message.userId), rooms.micBlocked(roomId, message.userId));
-      }
+      if (result.ok) void syncPermissions(roomId, { sub: message.userId, guest: rooms.isGuest(roomId, message.userId) });
       return result;
     }
     case "moderation.kick": {
@@ -40,6 +42,25 @@ function handle(roomId: string, user: SessionPayload, message: Exclude<ClientMes
     }
     case "join.respond":
       return rooms.respondToJoin(roomId, user, message.userId, message.allow);
+    case "settings.update": {
+      const { type: _type, ...patch } = message;
+      const result = rooms.updateSettings(roomId, user, patch);
+      if (result.ok && patch.sharing !== undefined) void syncAllPermissions(roomId);
+      return result;
+    }
+    case "stream.move":
+      return rooms.moveStream(roomId, user, message.streamId, message.direction);
+    case "queue.advance":
+      return rooms.advanceQueue(roomId, user, message.fromStreamId);
+    case "reaction.send":
+      return rooms.sendReaction(roomId, user, message.emoji);
+    case "presence.voice":
+      return rooms.setVoiceState(roomId, user.sub, message.deafened);
+    case "share.stop": {
+      const result = rooms.checkStopShare(roomId, user, message.userId);
+      if (result.ok) void stopScreenShare(roomId, message.userId);
+      return result;
+    }
     case "presence.watch":
       return rooms.setWatching(roomId, user.sub, message.streamId);
   }

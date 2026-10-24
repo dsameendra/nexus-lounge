@@ -7,23 +7,32 @@ I built it so my friends and I could watch League of Legends Worlds together, bu
 ## What you can do
 
 **Rooms and people**
-- Create a room and share the invite link. Sign in with Discord, or join as a guest.
+- Create a named room and share the invite link. Sign in with Discord, or join as a guest.
 - Guests wait in a lobby until the room owner lets them in. The owner can also remove anyone, who then can't rejoin.
+- Room settings (owner): room name, guest policy (ask / let in / not allowed), lock the room, who may share their screen, auto-play next, and reactions on or off.
 - Optional room password.
-- Roles: the owner can make other Discord users controllers, who can pick what the room watches and control playback.
+- Roles: the owner can make other Discord users controllers, who can pick what the room watches, control playback, reorder the queue, put a screen share on air, and stop someone's screen share.
 
 **Watching**
-- Paste any YouTube or Twitch link (video, live stream, channel, past broadcast) to add it to the room's stream list.
+- Paste any YouTube or Twitch link (video, live stream, channel, past broadcast) to add it to the room's stream list, and reorder it as a queue. When a video ends, the next one starts (a controller needs to be watching).
 - Every stream has its own shared clock, so some people can watch one stream while others watch another, and anyone can switch without losing sync. The owner or a controller can put one stream "on air" for everyone; guests always follow it.
 - Playback stays in sync across everyone's devices, with smooth correction instead of constant skipping.
 - On a live YouTube stream, **Go live** jumps everyone to the live edge.
-- Screen share a tab or screen, with audio, for anything that can't be embedded.
+- Several people can screen share at once, each with audio. Everyone picks which share to watch, and the owner or a controller can put one on air. A notice appears when someone starts sharing.
 - Twitch live channels can't be time-synced by embeds, so the app says so and suggests screen share.
+- Reactions: send emoji that float across the screen for everyone.
+
+**Playback controls**
+- Subtitles on YouTube (language list from the video, on/off, text size), remembered between videos.
+- Quality: the real list on Twitch, Auto/High/Low on screen shares. YouTube no longer lets embedded players choose a quality, so the menu says so.
+- Volume: a perceptual curve, truly silent at the bottom, remembered between sessions.
+- AirPlay: screen shares offer the AirPlay picker where Safari supports it; for YouTube and Twitch (which can't be sent to AirPlay directly) the TV sheet explains how to mirror the clean TV view to an Apple TV.
 
 **Voice and chat**
-- Always-on voice with mute, deafen and speaking indicators.
+- Always-on voice with mute, deafen, push-to-talk (any key, or hold the mic button), and speaking indicators that match what everyone hears.
+- Everyone's state is visible to everyone: muted, deafened, muted or deafened by the owner, and who is sharing their screen.
 - Click someone for their profile; right-click for per-person volume and "mute for me". The owner can mute or deafen anyone for everyone.
-- Text chat in the side panel.
+- Text chat in the side panel, with an unread badge.
 
 **Any screen**
 - Responsive on phone, tablet, laptop and desktop (including landscape phones).
@@ -79,7 +88,8 @@ Node 22.18+ (the server runs TypeScript directly), pnpm 10+, and Docker only if 
 - The browser never sends your Discord session to the server. Next API routes sign a short-lived HMAC token (with `AUTH_SECRET`) and call the Fastify server, which verifies it. Joining a room returns a LiveKit token plus a room-scoped ticket for the sync WebSocket.
 - Voice, speaking indicators, screen share and chat run through LiveKit. Playback state, the stream list, roles, guest approvals and moderation run over the server's WebSocket, and every message is validated with zod (`packages/shared/src/protocol.ts`).
 - Each stream stores `position`, `playing` and a server timestamp. Clients estimate the server clock (median of ping samples) and compute the expected position locally. Drift is the median of the last few readings, small drift is fixed by gently changing playback speed, and seeks are rare and debounced. Add `?debug` to a room URL to see the live numbers.
-- Permissions are enforced on the server and in the LiveKit token, not just hidden in the UI: guests can't add streams, share, or create rooms; only the owner can mute, deafen, remove people or let guests in.
+- Permissions are enforced on the server and in the LiveKit token, not just hidden in the UI: guests can't add streams, share, or create rooms; only the owner can mute, deafen, remove people, let guests in or change room settings; sharing can be limited to controllers.
+- Twitch embeds must not be covered by anything on the page (Twitch disables playback if they are), so nothing is ever drawn over a Twitch player: its own controls are used and our status lines sit below it.
 - YouTube titles are fetched server-side from YouTube's public oEmbed endpoint (no key needed).
 - Rooms live in server memory and vanish on restart. Redis is the natural next step for persistence and running more than one server instance.
 

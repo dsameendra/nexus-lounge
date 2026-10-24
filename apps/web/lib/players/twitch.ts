@@ -1,6 +1,16 @@
 import type { MediaSource } from "@nexus/shared";
 import { loadScript } from "../load-script";
-import { Emitter, type PlayerAdapter, type PlayerState } from "./types";
+import { Emitter, type PlayerAdapter, type PlayerState, type QualityOption } from "./types";
+
+const QUALITY_KEY = "nexus-twitch-quality";
+
+function readPreferredQuality() {
+  try {
+    return localStorage.getItem(QUALITY_KEY);
+  } catch {
+    return null;
+  }
+}
 
 interface TwitchPlayer {
   play(): void;
@@ -14,6 +24,9 @@ interface TwitchPlayer {
   setVideo(videoId: string, timestamp: number): void;
   setMuted(muted: boolean): void;
   getMuted(): boolean;
+  getQualities?(): (string | { name?: string; group?: string })[];
+  getQuality?(): string | { name?: string; group?: string };
+  setQuality?(quality: string): void;
   setVolume(volume: number): void;
   addEventListener(event: string, callback: () => void): void;
 }
@@ -108,6 +121,7 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
       this.player.addEventListener(Twitch.Player.PLAYING, () => {
         this.playedOnce = true;
         this.player?.setMuted(this.muted);
+        this.applyPreferredQuality();
       });
       for (const name of [Twitch.Player.PLAY, Twitch.Player.PLAYING, Twitch.Player.PAUSE, Twitch.Player.ENDED, Twitch.Player.SEEK]) {
         this.player.addEventListener(name, () => this.emit("state"));
@@ -129,16 +143,16 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
 
   play() {
     this.pendingPlay = true;
-    this.player?.play();
+    if (this.ready) this.player?.play();
   }
 
   pause() {
     this.pendingPlay = false;
-    this.player?.pause();
+    if (this.ready) this.player?.pause();
   }
 
   seek(seconds: number) {
-    if (this.current && !this.current.isLive) this.player?.seek(seconds);
+    if (this.ready && this.current && !this.current.isLive) this.player?.seek(seconds);
   }
 
   getTime() {
@@ -163,18 +177,52 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
     return 1;
   }
 
+  qualities(): QualityOption[] {
+    if (!this.ready || !this.player?.getQualities) return [];
+    const options: QualityOption[] = [];
+    for (const raw of this.player.getQualities()) {
+      const id = typeof raw === "string" ? raw : (raw.group ?? raw.name);
+      const label = typeof raw === "string" ? raw : (raw.name ?? raw.group);
+      if (id && label && !options.some((option) => option.id === id)) options.push({ id, label: id === "auto" ? "Auto" : label });
+    }
+    if (options.length > 0 && !options.some((option) => option.id === "auto")) options.unshift({ id: "auto", label: "Auto" });
+    return options;
+  }
+
+  quality() {
+    if (!this.ready || !this.player?.getQuality) return "auto";
+    const raw = this.player.getQuality();
+    return typeof raw === "string" ? raw : (raw.group ?? raw.name ?? "auto");
+  }
+
+  setQuality(id: string) {
+    this.player?.setQuality?.(id);
+    try {
+      localStorage.setItem(QUALITY_KEY, id);
+    } catch {}
+  }
+
+  private applyPreferredQuality() {
+    const preferred = readPreferredQuality();
+    if (preferred && preferred !== this.quality() && this.qualities().some((option) => option.id === preferred)) {
+      this.player?.setQuality?.(preferred);
+    }
+  }
+
   get muteBlocked() {
     return this.ready && this.playedOnce && !this.muted && Boolean(this.player?.getMuted());
   }
 
   setMuted(muted: boolean) {
     this.muted = muted;
-    if (this.playedOnce) this.player?.setMuted(muted);
+    if (!this.playedOnce) return;
+    this.player?.setMuted(muted);
+    if (!muted) this.player?.setVolume(this.volume);
   }
 
   setVolume(volume: number) {
     this.volume = volume;
-    this.player?.setVolume(volume);
+    if (this.ready) this.player?.setVolume(volume);
   }
 
   destroy() {

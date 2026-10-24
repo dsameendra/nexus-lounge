@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { FullscreenIcon, PauseIcon, PlayIcon, SyncIcon, VolumeIcon, VolumeOffIcon } from "./Icons";
+import { isSilent } from "@nexus/shared";
+import type { CaptionState, QualityOption } from "@/lib/players/types";
+import { CaptionsMenu } from "./CaptionsMenu";
+import { AirPlayIcon, FullscreenIcon, PauseIcon, PlayIcon, SyncIcon, VolumeIcon, VolumeOffIcon } from "./Icons";
+import { QualityMenu } from "./QualityMenu";
 
 export type SyncStatus = "synced" | "syncing" | "waiting" | "unsynced";
 
@@ -20,30 +24,12 @@ const STATUS_LABEL: Record<SyncStatus, string> = {
   unsynced: "Not synced",
 };
 
-export function PlayerControls({
-  variant,
-  visible,
-  playing,
-  time,
-  duration,
-  live,
-  atEdge,
-  canControl,
-  canSeek,
-  status,
-  volume,
-  muted,
-  onPlayPause,
-  onSeek,
-  onVolume,
-  onMute,
-  onFullscreen,
-  onResync,
-  onGoLive,
-  canFullscreen,
-}: {
+const iconButton = "flex size-10 shrink-0 items-center justify-center rounded-full text-xl transition hover:bg-white/10 active:scale-95";
+
+export interface PlayerControlsProps {
   variant: "overlay" | "bar";
   visible: boolean;
+  minimal?: boolean;
   playing: boolean;
   time: number;
   duration: number;
@@ -54,6 +40,11 @@ export function PlayerControls({
   status: SyncStatus;
   volume: number;
   muted: boolean;
+  canFullscreen: boolean;
+  qualityOptions: QualityOption[];
+  quality: string;
+  qualityNote?: string;
+  qualityLink?: { href: string; label: string };
   onPlayPause: () => void;
   onSeek: (seconds: number) => void;
   onVolume: (value: number) => void;
@@ -61,8 +52,18 @@ export function PlayerControls({
   onFullscreen: () => void;
   onResync: () => void;
   onGoLive: () => void;
-  canFullscreen: boolean;
-}) {
+  onQuality: (id: string) => void;
+  onAirPlay?: () => void;
+  captions?: CaptionState | null;
+  onCaptionTrack?: (id: string | null) => void;
+  onCaptionSize?: (size: number) => void;
+}
+
+export function PlayerControls(props: PlayerControlsProps) {
+  const {
+    variant, visible, minimal = false, playing, time, duration, live, atEdge, canControl, canSeek, status, volume, muted, canFullscreen,
+    qualityOptions, quality, qualityNote, qualityLink, onPlayPause, onSeek, onVolume, onMute, onFullscreen, onResync, onGoLive, onQuality, onAirPlay, captions, onCaptionTrack, onCaptionSize,
+  } = props;
   const [scrub, setScrub] = useState<number | null>(null);
   const dot = status === "synced" ? "bg-live" : status === "unsynced" ? "bg-warn" : "bg-label-3 animate-pulse";
 
@@ -83,87 +84,93 @@ export function PlayerControls({
       }
     >
       <div className={`${variant === "overlay" ? "material" : "bg-panel"} flex items-center gap-2 rounded-2xl px-2 py-1.5 sm:gap-3 sm:px-3`}>
-        {canControl && (
-          <button
-            onClick={onPlayPause}
-            aria-label={playing ? "Pause for everyone" : "Play for everyone"}
-            className="flex size-10 shrink-0 items-center justify-center rounded-full text-xl transition hover:bg-white/10 active:scale-95"
-          >
-            {playing ? <PauseIcon /> : <PlayIcon />}
+        {!minimal && (
+          <>
+            {canControl && (
+              <button onClick={onPlayPause} aria-label={playing ? "Pause for everyone" : "Play for everyone"} className={iconButton}>
+                {playing ? <PauseIcon /> : <PlayIcon />}
+              </button>
+            )}
+
+            <span className="w-11 shrink-0 text-xs text-label-2 tabular-nums">{format(time)}</span>
+
+            {live && duration <= 0 ? (
+              <div className="flex-1" />
+            ) : (
+              <input
+                type="range"
+                aria-label="Seek"
+                min={0}
+                max={Math.max(duration, 1)}
+                step={0.5}
+                value={Math.min(scrub ?? time, Math.max(duration, 1))}
+                disabled={!canSeek}
+                onChange={(event) => setScrub(Number(event.target.value))}
+                onPointerUp={commitScrub}
+                onKeyUp={commitScrub}
+                onBlur={commitScrub}
+                className="h-1 min-w-0 flex-1 accent-white disabled:opacity-60"
+              />
+            )}
+
+            {live && (
+              <button
+                onClick={onGoLive}
+                disabled={atEdge && !canControl}
+                title={atEdge ? "You're at the live edge" : canControl ? "Jump everyone to the live edge" : "Jump to where the room is"}
+                className={`flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold tracking-wide uppercase transition active:scale-95 ${
+                  atEdge ? "bg-danger text-white" : "bg-white/15 text-label-2 hover:bg-white/25 hover:text-white"
+                }`}
+              >
+                <span className={`size-1.5 rounded-full ${atEdge ? "bg-white" : "bg-danger"}`} />
+                {atEdge ? "Live" : "Go live"}
+              </button>
+            )}
+
+            <button
+              onClick={onResync}
+              title={status === "unsynced" ? "This source can't be time-synced" : "Resync with the room"}
+              className="hidden shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-label-2 transition hover:bg-white/10 sm:flex"
+            >
+              <span className={`size-1.5 rounded-full ${dot}`} />
+              {STATUS_LABEL[status]}
+              {status !== "unsynced" && <SyncIcon className="text-sm" />}
+            </button>
+          </>
+        )}
+
+        {minimal && <span className="flex-1 truncate px-1 text-sm text-label-2">Live on Twitch</span>}
+
+        {captions && onCaptionTrack && onCaptionSize && <CaptionsMenu captions={captions} onTrack={onCaptionTrack} onSize={onCaptionSize} />}
+
+        <QualityMenu options={qualityOptions} value={quality} note={qualityNote} link={qualityLink} onSelect={onQuality} />
+
+        {onAirPlay && (
+          <button onClick={onAirPlay} aria-label="AirPlay and screen mirroring" title="AirPlay and screen mirroring" className={iconButton}>
+            <AirPlayIcon />
           </button>
         )}
 
-        <span className="w-11 shrink-0 text-xs text-label-2 tabular-nums">{format(time)}</span>
-
-        {live && duration <= 0 ? (
-          <div className="flex-1" />
-        ) : (
-          <input
-            type="range"
-            aria-label="Seek"
-            min={0}
-            max={Math.max(duration, 1)}
-            step={0.5}
-            value={Math.min(scrub ?? time, Math.max(duration, 1))}
-            disabled={!canSeek}
-            onChange={(event) => setScrub(Number(event.target.value))}
-            onPointerUp={commitScrub}
-            onKeyUp={commitScrub}
-            onBlur={commitScrub}
-            className="h-1 min-w-0 flex-1 accent-white disabled:opacity-60"
-          />
+        {!minimal && (
+          <div className="flex shrink-0 items-center">
+            <button onClick={onMute} aria-label={muted ? "Unmute" : "Mute"} className={iconButton}>
+              {muted || isSilent(volume) ? <VolumeOffIcon /> : <VolumeIcon />}
+            </button>
+            <input
+              type="range"
+              aria-label="Volume"
+              min={0}
+              max={1}
+              step={0.02}
+              value={muted || isSilent(volume) ? 0 : volume}
+              onChange={(event) => onVolume(Number(event.target.value))}
+              className="hidden h-1 w-20 accent-white sm:block"
+            />
+          </div>
         )}
 
-        {live && (
-          <button
-            onClick={onGoLive}
-            disabled={atEdge && !canControl}
-            title={atEdge ? "You're at the live edge" : canControl ? "Jump everyone to the live edge" : "Jump to where the room is"}
-            className={`flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold tracking-wide uppercase transition active:scale-95 ${
-              atEdge ? "bg-danger text-white" : "bg-white/15 text-label-2 hover:bg-white/25 hover:text-white"
-            }`}
-          >
-            <span className={`size-1.5 rounded-full ${atEdge ? "bg-white" : "bg-danger"}`} />
-            {atEdge ? "Live" : "Go live"}
-          </button>
-        )}
-
-        <button
-          onClick={onResync}
-          title={status === "unsynced" ? "This source can't be time-synced" : "Resync with the room"}
-          className="hidden shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-label-2 transition hover:bg-white/10 sm:flex"
-        >
-          <span className={`size-1.5 rounded-full ${dot}`} />
-          {STATUS_LABEL[status]}
-          {status !== "unsynced" && <SyncIcon className="text-sm" />}
-        </button>
-
-        <div className="group/vol flex shrink-0 items-center">
-          <button
-            onClick={onMute}
-            aria-label={muted ? "Unmute" : "Mute"}
-            className="flex size-10 items-center justify-center rounded-full text-xl transition hover:bg-white/10 active:scale-95"
-          >
-            {muted || volume === 0 ? <VolumeOffIcon /> : <VolumeIcon />}
-          </button>
-          <input
-            type="range"
-            aria-label="Volume"
-            min={0}
-            max={1}
-            step={0.02}
-            value={muted ? 0 : volume}
-            onChange={(event) => onVolume(Number(event.target.value))}
-            className="hidden h-1 w-20 accent-white sm:block"
-          />
-        </div>
-
-        {canFullscreen && (
-          <button
-            onClick={onFullscreen}
-            aria-label="Fullscreen"
-            className="flex size-10 shrink-0 items-center justify-center rounded-full text-xl transition hover:bg-white/10 active:scale-95"
-          >
+        {!minimal && canFullscreen && (
+          <button onClick={onFullscreen} aria-label="Fullscreen" className={iconButton}>
             <FullscreenIcon />
           </button>
         )}

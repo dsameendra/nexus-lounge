@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { isSilent } from "@nexus/shared";
 import { VolumeIcon, VolumeOffIcon } from "./Icons";
 import { useRoom } from "./RoomProvider";
 import { Switch } from "./Switch";
@@ -10,12 +11,13 @@ export function VolumeRow({ userId, compact = false }: { userId: string; compact
   const voice = useVoiceSettings();
   const personal = voice.get(userId);
   const percent = Math.round(personal.volume * 100);
+  const silent = personal.muted || isSilent(personal.volume);
 
   return (
     <div className={compact ? "px-3 py-2.5" : "px-4 py-3"}>
       <div className={`mb-2 flex items-center justify-between ${compact ? "text-sm" : "text-[15px]"}`}>
         <label htmlFor={`volume-${userId}`}>Volume</label>
-        <span className="text-label-2 tabular-nums">{personal.muted ? "Muted" : `${percent}%`}</span>
+        <span className="text-label-2 tabular-nums">{silent ? "Muted" : `${percent}%`}</span>
       </div>
       <div className="flex items-center gap-2.5 text-lg text-label-2">
         <VolumeOffIcon />
@@ -25,13 +27,13 @@ export function VolumeRow({ userId, compact = false }: { userId: string; compact
           min={0}
           max={100}
           step={1}
-          value={personal.muted ? 0 : percent}
+          value={silent ? 0 : percent}
           onChange={(event) => voice.set(userId, { volume: Number(event.target.value) / 100, muted: false })}
           className="h-1.5 min-w-0 flex-1 accent-white"
         />
         <VolumeIcon />
       </div>
-      {percent !== 100 && !personal.muted && (
+      {percent !== 100 && !silent && (
         <button onClick={() => voice.set(userId, { volume: 1 })} className="mt-2 text-xs text-accent hover:underline">
           Reset to 100%
         </button>

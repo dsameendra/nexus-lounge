@@ -7,7 +7,14 @@ export const metadata: Metadata = {
   description: "Watch streams together with voice and chat.",
   applicationName: "Nexus Lounge",
   appleWebApp: { capable: true, title: "Nexus", statusBarStyle: "black-translucent" },
-  icons: { icon: "/icons/192", apple: "/icons/apple" },
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icons/32", sizes: "32x32", type: "image/png" },
+      { url: "/icons/192", sizes: "192x192", type: "image/png" },
+    ],
+    apple: "/icons/apple",
+  },
 };
 
 export const viewport: Viewport = { themeColor: "#000000", viewportFit: "cover", width: "device-width", initialScale: 1 };

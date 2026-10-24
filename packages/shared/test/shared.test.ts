@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { atLiveEdge, computeCorrection, expectedPosition, liveEdgeTarget, median, parseMediaUrl, streamKey } from "../src/index.ts";
+import {
+  atLiveEdge,
+  clientMessageSchema,
+  computeCorrection,
+  defaultRoomSettings,
+  expectedPosition,
+  isAllowedPttKey,
+  isScreenId,
+  isSilent,
+  screenId,
+  screenIdentity,
+  sliderToGain,
+  isTypingTarget,
+  keyLabel,
+  liveEdgeTarget,
+  median,
+  parseMediaUrl,
+  reactionEmojiSchema,
+  roomSettingsSchema,
+  streamKey,
+} from "../src/index.ts";
 import { signSessionToken, verifySessionToken } from "../src/session-token.ts";
 
 const yt = (id: string, isLive = false) => ({ ok: true, source: { type: "youtube", id, isLive } });
@@ -94,4 +114,55 @@ test("live edge helpers", () => {
   assert.equal(atLiveEdge(995, 1000), true);
   assert.equal(atLiveEdge(900, 1000), false);
   assert.equal(atLiveEdge(0, 0), false);
+});
+
+test("push to talk helpers", () => {
+  assert.equal(keyLabel("KeyV"), "V");
+  assert.equal(keyLabel("Space"), "Space");
+  assert.equal(keyLabel("Digit5"), "5");
+  assert.equal(keyLabel("ArrowUp"), "Up arrow");
+  assert.equal(keyLabel("F9"), "F9");
+  assert.equal(isTypingTarget("INPUT", false), true);
+  assert.equal(isTypingTarget("div", true), true);
+  assert.equal(isTypingTarget("BUTTON", false), false);
+  assert.equal(isAllowedPttKey("KeyV"), true);
+  assert.equal(isAllowedPttKey("Escape"), false);
+  assert.equal(isAllowedPttKey(""), false);
+});
+
+test("room settings and reactions schemas", () => {
+  assert.equal(roomSettingsSchema.safeParse(defaultRoomSettings).success, true);
+  assert.equal(roomSettingsSchema.safeParse({ ...defaultRoomSettings, guests: "everyone" }).success, false);
+  assert.equal(reactionEmojiSchema.safeParse("🔥").success, true);
+  assert.equal(reactionEmojiSchema.safeParse("💩").success, false);
+  assert.equal(clientMessageSchema.safeParse({ type: "settings.update", locked: true, name: "Worlds night" }).success, true);
+  assert.equal(clientMessageSchema.safeParse({ type: "settings.update", guests: "nope" }).success, false);
+  assert.equal(clientMessageSchema.safeParse({ type: "settings.update", name: "x".repeat(41) }).success, false);
+  assert.equal(clientMessageSchema.safeParse({ type: "stream.move", streamId: "a", direction: "sideways" }).success, false);
+});
+
+test("volume curve: zero is truly silent and low values stay low", () => {
+  assert.equal(sliderToGain(0), 0);
+  assert.equal(sliderToGain(0.04), 0, "the bottom of the slider is silent");
+  assert.equal(isSilent(0.02), true);
+  assert.equal(isSilent(0.05), false);
+  assert.equal(sliderToGain(1), 1);
+  assert.equal(sliderToGain(0.5), 0.25);
+  assert.equal(sliderToGain(7), 1, "clamped");
+  assert.equal(sliderToGain(-1), 0);
+  assert.equal(sliderToGain(Number.NaN), 0);
+  assert.ok(sliderToGain(0.3) < 0.3, "perceptual curve is quieter than linear at low settings");
+});
+
+test("screen ids are per person", () => {
+  assert.equal(screenId("discord-1"), "screen:discord-1");
+  assert.equal(screenIdentity("screen:guest-ab_c"), "guest-ab_c");
+  assert.equal(isScreenId("screen:123456789"), true);
+  assert.equal(isScreenId("screen:"), false);
+  assert.equal(isScreenId("screen:bad id"), false);
+  assert.equal(isScreenId("youtube:abc"), false);
+  assert.equal(isScreenId(null), false);
+  assert.equal(clientMessageSchema.safeParse({ type: "presence.voice", deafened: true }).success, true);
+  assert.equal(clientMessageSchema.safeParse({ type: "share.stop", userId: "x" }).success, true);
+  assert.equal(roomSettingsSchema.safeParse({ ...defaultRoomSettings, sharing: "nobody" }).success, false);
 });

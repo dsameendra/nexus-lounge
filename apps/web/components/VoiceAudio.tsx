@@ -2,7 +2,7 @@
 
 import { AudioTrack, isTrackReference, useTracks } from "@livekit/components-react";
 import { Track } from "livekit-client";
-import { SCREEN_ID } from "@nexus/shared";
+import { isSilent, screenId, sliderToGain } from "@nexus/shared";
 import { useRoom } from "./RoomProvider";
 import { useEffectiveSource } from "./useEffectiveSource";
 import { useVoiceSettings } from "./VoiceSettings";
@@ -25,8 +25,8 @@ export function VoiceAudio({ deafened }: { deafened: boolean }) {
           <AudioTrack
             key={`${track.participant.identity}-${track.source}`}
             trackRef={track}
-            volume={isVoice ? person.volume : 1}
-            muted={deafened || serverDeafened || (isVoice ? person.muted : effectiveId !== SCREEN_ID)}
+            volume={isVoice ? sliderToGain(person.volume) : 1}
+            muted={deafened || serverDeafened || (isVoice ? person.muted || isSilent(person.volume) : effectiveId !== screenId(track.participant.identity))}
           />
         );
       })}

@@ -1,11 +1,14 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { WebSocket } from "ws";
 import {
-  SCREEN_ID,
+  defaultRoomSettings,
+  isScreenId,
+  type RoomSettings,
   streamKey,
   type MediaSource,
   type Member,
   type PendingRequest,
+  type ReactionEmoji,
   type Restriction,
   type RoomInfo,
   type RoomState,
@@ -33,6 +36,7 @@ interface StoredRoom {
   restrictions: Map<string, Restriction>;
   pending: Map<string, PendingRequest & { lastSeen: number }>;
   admitted: Set<string>;
+  known: Set<string>;
   blocked: Map<string, "removed" | "declined">;
   emptySince: number | null;
 }
@@ -48,10 +52,18 @@ function hashPassword(password: string, salt: Buffer) {
   return scryptSync(password, salt, 32);
 }
 
-export function createRoom(hostId: string, password?: string): RoomInfo {
+export function createRoom(hostId: string, password?: string, name = ""): RoomInfo {
   let id = newId();
   while (rooms.has(id)) id = newId();
-  const info: RoomInfo = { id, hostId, controllerIds: [], createdAt: Date.now(), hasPassword: Boolean(password) };
+  const info: RoomInfo = {
+    id,
+    name,
+    settings: { ...defaultRoomSettings },
+    hostId,
+    controllerIds: [],
+    createdAt: Date.now(),
+    hasPassword: Boolean(password),
+  };
   const salt = randomBytes(16);
   rooms.set(id, {
     info,
@@ -62,6 +74,7 @@ export function createRoom(hostId: string, password?: string): RoomInfo {
     restrictions: new Map(),
     pending: new Map(),
     admitted: new Set(),
+    known: new Set(),
     blocked: new Map(),
     emptySince: Date.now(),
   });
@@ -115,10 +128,11 @@ export function connect(roomId: string, user: SessionPayload, socket: WebSocket)
     existing.member.image = user.image;
   } else {
     room.connections.set(user.sub, {
-      member: { id: user.sub, name: user.name, image: user.image, guest: user.guest, watching: null },
+      member: { id: user.sub, name: user.name, image: user.image, guest: user.guest, deafened: false, watching: null },
       sockets: new Set([socket]),
     });
   }
+  room.known.add(user.sub);
   room.emptySince = null;
   broadcast(roomId);
   return "ok" as const;
@@ -232,7 +246,7 @@ export function featureStream(roomId: string, user: SessionPayload, streamId: st
   const room = rooms.get(roomId);
   if (!room) return fail("Room not found");
   if (user.guest || !isController(room, user.sub)) return fail("Only the host or controllers can choose what the room watches");
-  if (streamId !== null && streamId !== SCREEN_ID && !room.streams.some((stream) => stream.id === streamId)) {
+  if (streamId !== null && !isScreenId(streamId) && !room.streams.some((stream) => stream.id === streamId)) {
     return fail("Stream not found");
   }
   room.featuredId = streamId;
@@ -256,7 +270,7 @@ export function setWatching(roomId: string, userId: string, streamId: string | n
   const room = rooms.get(roomId);
   const connection = room?.connections.get(userId);
   if (!room || !connection) return fail("Room not found");
-  if (streamId !== null && streamId !== SCREEN_ID && !room.streams.some((stream) => stream.id === streamId)) return ok;
+  if (streamId !== null && !isScreenId(streamId) && !room.streams.some((stream) => stream.id === streamId)) return ok;
   if (connection.member.watching === streamId) return ok;
   connection.member.watching = streamId;
   broadcast(roomId);
@@ -296,12 +310,35 @@ export function isMember(roomId: string, userId: string) {
   return rooms.get(roomId)?.connections.has(userId) ?? false;
 }
 
-export function requestEntry(roomId: string, user: SessionPayload) {
-  const room = rooms.get(roomId);
-  if (!room) return "not_found" as const;
+type EntryDecision = "ok" | "admit" | "pending" | "locked" | "closed" | "removed" | "declined" | "not_found";
+
+function evaluateEntry(room: StoredRoom | undefined, user: SessionPayload): EntryDecision {
+  if (!room) return "not_found";
   const blocked = room.blocked.get(user.sub);
   if (blocked) return blocked;
-  if (!user.guest || room.admitted.has(user.sub)) return "ok" as const;
+  if (user.sub === room.info.hostId) return "ok";
+
+  const returning = room.known.has(user.sub) || room.admitted.has(user.sub);
+  if (room.info.settings.locked && !returning) return "locked";
+  if (!user.guest || returning) return "ok";
+  if (room.info.settings.guests === "closed") return "closed";
+  return room.info.settings.guests === "open" ? "admit" : "pending";
+}
+
+export function checkEntry(roomId: string, user: SessionPayload) {
+  const decision = evaluateEntry(rooms.get(roomId), user);
+  return decision === "admit" ? ("ok" as const) : decision;
+}
+
+export function requestEntry(roomId: string, user: SessionPayload) {
+  const room = rooms.get(roomId);
+  const decision = evaluateEntry(room, user);
+  if (!room) return "not_found" as const;
+  if (decision === "admit") {
+    room.admitted.add(user.sub);
+    return "ok" as const;
+  }
+  if (decision !== "pending") return decision;
 
   const existing = room.pending.get(user.sub);
   if (existing) {
@@ -312,11 +349,6 @@ export function requestEntry(roomId: string, user: SessionPayload) {
     broadcast(roomId);
   }
   return "pending" as const;
-}
-
-export function isAdmitted(roomId: string, user: SessionPayload) {
-  const room = rooms.get(roomId);
-  return Boolean(room && !room.blocked.has(user.sub) && (!user.guest || room.admitted.has(user.sub)));
 }
 
 export function respondToJoin(roomId: string, user: SessionPayload, targetId: string, allow: boolean): Result {
@@ -368,4 +400,131 @@ export function pruneStalePending() {
     }
     if (changed) broadcast(roomId);
   }
+}
+
+export function updateSettings(roomId: string, user: SessionPayload, patch: Partial<RoomSettings> & { name?: string }): Result {
+  const room = rooms.get(roomId);
+  if (!room) return fail("Room not found");
+  if (room.info.hostId !== user.sub) return fail("Only the room owner can change room settings");
+
+  const { name, ...settingsPatch } = patch;
+  const defined = Object.fromEntries(Object.entries(settingsPatch).filter(([, value]) => value !== undefined));
+  const settings = { ...room.info.settings, ...defined } as RoomSettings;
+  room.info = { ...room.info, settings, name: name ?? room.info.name };
+
+  if (settings.guests === "open") {
+    for (const id of room.pending.keys()) room.admitted.add(id);
+    room.pending.clear();
+  } else if (settings.guests === "closed") {
+    room.pending.clear();
+  }
+  broadcast(roomId);
+  return ok;
+}
+
+export function moveStream(roomId: string, user: SessionPayload, streamId: string, direction: "up" | "down" | "next"): Result {
+  const room = rooms.get(roomId);
+  if (!room) return fail("Room not found");
+  if (user.guest || !isController(room, user.sub)) return fail("Only the host or controllers can reorder the queue");
+  const index = room.streams.findIndex((stream) => stream.id === streamId);
+  if (index === -1) return fail("Stream not found");
+
+  let target = index;
+  if (direction === "up") target = index - 1;
+  if (direction === "down") target = index + 1;
+  if (direction === "next") {
+    const featuredIndex = room.streams.findIndex((stream) => stream.id === room.featuredId);
+    target = featuredIndex === -1 ? 0 : featuredIndex + 1;
+    if (index < target) target -= 1;
+  }
+  if (target < 0 || target >= room.streams.length || target === index) return ok;
+
+  const [moved] = room.streams.splice(index, 1);
+  room.streams.splice(target, 0, moved!);
+  broadcast(roomId);
+  return ok;
+}
+
+export function advanceQueue(roomId: string, user: SessionPayload, fromStreamId: string): Result {
+  const room = rooms.get(roomId);
+  if (!room) return fail("Room not found");
+  if (user.guest || !isController(room, user.sub)) return fail("Only the host or controllers can advance the queue");
+  if (!room.info.settings.autoplayNext || room.featuredId !== fromStreamId) return ok;
+
+  const index = room.streams.findIndex((stream) => stream.id === fromStreamId);
+  const next = room.streams[index + 1];
+  if (index === -1 || !next) return ok;
+
+  room.featuredId = next.id;
+  const twitchLive = next.source.type === "twitch" && next.source.isLive;
+  next.playback = twitchLive
+    ? { position: null, playing: false, updatedAt: Date.now() }
+    : { position: next.source.isLive ? null : 0, playing: true, updatedAt: Date.now() };
+  broadcast(roomId);
+  return ok;
+}
+
+const reactionHistory = new Map<string, number[]>();
+const REACTION_LIMIT = 8;
+const REACTION_WINDOW_MS = 5000;
+
+export function sendReaction(roomId: string, user: SessionPayload, emoji: ReactionEmoji): Result {
+  const room = rooms.get(roomId);
+  if (!room || !room.connections.has(user.sub)) return fail("Join the room first");
+  if (!room.info.settings.reactions) return fail("Reactions are turned off in this room");
+
+  const key = `${roomId}:${user.sub}`;
+  const now = Date.now();
+  const recent = (reactionHistory.get(key) ?? []).filter((time) => now - time < REACTION_WINDOW_MS);
+  if (recent.length >= REACTION_LIMIT) return ok;
+  reactionHistory.set(key, [...recent, now]);
+
+  const payload = JSON.stringify({ type: "reaction", id: randomBytes(6).toString("hex"), emoji, from: { id: user.sub, name: user.name } } satisfies ServerMessage);
+  for (const connection of room.connections.values()) {
+    for (const socket of connection.sockets) if (socket.readyState === socket.OPEN) socket.send(payload);
+  }
+  return ok;
+}
+
+export function pruneReactionHistory() {
+  const cutoff = Date.now() - REACTION_WINDOW_MS;
+  for (const [key, times] of reactionHistory) {
+    const recent = times.filter((time) => time > cutoff);
+    if (recent.length === 0) reactionHistory.delete(key);
+    else reactionHistory.set(key, recent);
+  }
+}
+
+export function setVoiceState(roomId: string, userId: string, deafened: boolean): Result {
+  const room = rooms.get(roomId);
+  const connection = room?.connections.get(userId);
+  if (!room || !connection) return fail("Room not found");
+  if (connection.member.deafened === deafened) return ok;
+  connection.member.deafened = deafened;
+  broadcast(roomId);
+  return ok;
+}
+
+export function canShareScreen(roomId: string, user: { sub: string; guest: boolean }) {
+  const room = rooms.get(roomId);
+  if (!room || user.guest) return false;
+  return room.info.settings.sharing === "everyone" || isController(room, user.sub);
+}
+
+export function publishInputs(roomId: string, user: { sub: string; guest: boolean }) {
+  return { guest: user.guest, micBlocked: micBlocked(roomId, user.sub), canShare: canShareScreen(roomId, user) };
+}
+
+export function connectedUsers(roomId: string) {
+  const room = rooms.get(roomId);
+  return room ? Array.from(room.connections.values(), (connection) => ({ sub: connection.member.id, guest: connection.member.guest })) : [];
+}
+
+export function checkStopShare(roomId: string, user: SessionPayload, targetId: string): Result {
+  const room = rooms.get(roomId);
+  if (!room) return fail("Room not found");
+  if (user.guest || !isController(room, user.sub)) return fail("Only the host or controllers can stop someone's screen share");
+  if (targetId === room.info.hostId && user.sub !== room.info.hostId) return fail("Only the room owner can stop the owner's screen share");
+  if (!room.connections.has(targetId)) return fail("That person isn't in the room");
+  return ok;
 }
