@@ -63,6 +63,15 @@ export function StreamLibrary({ onAdd }: { onAdd: () => void }) {
                 </>
               }
               viewers={watchers(SCREEN_ID)}
+              menu={
+                isController
+                  ? [
+                      featuredId === SCREEN_ID
+                        ? { label: "Stop showing to everyone", icon: <BroadcastIcon />, onSelect: () => send({ type: "stream.feature", streamId: null }) }
+                        : { label: "Show to everyone", icon: <BroadcastIcon />, onSelect: () => send({ type: "stream.feature", streamId: SCREEN_ID }) },
+                    ]
+                  : []
+              }
             />
           </li>
         )}
@@ -77,8 +86,12 @@ export function StreamLibrary({ onAdd }: { onAdd: () => void }) {
               clickable={!self.guest}
               onSelect={() => select(stream.id)}
               menu={[
-                ...(isController && featuredId !== stream.id
-                  ? [{ label: "Show to everyone", icon: <BroadcastIcon />, onSelect: () => send({ type: "stream.feature", streamId: stream.id }) }]
+                ...(isController
+                  ? [
+                      featuredId === stream.id
+                        ? { label: "Stop showing to everyone", icon: <BroadcastIcon />, onSelect: () => send({ type: "stream.feature", streamId: null }) }
+                        : { label: "Show to everyone", icon: <BroadcastIcon />, onSelect: () => send({ type: "stream.feature", streamId: stream.id }) },
+                    ]
                   : []),
                 ...(canControlStream(stream)
                   ? [{ label: "Remove", icon: <TrashIcon />, danger: true, onSelect: () => send({ type: "stream.remove", streamId: stream.id }) }]

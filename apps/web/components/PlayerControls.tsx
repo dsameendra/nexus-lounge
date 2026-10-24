@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { FullscreenIcon, PauseIcon, PlayIcon, SyncIcon, VolumeIcon, VolumeOffIcon } from "./Icons";
 
 export type SyncStatus = "synced" | "syncing" | "waiting" | "unsynced";
@@ -54,7 +55,14 @@ export function PlayerControls({
   onFullscreen: () => void;
   onResync: () => void;
 }) {
+  const [scrub, setScrub] = useState<number | null>(null);
   const dot = status === "synced" ? "bg-live" : status === "unsynced" ? "bg-warn" : "bg-label-3 animate-pulse";
+
+  function commitScrub() {
+    if (scrub === null) return;
+    onSeek(scrub);
+    setScrub(null);
+  }
 
   return (
     <div
@@ -84,9 +92,12 @@ export function PlayerControls({
             min={0}
             max={Math.max(duration, 1)}
             step={0.5}
-            value={Math.min(time, Math.max(duration, 1))}
+            value={Math.min(scrub ?? time, Math.max(duration, 1))}
             disabled={!canSeek}
-            onChange={(event) => onSeek(Number(event.target.value))}
+            onChange={(event) => setScrub(Number(event.target.value))}
+            onPointerUp={commitScrub}
+            onKeyUp={commitScrub}
+            onBlur={commitScrub}
             className="h-1 min-w-0 flex-1 accent-white disabled:opacity-60"
           />
         )}

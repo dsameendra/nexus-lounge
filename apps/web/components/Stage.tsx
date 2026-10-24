@@ -76,9 +76,9 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
               </div>
               <h1 className="line-clamp-2 text-base leading-snug font-semibold sm:text-lg">{stream?.title ?? "Screen share"}</h1>
             </div>
-            {isController && stream && featuredId !== stream.id && (
+            {isController && featuredId !== (stream?.id ?? SCREEN_ID) && (
               <button
-                onClick={() => send({ type: "stream.feature", streamId: stream.id })}
+                onClick={() => send({ type: "stream.feature", streamId: stream?.id ?? SCREEN_ID })}
                 className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-4 text-sm font-medium transition hover:bg-white/15 active:scale-95"
               >
                 <BroadcastIcon /> Show to everyone

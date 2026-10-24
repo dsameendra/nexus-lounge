@@ -13,7 +13,7 @@ interface YTPlayer {
   getPlayerState(): number;
   getVideoData(): { isLive?: boolean } | undefined;
   setPlaybackRate(rate: number): void;
-  getPlaybackRate(): number;
+  getAvailablePlaybackRates(): number[];
   mute(): void;
   unMute(): void;
   setVolume(volume: number): void;
@@ -65,7 +65,6 @@ export class YouTubeAdapter extends Emitter implements PlayerAdapter {
   private player: YTPlayer | null = null;
   private wanted: { source: MediaSource; startAt: number | null; autoplay: boolean } | null = null;
   private loadedId: string | null = null;
-  private rateProbe: boolean | null = null;
   private destroyed = false;
 
   private host: HTMLElement;
@@ -77,7 +76,8 @@ export class YouTubeAdapter extends Emitter implements PlayerAdapter {
   }
 
   get fineRate() {
-    return this.rateProbe !== false;
+    const rates = this.ready ? this.player?.getAvailablePlaybackRates?.() : undefined;
+    return Boolean(rates?.includes(0.95) && rates.includes(1.05));
   }
 
   private async init() {
@@ -119,7 +119,6 @@ export class YouTubeAdapter extends Emitter implements PlayerAdapter {
     const { source, startAt, autoplay } = this.wanted;
     this.wanted = null;
     this.loadedId = source.id;
-    this.rateProbe = null;
     const options = { videoId: source.id, ...(startAt !== null ? { startSeconds: startAt } : {}) };
     if (autoplay) this.player.loadVideoById(options);
     else this.player.cueVideoById(options);
@@ -163,9 +162,7 @@ export class YouTubeAdapter extends Emitter implements PlayerAdapter {
   setRate(rate: number) {
     if (!this.player || !this.ready) return 1;
     this.player.setPlaybackRate(rate);
-    const applied = this.player.getPlaybackRate();
-    if (rate !== 1) this.rateProbe = Math.abs(applied - rate) < 0.01;
-    return applied;
+    return rate;
   }
 
   setMuted(muted: boolean) {

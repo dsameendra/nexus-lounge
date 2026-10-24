@@ -104,7 +104,7 @@ export function StreamPlayer({
     patch({ playing: state === "playing" || state === "buffering", loading: state === "idle", live });
 
     if (!syncable) {
-      patch({ status: "unsynced" });
+      patch(state === "playing" ? { status: "unsynced", blocked: false } : { status: "unsynced" });
       return;
     }
 
@@ -242,14 +242,14 @@ export function StreamPlayer({
         <>
           <div className="absolute inset-0 z-10" onClick={revealControls} />
 
-          {ui.loading && (
+          {ui.loading && !ui.blocked && (
             <div className="animate-fade absolute inset-0 z-10 flex items-center justify-center bg-black">
               <StreamArt stream={stream} className="absolute inset-0 size-full opacity-40 blur-sm" />
               <span className="relative size-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
             </div>
           )}
 
-          {ui.blocked && !ui.loading && (
+          {ui.blocked && (
             <button
               onClick={startPlayback}
               className="animate-fade absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/60"

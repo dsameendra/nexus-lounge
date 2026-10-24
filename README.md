@@ -42,7 +42,7 @@ Node 22.18+ (the server runs TypeScript directly), pnpm 10+, and Docker only if 
 - **Featured ("On air") stream:** the host and controllers pick what the room watches. Guests always follow it; Discord users follow it by default and can pick any other stream, then **Join them** to come back.
 - **Controls:** play, pause and seek on a stream are limited to the host, controllers, and whoever added that stream. The host can promote other Discord users to controller from the People tab.
 - **Guests** can talk, chat and watch the featured stream. They can't add streams, share their screen, create rooms or pick another stream (enforced on the server and in the LiveKit token).
-- **Sync:** each client estimates the server clock (median of ping samples) and compares its player to `position + elapsed`. Drift over 1s hard-seeks, 0.15-1s nudges the playback rate to 0.95/1.05 where the player supports it (YouTube; Twitch has no rate control and uses a 0.5s seek threshold instead), under 0.15s does nothing.
+- **Sync:** each client estimates the server clock (median of ping samples) and compares its player to `position + elapsed`. Drift over 1s hard-seeks, 0.15-1s nudges the playback rate to 0.95/1.05 when the player offers those rates, under 0.15s does nothing. YouTube normally only offers rates in 0.25 steps and Twitch has no rate control, so in practice both fall back to seeking when drift passes 0.5s.
 - **Twitch live** cannot be seeked by embeds, so it can't be time-synced; the UI says so and suggests screen share.
 - **Titles:** YouTube titles are fetched server-side from YouTube's public oEmbed endpoint (no key needed); everything else falls back to the channel name or id.
 
