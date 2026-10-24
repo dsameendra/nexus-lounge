@@ -7,13 +7,18 @@ import { roomInfoSchema } from "@nexus/shared";
 export function CreateRoomButton() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function create() {
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch("/api/rooms", { method: "POST" });
+      const response = await fetch("/api/rooms", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(password ? { password } : {}),
+      });
       if (!response.ok) throw new Error();
       const room = roomInfoSchema.parse(await response.json());
       router.push(`/room/${room.id}`);
@@ -25,6 +30,14 @@ export function CreateRoomButton() {
 
   return (
     <div className="mt-6">
+      <input
+        type="password"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+        maxLength={64}
+        placeholder="Room password (optional)"
+        className="mb-3 w-full rounded-lg border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent"
+      />
       <button
         onClick={create}
         disabled={busy}

@@ -2,7 +2,7 @@
 
 Watch League of Legends streams with friends in a shared room: Discord-style voice chat, text chat, and (in later milestones) screen share and synced YouTube/Twitch playback.
 
-Status: **Milestone 1** — Discord login, rooms with invite links, LiveKit voice, text chat, participant list with speaking indicators.
+Status: **Milestone 1** — Discord or guest login, optional room passwords, rooms with invite links, LiveKit voice, text chat, participant list with speaking indicators.
 
 ## Layout
 

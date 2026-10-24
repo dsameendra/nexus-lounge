@@ -25,6 +25,31 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             Continue with Discord
           </button>
         </form>
+        <div className="my-5 flex items-center gap-3 text-xs text-slate-500">
+          <span className="h-px flex-1 bg-line" />
+          or
+          <span className="h-px flex-1 bg-line" />
+        </div>
+        <form
+          className="space-y-3"
+          action={async (formData) => {
+            "use server";
+            const name = String(formData.get("name") ?? "");
+            await signIn("guest", { name, redirectTo: callbackUrl });
+          }}
+        >
+          <input
+            name="name"
+            required
+            minLength={2}
+            maxLength={24}
+            placeholder="Your name"
+            className="w-full rounded-lg border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent"
+          />
+          <button className="w-full rounded-lg border border-line bg-panel-2 px-4 py-3 font-semibold transition hover:border-accent">
+            Continue as guest
+          </button>
+        </form>
       </div>
     </main>
   );

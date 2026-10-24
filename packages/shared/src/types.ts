@@ -7,6 +7,7 @@ export const roomInfoSchema = z.object({
   hostId: z.string(),
   controllerIds: z.array(z.string()),
   createdAt: z.number(),
+  hasPassword: z.boolean(),
 });
 export type RoomInfo = z.infer<typeof roomInfoSchema>;
 
@@ -21,3 +22,8 @@ export const livekitTokenResponseSchema = z.object({
   room: roomInfoSchema,
 });
 export type LivekitTokenResponse = z.infer<typeof livekitTokenResponseSchema>;
+
+export const roomPasswordSchema = z.string().min(1).max(64);
+
+export const createRoomRequestSchema = z.object({ password: roomPasswordSchema.optional() });
+export const joinRoomRequestSchema = z.object({ password: z.string().max(64).optional() });

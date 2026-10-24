@@ -1,11 +1,26 @@
 import NextAuth from "next-auth";
+import Credentials from "next-auth/providers/credentials";
 import Discord from "next-auth/providers/discord";
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+
+const guestSchema = z.object({ name: z.string().trim().min(2).max(24) });
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Discord({
+      issuer: "https://discord.com",
       clientId: process.env.DISCORD_CLIENT_ID,
       clientSecret: process.env.DISCORD_CLIENT_SECRET,
+    }),
+    Credentials({
+      id: "guest",
+      credentials: { name: {} },
+      authorize(credentials) {
+        const parsed = guestSchema.safeParse(credentials);
+        if (!parsed.success) return null;
+        return { id: `guest-${randomUUID()}`, name: parsed.data.name, image: null };
+      },
     }),
   ],
   pages: { signIn: "/login" },
