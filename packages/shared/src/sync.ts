@@ -1,8 +1,9 @@
 import type { Playback } from "./types.ts";
 
 export const HARD_SEEK_THRESHOLD = 1;
-export const RATE_THRESHOLD = 0.15;
-export const COARSE_SEEK_THRESHOLD = 0.5;
+export const MAX_HARD_SEEK_THRESHOLD = 3;
+export const NO_RATE_SEEK_THRESHOLD = 1.5;
+export const PAUSED_SEEK_THRESHOLD = 0.75;
 
 export function expectedPosition(playback: Playback, serverNow: number) {
   if (playback.position === null) return null;
@@ -12,13 +13,37 @@ export function expectedPosition(playback: Playback, serverNow: number) {
 
 export type Correction = { kind: "none" } | { kind: "seek" } | { kind: "rate"; rate: number } | { kind: "reset-rate" };
 
-export function computeCorrection(drift: number, options: { playing: boolean; fineRate: boolean }): Correction {
+export interface CorrectionOptions {
+  playing: boolean;
+  currentRate: number;
+  rates: number[];
+}
+
+export function pickRate(drift: number, rates: number[]) {
+  const candidates = drift > 0 ? rates.filter((rate) => rate < 1) : rates.filter((rate) => rate > 1);
+  if (candidates.length === 0) return null;
+  return drift > 0 ? Math.max(...candidates) : Math.min(...candidates);
+}
+
+export function computeCorrection(drift: number, options: CorrectionOptions): Correction {
   const size = Math.abs(drift);
-  if (!options.playing) return size > COARSE_SEEK_THRESHOLD ? { kind: "seek" } : { kind: "none" };
-  if (size > HARD_SEEK_THRESHOLD) return { kind: "seek" };
-  if (size < RATE_THRESHOLD) return { kind: "reset-rate" };
-  if (!options.fineRate) return size > COARSE_SEEK_THRESHOLD ? { kind: "seek" } : { kind: "none" };
-  return { kind: "rate", rate: drift > 0 ? 0.95 : 1.05 };
+  if (!options.playing) return size > PAUSED_SEEK_THRESHOLD ? { kind: "seek" } : { kind: "none" };
+
+  const rate = pickRate(drift, options.rates);
+  if (rate === null) {
+    if (size > NO_RATE_SEEK_THRESHOLD) return { kind: "seek" };
+    return options.currentRate !== 1 ? { kind: "reset-rate" } : { kind: "none" };
+  }
+
+  const speed = Math.abs(rate - 1);
+  const hardThreshold = Math.min(MAX_HARD_SEEK_THRESHOLD, Math.max(HARD_SEEK_THRESHOLD, speed * 10));
+  if (size > hardThreshold) return { kind: "seek" };
+
+  const fine = speed <= 0.1;
+  const start = fine ? 0.15 : 0.6;
+  const stop = fine ? 0.15 : 0.3;
+  if (options.currentRate !== 1) return size < stop ? { kind: "reset-rate" } : { kind: "rate", rate };
+  return size >= start ? { kind: "rate", rate } : { kind: "none" };
 }
 
 export function median(values: number[]) {

@@ -84,9 +84,9 @@ export class YouTubeAdapter extends Emitter implements PlayerAdapter {
     void this.init();
   }
 
-  get fineRate() {
-    const rates = this.ready ? this.player?.getAvailablePlaybackRates?.() : undefined;
-    return Boolean(rates?.includes(0.95) && rates.includes(1.05));
+  get rates() {
+    const available = this.ready ? this.player?.getAvailablePlaybackRates?.() : undefined;
+    return (available ?? []).filter((rate) => rate !== 1 && rate >= 0.75 && rate <= 1.25);
   }
 
   private async init() {

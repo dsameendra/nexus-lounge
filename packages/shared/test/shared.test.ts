@@ -41,17 +41,37 @@ test("expected position", () => {
   assert.equal(expectedPosition({ position: 10, playing: true, updatedAt: 1000 }, 3500), 12.5);
 });
 
-test("drift correction thresholds", () => {
-  const playing = { playing: true, fineRate: true };
-  assert.equal(computeCorrection(1.2, playing).kind, "seek");
-  assert.equal(computeCorrection(-1.2, playing).kind, "seek");
-  assert.deepEqual(computeCorrection(0.5, playing), { kind: "rate", rate: 0.95 });
-  assert.deepEqual(computeCorrection(-0.5, playing), { kind: "rate", rate: 1.05 });
-  assert.equal(computeCorrection(0.1, playing).kind, "reset-rate");
-  assert.equal(computeCorrection(0.4, { playing: true, fineRate: false }).kind, "none");
-  assert.equal(computeCorrection(0.7, { playing: true, fineRate: false }).kind, "seek");
-  assert.equal(computeCorrection(0.7, { playing: false, fineRate: true }).kind, "seek");
-  assert.equal(computeCorrection(0.3, { playing: false, fineRate: true }).kind, "none");
+test("drift correction with fine rates", () => {
+  const o = { playing: true, currentRate: 1, rates: [0.95, 1.05] };
+  assert.equal(computeCorrection(1.2, o).kind, "seek");
+  assert.equal(computeCorrection(-1.2, o).kind, "seek");
+  assert.deepEqual(computeCorrection(0.5, o), { kind: "rate", rate: 0.95 });
+  assert.deepEqual(computeCorrection(-0.5, o), { kind: "rate", rate: 1.05 });
+  assert.equal(computeCorrection(0.1, o).kind, "none");
+  assert.equal(computeCorrection(0.1, { ...o, currentRate: 0.95 }).kind, "reset-rate");
+});
+
+test("drift correction with coarse rates prefers speeding up over seeking", () => {
+  const o = { playing: true, currentRate: 1, rates: [0.75, 1.25] };
+  assert.equal(computeCorrection(0.4, o).kind, "none");
+  assert.deepEqual(computeCorrection(0.8, o), { kind: "rate", rate: 0.75 });
+  assert.deepEqual(computeCorrection(-2, o), { kind: "rate", rate: 1.25 });
+  assert.equal(computeCorrection(2.6, o).kind, "seek");
+  assert.equal(computeCorrection(0.2, { ...o, currentRate: 1.25 }).kind, "reset-rate");
+  assert.deepEqual(computeCorrection(-0.5, { ...o, currentRate: 1.25 }), { kind: "rate", rate: 1.25 });
+});
+
+test("drift correction without rate control only seeks when far off", () => {
+  const o = { playing: true, currentRate: 1, rates: [] };
+  assert.equal(computeCorrection(1.0, o).kind, "none");
+  assert.equal(computeCorrection(-1.4, o).kind, "none");
+  assert.equal(computeCorrection(1.6, o).kind, "seek");
+});
+
+test("paused drift", () => {
+  const o = { playing: false, currentRate: 1, rates: [0.95, 1.05] };
+  assert.equal(computeCorrection(0.5, o).kind, "none");
+  assert.equal(computeCorrection(0.8, o).kind, "seek");
 });
 
 test("median", () => {

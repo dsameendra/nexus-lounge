@@ -5,7 +5,7 @@ export type PlayerState = "idle" | "playing" | "paused" | "buffering" | "ended";
 export interface PlayerAdapter {
   readonly type: MediaSource["type"];
   readonly ready: boolean;
-  readonly fineRate: boolean;
+  readonly rates: number[];
   readonly error: string | null;
   load(source: MediaSource, startAt: number | null, autoplay: boolean): void;
   play(): void;

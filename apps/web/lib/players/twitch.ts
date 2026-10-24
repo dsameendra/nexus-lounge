@@ -50,7 +50,7 @@ function timeString(seconds: number) {
 
 export class TwitchAdapter extends Emitter implements PlayerAdapter {
   readonly type = "twitch" as const;
-  readonly fineRate = false;
+  readonly rates: number[] = [];
   ready = false;
   error: string | null = null;
   private player: TwitchPlayer | null = null;

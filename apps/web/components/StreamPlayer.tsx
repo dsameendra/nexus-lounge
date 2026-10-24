@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { computeCorrection, expectedPosition, type Stream } from "@nexus/shared";
+import { computeCorrection, expectedPosition, median, type Stream } from "@nexus/shared";
 import { YouTubeAdapter } from "@/lib/players/youtube";
 import { TwitchAdapter } from "@/lib/players/twitch";
 import type { PlayerAdapter } from "@/lib/players/types";
@@ -45,7 +45,23 @@ export function StreamPlayer({
   const { clock, send, canControlStream } = useRoom();
   const hostRefs = { youtube: useRef<HTMLDivElement>(null), twitch: useRef<HTMLDivElement>(null) };
   const adapters = useRef<Partial<Record<Provider, PlayerAdapter>>>({});
-  const mem = useRef({ loadedId: null as string | null, loadedAt: 0, graceUntil: 0, lastPlayCmd: 0, wantSince: 0, lastWant: false, rate: 1, establishAt: 0 });
+  const mem = useRef({
+    loadedId: null as string | null,
+    loadedAt: 0,
+    graceUntil: 0,
+    lastPlayCmd: 0,
+    wantSince: 0,
+    lastWant: false,
+    rate: 1,
+    establishAt: 0,
+    seenUpdate: 0,
+    drifts: [] as number[],
+    lastSample: 0,
+    seekSince: 0,
+    immediate: false,
+    learn: false,
+    lead: { youtube: 0.5, twitch: 1 } as Record<Provider, number>,
+  });
   const debugRef = useRef(typeof window !== "undefined" && new URLSearchParams(window.location.search).has("debug"));
   const latest = useRef({ stream, visible, volume: 1, muted: false });
   const [ui, setUi] = useState<UiState>(INITIAL_UI);
@@ -101,10 +117,23 @@ export function StreamPlayer({
 
     if (m.loadedId !== stream.id) {
       const expected = syncable ? expectedPosition(playback, clock.now()) : null;
-      Object.assign(m, { loadedId: stream.id, loadedAt: now, graceUntil: now + 3000, rate: 1, wantSince: now, lastWant: true });
+      const lead = playback.playing ? m.lead[stream.source.type] : 0;
+      Object.assign(m, {
+        loadedId: stream.id,
+        loadedAt: now,
+        graceUntil: now + 4000,
+        rate: 1,
+        wantSince: now,
+        lastWant: true,
+        drifts: [],
+        seekSince: 0,
+        immediate: false,
+        learn: false,
+        seenUpdate: playback.updatedAt,
+      });
       adapter.setVolume(volume);
       adapter.setMuted(muted);
-      adapter.load(stream.source, expected, syncable ? playback.playing : true);
+      adapter.load(stream.source, expected === null ? null : expected + lead, syncable ? playback.playing : true);
       patch({ loading: true, blocked: false, time: 0, duration: 0 });
       return;
     }
@@ -121,7 +150,7 @@ export function StreamPlayer({
     if (debugRef.current) {
       const exp = syncable ? expectedPosition(playback, clock.now()) : null;
       patch({
-        debug: `${stream.id} | state=${state} ready=${adapter.ready} | want=${playback.playing} pos=${playback.position?.toFixed(1) ?? "null"} | expected=${exp?.toFixed(1) ?? "-"} actual=${adapter.getTime().toFixed(1)} | rate=${m.rate} fine=${adapter.fineRate} | clock=${clock.ready} off=${Math.round(clock.offset)}ms`,
+        debug: `${stream.id} | state=${state} ready=${adapter.ready} | want=${playback.playing} pos=${playback.position?.toFixed(1) ?? "null"} | expected=${exp?.toFixed(1) ?? "-"} actual=${adapter.getTime().toFixed(1)} | rate=${m.rate} rates=[${adapter.rates.join(",")}] lead=${m.lead[stream.source.type].toFixed(2)} drifts=[${m.drifts.map((d) => d.toFixed(2)).join(",")}] | clock=${clock.ready} off=${Math.round(clock.offset)}ms`,
       });
     }
 
@@ -156,30 +185,63 @@ export function StreamPlayer({
       return;
     }
 
-    if (state === "buffering" || state === "idle" || state === "ended" || now < m.graceUntil) {
+    if (playback.updatedAt !== m.seenUpdate) {
+      m.seenUpdate = playback.updatedAt;
+      m.drifts = [];
+      m.seekSince = 0;
+      m.immediate = true;
+    }
+
+    if (state === "buffering" || state === "idle" || state === "ended") {
+      m.drifts = [];
+      m.graceUntil = Math.max(m.graceUntil, now + 1500);
       patch({ status: "syncing" });
       return;
     }
+    if (now < m.graceUntil) {
+      patch({ status: "syncing" });
+      return;
+    }
+    if (now - m.lastSample < 350) return;
+    m.lastSample = now;
 
     const duration = adapter.getDuration();
     const target = duration > 0 ? Math.min(expected, duration) : expected;
-    const drift = adapter.getTime() - target;
-    const correction = computeCorrection(drift, { playing: want, fineRate: adapter.fineRate });
+    m.drifts.push(adapter.getTime() - target);
+    if (m.drifts.length > 5) m.drifts.shift();
+    if (m.drifts.length < (m.immediate ? 1 : 3)) return;
+
+    const drift = median(m.drifts);
+    patch({ status: Math.abs(drift) < 1 ? "synced" : "syncing" });
+
+    if (m.learn) {
+      m.learn = false;
+      const type = stream.source.type;
+      m.lead[type] = Math.min(3, Math.max(0, m.lead[type] - drift * 0.7));
+    }
+
+    const correction = computeCorrection(drift, { playing: want, currentRate: m.rate, rates: adapter.rates });
 
     if (correction.kind === "seek") {
-      adapter.seek(target);
-      if (m.rate !== 1) adapter.setRate(1);
-      Object.assign(m, { graceUntil: now + 2500, rate: 1 });
-    } else if (correction.kind === "rate") {
-      if (m.rate !== correction.rate) {
-        adapter.setRate(correction.rate);
-        m.rate = correction.rate;
+      if (m.seekSince === 0) m.seekSince = now;
+      const urgent = m.immediate || Math.abs(drift) > 5;
+      if (urgent || now - m.seekSince >= 1200) {
+        adapter.seek(target + (want ? m.lead[stream.source.type] : 0));
+        if (m.rate !== 1) adapter.setRate(1);
+        Object.assign(m, { graceUntil: now + 3500, rate: 1, drifts: [], seekSince: 0, immediate: false, learn: want });
       }
+      return;
+    }
+
+    m.seekSince = 0;
+    m.immediate = false;
+    if (correction.kind === "rate" && m.rate !== correction.rate) {
+      adapter.setRate(correction.rate);
+      m.rate = correction.rate;
     } else if (correction.kind === "reset-rate" && m.rate !== 1) {
       adapter.setRate(1);
       m.rate = 1;
     }
-    patch({ status: Math.abs(drift) < 0.5 ? "synced" : "syncing" });
   }, [clock, ensureAdapter, patch, send]);
 
   useEffect(() => {
@@ -245,7 +307,8 @@ export function StreamPlayer({
     if (!stream || !activeAdapter) return;
     const expected = expectedPosition(stream.playback, clock.now());
     if (expected !== null) activeAdapter.seek(expected);
-    mem.current.graceUntil = Date.now() + 2000;
+    mem.current.graceUntil = Date.now() + 3500;
+    mem.current.drifts = [];
     if (stream.playback.playing) activeAdapter.play();
   }
 
