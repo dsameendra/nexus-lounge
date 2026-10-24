@@ -120,6 +120,9 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
       });
       this.player.addEventListener(Twitch.Player.READY, () => {
         this.ready = true;
+        const frame = this.mount.querySelector("iframe");
+        frame?.setAttribute("allowfullscreen", "");
+        frame?.setAttribute("allow", "autoplay; fullscreen; picture-in-picture");
         this.player?.setVolume(this.volume);
         if (this.pendingPlay) {
           this.player?.play();

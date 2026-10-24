@@ -104,9 +104,12 @@ export class YouTubeAdapter extends Emitter implements PlayerAdapter {
 
   private host: HTMLElement;
 
-  constructor(host: HTMLElement) {
+  private native: boolean;
+
+  constructor(host: HTMLElement, native = false) {
     super();
     this.host = host;
+    this.native = native;
     void this.init();
   }
 
@@ -134,9 +137,9 @@ export class YouTubeAdapter extends Emitter implements PlayerAdapter {
         width: "100%",
         height: "100%",
         playerVars: {
-          controls: 0,
-          disablekb: 1,
-          fs: 0,
+          controls: this.native ? 1 : 0,
+          disablekb: this.native ? 0 : 1,
+          fs: this.native ? 1 : 0,
           playsinline: 1,
           rel: 0,
           modestbranding: 1,
@@ -148,6 +151,7 @@ export class YouTubeAdapter extends Emitter implements PlayerAdapter {
         events: {
           onReady: () => {
             this.ready = true;
+            this.allowFullscreen();
             this.applyAudio();
             this.applyWanted();
             this.emit("ready");
@@ -166,6 +170,15 @@ export class YouTubeAdapter extends Emitter implements PlayerAdapter {
       this.error = "Couldn't load the YouTube player. Check your connection or ad blocker.";
       this.emit("error");
     }
+  }
+
+  private allowFullscreen() {
+    const frame = this.host.querySelector("iframe");
+    if (!frame) return;
+    frame.setAttribute("allowfullscreen", "");
+    const allow = new Set((frame.getAttribute("allow") ?? "").split(";").map((item) => item.trim()).filter(Boolean));
+    for (const feature of ["fullscreen", "autoplay", "picture-in-picture", "encrypted-media"]) allow.add(feature);
+    frame.setAttribute("allow", [...allow].join("; "));
   }
 
   private applyAudio() {

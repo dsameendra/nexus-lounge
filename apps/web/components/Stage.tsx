@@ -54,6 +54,7 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
           visible={Boolean(stream) && !showingScreen}
           onFullscreen={toggleFullscreen}
           fullscreen={fullscreen}
+          immersive={immersive}
           controlsSlot={slot}
         />
 

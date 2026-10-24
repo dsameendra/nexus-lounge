@@ -71,6 +71,7 @@ export function StreamPlayer({
   onFullscreen,
   bare = false,
   fullscreen = false,
+  immersive = false,
   controlsSlot = null,
 }: {
   stream: Stream | null;
@@ -78,6 +79,7 @@ export function StreamPlayer({
   onFullscreen: () => void;
   bare?: boolean;
   fullscreen?: boolean;
+  immersive?: boolean;
   controlsSlot?: HTMLElement | null;
 }) {
   const canFullscreen = true;
@@ -126,7 +128,7 @@ export function StreamPlayer({
       let adapter = adapters.current[type];
       const host = hostRefs[type].current;
       if (!adapter && host) {
-        adapter = type === "youtube" ? new YouTubeAdapter(host) : new TwitchAdapter(host);
+        adapter = type === "youtube" ? new YouTubeAdapter(host, nativeYoutube.current) : new TwitchAdapter(host);
         adapter.subscribe((event) => {
           if (event === "blocked") patch({ blocked: true });
         });
@@ -137,6 +139,20 @@ export function StreamPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [patch],
   );
+
+  const nativeYoutube = useRef(false);
+  const ytNative = immersive && stream?.source.type === "youtube";
+
+  useEffect(() => {
+    if (nativeYoutube.current === ytNative) return;
+    nativeYoutube.current = ytNative;
+    const existing = adapters.current.youtube;
+    if (!existing) return;
+    existing.destroy();
+    delete adapters.current.youtube;
+    mem.current.loadedId = null;
+    patch({ loading: true });
+  }, [ytNative, patch]);
 
   const resetTwitch = useCallback(() => {
     const existing = adapters.current.twitch;
@@ -449,8 +465,8 @@ export function StreamPlayer({
 
   const controls = stream && (
           <PlayerControls
-      variant={fullscreen && !isTwitch ? "overlay" : "bar"}
-      visible={fullscreen && !isTwitch ? showControls : true}
+      variant={fullscreen && !isTwitch && !ytNative ? "overlay" : "bar"}
+      visible={fullscreen && !isTwitch && !ytNative ? showControls : true}
       playing={ui.playing}
       time={ui.time}
       duration={ui.duration}
@@ -561,7 +577,7 @@ export function StreamPlayer({
           )}
 
           {!bare &&
-            (fullscreen && !isTwitch ? (
+            (fullscreen && !isTwitch && !ytNative ? (
               controls
             ) : controlsSlot ? (
               createPortal(

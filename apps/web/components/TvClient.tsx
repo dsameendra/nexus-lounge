@@ -5,6 +5,7 @@ import { LiveKitRoom } from "@livekit/components-react";
 import { tvCredentialsSchema, tvPairingSchema, tvPollSchema, type TvCredentials } from "@nexus/shared";
 import { RoomProvider } from "./RoomProvider";
 import { TvRoom } from "./TvRoom";
+import { useWakeLock } from "./useWakeLock";
 
 type Credentials = TvCredentials & { wsUrl: string };
 
@@ -18,6 +19,7 @@ type Phase =
 const TV_SELF = { id: "tv", name: "TV", image: null, guest: true };
 
 export function TvClient({ roomId, signedIn }: { roomId: string; signedIn: boolean }) {
+  useWakeLock();
   const [phase, setPhase] = useState<Phase>({ kind: "boot" });
   const cancelled = useRef(false);
 

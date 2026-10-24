@@ -17,6 +17,7 @@ import { Stage } from "./Stage";
 import { StreamLibrary } from "./StreamLibrary";
 import { useEffectiveSource } from "./useEffectiveSource";
 import { useMediaQuery } from "./useMediaQuery";
+import { useWakeLock } from "./useWakeLock";
 
 type Tab = "chat" | "streams" | "people";
 
@@ -75,6 +76,7 @@ export function RoomView({
   const [seenChat, setSeenChat] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   useVisualViewportHeight();
+  useWakeLock();
 
   useEffect(() => {
     if (status === "open") send({ type: "presence.watch", streamId: effectiveId });

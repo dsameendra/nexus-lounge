@@ -23,7 +23,8 @@ Virtual watch-party PWA: rooms with LiveKit voice/chat/screen share, synced YouT
 - YouTube embeds cannot be told a quality (the write APIs are no-ops); the player's pixel size drives what YouTube serves. Reads work. Captions use an undocumented module, so guard every call (`safe()`).
 - Per-stream clock: `{position, playing, updatedAt}`; correct drift with playback rate first, seek rarely and debounced.
 - Screen share stream ids are `screen:<identity>`.
-- iPhone has no Fullscreen API: `useStageFullscreen` falls back to an immersive CSS mode.
+- iPhone has no Fullscreen API for elements: `useStageFullscreen` falls back to an immersive CSS mode, and in it YouTube is rebuilt with its own native controls (`fs=1`) so its fullscreen button opens iOS's native player (Twitch always shows its own controls). Cross-origin iframes can't be sent to native fullscreen programmatically.
+- `useWakeLock` keeps the screen on in rooms and TV mode (Screen Wake Lock API, re-acquired on visibility change).
 - `NEXT_PUBLIC_*` values are baked at build time; `SERVER_WS_URL` is the runtime override.
 - iCloud can create `* 2.ts` duplicates inside `.next`; tsconfig excludes them.
 - Rooms vanish on server restart; keep a single server instance.
