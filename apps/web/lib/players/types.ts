@@ -7,6 +7,7 @@ export interface PlayerAdapter {
   readonly ready: boolean;
   readonly rates: number[];
   readonly error: string | null;
+  readonly muteBlocked?: boolean;
   load(source: MediaSource, startAt: number | null, autoplay: boolean): void;
   play(): void;
   pause(): void;

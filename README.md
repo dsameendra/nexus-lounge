@@ -1,15 +1,41 @@
 # Nexus Lounge
 
-Watch League of Legends streams with friends in a shared room: Discord-style voice chat, text chat, and (in later milestones) screen share and synced YouTube/Twitch playback.
+A web app for watching things together online: a shared room with voice chat, text chat, synced YouTube and Twitch playback, and screen sharing. It installs as an app on phones and desktops, and has a TV mode for the big screen.
 
-Status: **Milestone 3** — Discord or guest login, optional room passwords, rooms with invite links, LiveKit voice, text chat, participant list with speaking indicators, and tab/screen sharing with audio.
+I built it so my friends and I could watch League of Legends Worlds together, but it's general purpose and works for any virtual watch party: sports, premieres, VODs, movie nights.
+
+## What you can do
+
+**Rooms and people**
+- Create a room and share the invite link. Sign in with Discord, or join as a guest.
+- Guests wait in a lobby until the room owner lets them in. The owner can also remove anyone, who then can't rejoin.
+- Optional room password.
+- Roles: the owner can make other Discord users controllers, who can pick what the room watches and control playback.
+
+**Watching**
+- Paste any YouTube or Twitch link (video, live stream, channel, past broadcast) to add it to the room's stream list.
+- Every stream has its own shared clock, so some people can watch one stream while others watch another, and anyone can switch without losing sync. The owner or a controller can put one stream "on air" for everyone; guests always follow it.
+- Playback stays in sync across everyone's devices, with smooth correction instead of constant skipping.
+- On a live YouTube stream, **Go live** jumps everyone to the live edge.
+- Screen share a tab or screen, with audio, for anything that can't be embedded.
+- Twitch live channels can't be time-synced by embeds, so the app says so and suggests screen share.
+
+**Voice and chat**
+- Always-on voice with mute, deafen and speaking indicators.
+- Click someone for their profile; right-click for per-person volume and "mute for me". The owner can mute or deafen anyone for everyone.
+- Text chat in the side panel.
+
+**Any screen**
+- Responsive on phone, tablet, laptop and desktop (including landscape phones).
+- Installable as a PWA.
+- TV mode: open the TV view on a TV browser (enter the code it shows in your room) or cast a browser tab. It shows only the video, with no controls.
 
 ## Layout
 
 ```
 apps/web         Next.js app (UI, Discord login via Auth.js, thin API routes)
-apps/server      Fastify + ws (rooms in memory, LiveKit token endpoint, WS protocol)
-packages/shared  zod schemas and types shared by both
+apps/server      Fastify + ws (rooms in memory, LiveKit tokens, sync WebSocket)
+packages/shared  zod schemas, types and the sync maths shared by both
 ```
 
 ## Requirements
@@ -22,7 +48,7 @@ Node 22.18+ (the server runs TypeScript directly), pnpm 10+, and Docker only if 
 2. `cp .env.example .env` and fill it in (below).
 3. `pnpm dev`, then open http://localhost:3000.
 
-`pnpm dev` starts the web app (port 3000) and the server (port 4000). For local LiveKit, run `pnpm livekit` in another terminal, or use LiveKit Cloud instead.
+`pnpm dev` starts the web app (port 3000) and the server (port 4000). For local voice, run `pnpm livekit` in another terminal (needs Docker), or use LiveKit Cloud instead.
 
 ### Discord credentials
 
@@ -36,39 +62,35 @@ Node 22.18+ (the server runs TypeScript directly), pnpm 10+, and Docker only if 
 - **Local (default in `.env.example`)**: `pnpm livekit` runs LiveKit in dev mode with key `devkey` and secret `secret`, at `ws://localhost:7880`.
 - **LiveKit Cloud**: create a project at [cloud.livekit.io](https://cloud.livekit.io), then copy the WebSocket URL (`wss://….livekit.cloud`) into `LIVEKIT_URL` and an API key/secret pair from **Settings → Keys** into `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET`.
 
-## Watching together
-
-- **Streams library:** anyone signed in with Discord can paste a YouTube or Twitch link (video, live stream, channel or past broadcast) into **Add**. Every stream keeps its own shared clock on the server, so people can watch different streams at the same time and switch between them without losing sync.
-- **Featured ("On air") stream:** the host and controllers pick what the room watches. Guests always follow it; Discord users follow it by default and can pick any other stream, then **Join them** to come back.
-- **Controls:** play, pause and seek on a stream are limited to the host, controllers, and whoever added that stream. The host can promote other Discord users to controller from the People tab.
-- **Guests** can talk, chat and watch the featured stream. They can't add streams, share their screen, create rooms or pick another stream (enforced on the server and in the LiveKit token).
-- **Sync:** each client estimates the server clock (median of ping samples) and compares its player to `position + elapsed`. To avoid a choppy picture it never reacts to a single reading: drift is the median of the last few samples, and a short grace period follows every seek or buffer stall. Small drift is fixed by gently changing the playback speed (0.95/1.05 where available, otherwise YouTube's 0.75/1.25, which pitch-corrects). A seek only happens when the player is far off (over ~2.5s with rate control, ~1.5s without, as on Twitch) and stays off for more than a second, or right away when a controller seeks. Each seek learns how long the player takes to resume and aims slightly ahead to compensate. Add `?debug` to a room URL to see the live numbers.
-- **Voice controls:** click (or right-click) anyone in the People tab. Everyone can set a per-person volume and "Mute for me", which only affects them and is remembered in their browser. The room owner can also "Mute for everyone" (the LiveKit microphone permission is revoked, so it can't be undone from their side) and "Deafen for everyone" (they hear nothing and are muted too). Both survive the person reconnecting.
-- **Twitch live** cannot be seeked by embeds, so it can't be time-synced; the UI says so and suggests screen share.
-- **Titles:** YouTube titles are fetched server-side from YouTube's public oEmbed endpoint (no key needed); everything else falls back to the channel name or id.
-
-## Tests
-
-`pnpm --filter @nexus/shared test` (URL parsing, drift maths, tokens) and `pnpm --filter @nexus/server test` (spawns the server and checks permissions, late joiners, tickets and passwords over real WebSockets).
-
-## How it works
-
-- The browser never talks to the server directly with your Discord session. Next API routes sign a 5-minute HMAC token (using `AUTH_SECRET`) and call the Fastify server, which verifies it.
-- `POST /rooms` creates a room (the creator is host). `POST /rooms/:id/livekit-token` returns a LiveKit token for that room plus the LiveKit URL.
-- Voice, speaking indicators, presence and chat all run through LiveKit (chat uses data channels).
-- The `/ws` WebSocket validates every message with zod (`packages/shared/src/protocol.ts`). In Milestone 1 it only handles `join` and `ping`; playback sync lands in Milestone 3.
-- Rooms live in server memory and vanish on restart. Redis is the planned future step for persistence and multiple server instances.
-
 ## Env vars
 
 | Variable | Used by | Purpose |
 | --- | --- | --- |
 | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | web | Discord OAuth |
-| `AUTH_SECRET` | web, server | Auth.js session encryption and server token signing (must match) |
+| `AUTH_SECRET` | web, server | Session encryption and server token signing (must match) |
 | `AUTH_URL` | web | Public URL of the web app |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | server | LiveKit connection and token minting |
-| `NEXT_PUBLIC_SERVER_WS_URL` | web | WebSocket URL of the Fastify server (the HTTP URL is derived from it) |
+| `NEXT_PUBLIC_SERVER_WS_URL` | web | WebSocket URL of the server (`wss://<server>/ws`); the HTTP URL is derived from it |
+| `SERVER_WS_URL` | web | Optional runtime override of the above. Next bakes `NEXT_PUBLIC_*` values in at build time, this one is read when the app runs |
 | `PORT` | server | Server port (default 4000) |
+
+## How it works
+
+- The browser never sends your Discord session to the server. Next API routes sign a short-lived HMAC token (with `AUTH_SECRET`) and call the Fastify server, which verifies it. Joining a room returns a LiveKit token plus a room-scoped ticket for the sync WebSocket.
+- Voice, speaking indicators, screen share and chat run through LiveKit. Playback state, the stream list, roles, guest approvals and moderation run over the server's WebSocket, and every message is validated with zod (`packages/shared/src/protocol.ts`).
+- Each stream stores `position`, `playing` and a server timestamp. Clients estimate the server clock (median of ping samples) and compute the expected position locally. Drift is the median of the last few readings, small drift is fixed by gently changing playback speed, and seeks are rare and debounced. Add `?debug` to a room URL to see the live numbers.
+- Permissions are enforced on the server and in the LiveKit token, not just hidden in the UI: guests can't add streams, share, or create rooms; only the owner can mute, deafen, remove people or let guests in.
+- YouTube titles are fetched server-side from YouTube's public oEmbed endpoint (no key needed).
+- Rooms live in server memory and vanish on restart. Redis is the natural next step for persistence and running more than one server instance.
+
+## Tests
+
+```
+pnpm --filter @nexus/shared test   # URL parsing, drift maths, live-edge helpers, tokens
+pnpm --filter @nexus/server test   # spawns the server; permissions, guest approval, removal, moderation,
+                                   # late joiners, passwords, tickets, TV pairing over real WebSockets
+pnpm typecheck
+```
 
 ## Deploy on Railway
 
@@ -76,7 +98,7 @@ Two services built from the Dockerfiles in `apps/server` and `apps/web` (the bui
 
 ```
 railway login
-railway link --project nexus-lounge
+railway link --project <your project>
 railway add --service server --variables RAILWAY_DOCKERFILE_PATH=apps/server/Dockerfile
 railway add --service web    --variables RAILWAY_DOCKERFILE_PATH=apps/web/Dockerfile
 railway domain --service server && railway domain --service web
@@ -89,6 +111,6 @@ Variables (set with `railway variables --service <name> --set KEY=VALUE`):
 | `server` | `AUTH_SECRET`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` |
 | `web` | `AUTH_SECRET` (same value as the server), `AUTH_URL` (the web domain), `NEXT_PUBLIC_SERVER_WS_URL` (`wss://<server domain>/ws`), `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` |
 
-Railway sets `PORT` itself. Add `https://<web domain>/api/auth/callback/discord` as a redirect in the Discord developer portal. Deploy with `railway up --service server --ci` and `railway up --service web --ci`, or connect the GitHub repo to each service in the Railway dashboard for deploys on push (set the service's Dockerfile path variable as above).
+Railway sets `PORT` itself. Add `https://<web domain>/api/auth/callback/discord` as a redirect in the Discord developer portal. Deploy with `railway up --service server --ci` and `railway up --service web --ci`, or connect the GitHub repo to each service in the Railway dashboard for deploys on push (set the Dockerfile path variable as above).
 
-Rooms live in the server's memory, so every server deploy or restart ends all rooms. Keep the server at a single instance.
+Every server deploy or restart ends all rooms, because they live in memory. Keep the server at a single instance.

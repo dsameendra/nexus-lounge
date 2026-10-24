@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LiveKitRoom } from "@livekit/components-react";
@@ -17,6 +17,8 @@ type State =
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "password"; wrong: boolean }
+  | { status: "waiting" }
+  | { status: "denied"; message: string }
   | { status: "ready"; data: JoinResponse };
 
 const passwordKey = (roomId: string) => `room-password:${roomId}`;
@@ -34,10 +36,14 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
   const [state, setState] = useState<State>({ status: "loading" });
   const [joined, setJoined] = useState(false);
   const [deafened, setDeafened] = useState(false);
+  const [voiceLost, setVoiceLost] = useState(false);
+  const [voiceKey, setVoiceKey] = useState(0);
   const [passwordDraft, setPasswordDraft] = useState("");
+  const passwordRef = useRef<string | undefined>(undefined);
 
   const requestToken = useCallback(
     async (password?: string, signal?: AbortSignal) => {
+      passwordRef.current = password ?? passwordRef.current;
       try {
         const response = await fetch(`/api/rooms/${roomId}/token`, {
           method: "POST",
@@ -46,8 +52,11 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
           signal,
         });
         if (response.status === 404) return setState({ status: "error", message: "This room doesn't exist or has ended." });
+        if (response.status === 202) return setState({ status: "waiting" });
         if (response.status === 403) {
           const { error } = (await response.json()) as { error: string };
+          if (error === "removed") return setState({ status: "denied", message: "You were removed from this room by the owner." });
+          if (error === "declined") return setState({ status: "denied", message: "The room owner didn't let you in." });
           return setState({ status: "password", wrong: error === "wrong_password" });
         }
         if (!response.ok) return setState({ status: "error", message: "Could not reach the server." });
@@ -71,7 +80,38 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
     return () => controller.abort();
   }, [roomId, requestToken]);
 
+  useEffect(() => {
+    if (state.status !== "waiting") return;
+    const id = setInterval(() => void requestToken(passwordRef.current), 2000);
+    return () => clearInterval(id);
+  }, [state.status, requestToken]);
+
   if (state.status === "loading") return <Centered>Loading room…</Centered>;
+
+  if (state.status === "waiting") {
+    return (
+      <Centered>
+        <span className="mx-auto mb-5 block size-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+        <h1 className="text-xl font-semibold">Waiting to be let in</h1>
+        <p className="mt-2 text-sm text-label-2">The room owner has been asked to let you in. This page will open as soon as they do.</p>
+        <Link href="/" className="mt-6 inline-block text-sm text-label-2 transition hover:text-white">
+          Cancel
+        </Link>
+      </Centered>
+    );
+  }
+
+  if (state.status === "denied") {
+    return (
+      <Centered>
+        <h1 className="text-xl font-semibold">Can't join</h1>
+        <p className="mt-2 text-sm text-label-2">{state.message}</p>
+        <Link href="/" className="mt-6 inline-block text-accent hover:underline">
+          Back home
+        </Link>
+      </Centered>
+    );
+  }
 
   if (state.status === "error") {
     return (
@@ -134,7 +174,15 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
       wsUrl={data.wsUrl}
       self={self}
       fallback={(status) =>
-        status === "failed" ? (
+        status === "kicked" ? (
+          <Centered>
+            <h1 className="text-xl font-semibold">You were removed</h1>
+            <p className="mt-2 text-sm text-label-2">The room owner removed you from this room.</p>
+            <Link href="/" className="mt-6 inline-block text-accent hover:underline">
+              Back home
+            </Link>
+          </Centered>
+        ) : status === "failed" ? (
           <Centered>
             <p className="text-danger">Couldn't connect to the room.</p>
             <Link href="/" className="mt-4 inline-block text-accent hover:underline">
@@ -147,18 +195,29 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
       }
     >
       <LiveKitRoom
+        key={voiceKey}
         token={data.token}
         serverUrl={data.url}
         connect
         audio={{ echoCancellation: true, noiseSuppression: true, autoGainControl: true }}
         video={false}
         options={roomOptions}
-        onDisconnected={() => setJoined(false)}
+        onConnected={() => setVoiceLost(false)}
+        onDisconnected={() => setVoiceLost(true)}
         className="h-dvh"
       >
         <VoiceSettingsProvider>
           <VoiceAudio deafened={deafened} />
-          <RoomView deafened={deafened} onDeafenedChange={setDeafened} onLeave={() => router.push("/")} />
+          <RoomView
+            deafened={deafened}
+            onDeafenedChange={setDeafened}
+            onLeave={() => router.push("/")}
+            voiceLost={voiceLost}
+            onReconnectVoice={() => {
+              setVoiceLost(false);
+              setVoiceKey((key) => key + 1);
+            }}
+          />
         </VoiceSettingsProvider>
       </LiveKitRoom>
     </RoomProvider>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { computeCorrection, expectedPosition, median, parseMediaUrl, streamKey } from "../src/index.ts";
+import { atLiveEdge, computeCorrection, expectedPosition, liveEdgeTarget, median, parseMediaUrl, streamKey } from "../src/index.ts";
 import { signSessionToken, verifySessionToken } from "../src/session-token.ts";
 
 const yt = (id: string, isLive = false) => ({ ok: true, source: { type: "youtube", id, isLive } });
@@ -12,12 +12,12 @@ test("youtube urls", () => {
   assert.deepEqual(parseMediaUrl("https://youtube.com/shorts/dQw4w9WgXcQ"), yt("dQw4w9WgXcQ"));
   assert.deepEqual(parseMediaUrl("https://www.youtube.com/embed/dQw4w9WgXcQ"), yt("dQw4w9WgXcQ"));
   assert.equal(parseMediaUrl("https://youtube.com/watch?v=short").ok, false);
-  assert.equal(parseMediaUrl("https://youtube.com/@caedrel").ok, false);
+  assert.equal(parseMediaUrl("https://youtube.com/@somechannel").ok, false);
 });
 
 test("twitch urls", () => {
-  assert.deepEqual(parseMediaUrl("https://www.twitch.tv/caedrel"), { ok: true, source: { type: "twitch", id: "caedrel", isLive: true } });
-  assert.deepEqual(parseMediaUrl("twitch.tv/Caedrel/"), { ok: true, source: { type: "twitch", id: "caedrel", isLive: true } });
+  assert.deepEqual(parseMediaUrl("https://www.twitch.tv/examplechannel"), { ok: true, source: { type: "twitch", id: "examplechannel", isLive: true } });
+  assert.deepEqual(parseMediaUrl("twitch.tv/ExampleChannel/"), { ok: true, source: { type: "twitch", id: "examplechannel", isLive: true } });
   assert.deepEqual(parseMediaUrl("https://www.twitch.tv/videos/2345678901?t=1h2m3s"), { ok: true, source: { type: "twitch", id: "2345678901", isLive: false } });
   assert.equal(parseMediaUrl("https://www.twitch.tv/directory").ok, false);
   assert.equal(parseMediaUrl("https://clips.twitch.tv/AbcDef").ok, false);
@@ -86,4 +86,12 @@ test("session tokens", () => {
   assert.equal(verifySessionToken(token, "other-secret-secret"), null);
   assert.equal(verifySessionToken(signSessionToken(user, "secret-secret-secret", -5), "secret-secret-secret"), null);
   assert.equal(verifySessionToken(`${token}x`, "secret-secret-secret"), null);
+});
+
+test("live edge helpers", () => {
+  assert.equal(liveEdgeTarget(1000), 997);
+  assert.equal(liveEdgeTarget(2), 0);
+  assert.equal(atLiveEdge(995, 1000), true);
+  assert.equal(atLiveEdge(900, 1000), false);
+  assert.equal(atLiveEdge(0, 0), false);
 });

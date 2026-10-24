@@ -51,3 +51,14 @@ export function median(values: number[]) {
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
+
+export const LIVE_EDGE_MARGIN = 3;
+export const LIVE_EDGE_TOLERANCE = 8;
+
+export function liveEdgeTarget(duration: number) {
+  return Math.max(0, duration - LIVE_EDGE_MARGIN);
+}
+
+export function atLiveEdge(time: number, duration: number) {
+  return duration > 0 && duration - time <= LIVE_EDGE_TOLERANCE;
+}

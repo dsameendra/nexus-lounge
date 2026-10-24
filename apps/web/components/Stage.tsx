@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useFullscreenSupport } from "./useFullscreenSupport";
 import { SCREEN_ID } from "@nexus/shared";
 import { Pill, ProviderBadge } from "./Badges";
 import { BroadcastIcon, FilmIcon, FullscreenIcon, PlusIcon, SyncIcon } from "./Icons";
@@ -13,6 +14,15 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
   const { state, self, select, send, isController, canAdd } = useRoom();
   const { effectiveId, stream, screenActive, featuredId, isFollowing } = useEffectiveSource();
   const boxRef = useRef<HTMLDivElement>(null);
+  const canFullscreen = useFullscreenSupport();
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  useEffect(() => {
+    const update = () => setFullscreen(document.fullscreenElement === boxRef.current);
+    document.addEventListener("fullscreenchange", update);
+    return () => document.removeEventListener("fullscreenchange", update);
+  }, []);
 
   function toggleFullscreen() {
     if (document.fullscreenElement) void document.exitFullscreen();
@@ -27,19 +37,34 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
 
   return (
     <section aria-label="Now watching">
-      <div ref={boxRef} className="relative aspect-video w-full overflow-hidden bg-black lg:rounded-2xl">
-        <StreamPlayer stream={stream} visible={Boolean(stream) && !showingScreen} onFullscreen={toggleFullscreen} />
+      <div ref={boxRef} className={fullscreen ? "flex h-full w-full flex-col bg-black" : "bg-black lg:bg-transparent"}>
+      <div
+        className={`relative w-full overflow-hidden bg-black ${
+          fullscreen
+            ? "min-h-0 flex-1"
+            : "aspect-video max-lg:landscape:aspect-auto max-lg:landscape:h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-6rem)] lg:rounded-2xl"
+        }`}
+      >
+        <StreamPlayer
+          stream={stream}
+          visible={Boolean(stream) && !showingScreen}
+          onFullscreen={toggleFullscreen}
+          fullscreen={fullscreen}
+          controlsSlot={slot}
+        />
 
         {showingScreen && (
           <div className="absolute inset-0 z-10">
             <WatchArea />
-            <button
-              onClick={toggleFullscreen}
-              aria-label="Fullscreen"
-              className="material absolute right-3 bottom-3 flex size-10 items-center justify-center rounded-full text-xl transition hover:brightness-125 active:scale-95"
-            >
-              <FullscreenIcon />
-            </button>
+            {canFullscreen && (
+              <button
+                onClick={toggleFullscreen}
+                aria-label="Fullscreen"
+                className="material absolute right-3 bottom-3 flex size-10 items-center justify-center rounded-full text-xl transition hover:brightness-125 active:scale-95"
+              >
+                <FullscreenIcon />
+              </button>
+            )}
           </div>
         )}
 
@@ -64,6 +89,8 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
             )}
           </div>
         )}
+      </div>
+      <div ref={setSlot} />
       </div>
 
       <div className="space-y-3 px-4 pt-3 lg:px-0">

@@ -1,8 +1,13 @@
 import { signSessionToken } from "@nexus/shared/session-token";
 import { auth } from "@/auth";
 
-const wsUrl = process.env.NEXT_PUBLIC_SERVER_WS_URL ?? "ws://localhost:4000/ws";
-export const serverHttpUrl = wsUrl.replace(/^ws/, "http").replace(/\/ws$/, "");
+export function serverWsUrl() {
+  return process.env.SERVER_WS_URL ?? process.env.NEXT_PUBLIC_SERVER_WS_URL ?? "ws://localhost:4000/ws";
+}
+
+export function serverHttpUrl() {
+  return serverWsUrl().replace(/^ws/, "http").replace(/\/ws$/, "");
+}
 
 export async function getSessionToken() {
   const session = await auth();
@@ -19,7 +24,7 @@ export async function getSessionToken() {
 }
 
 export async function serverFetch(path: string, token: string, init?: RequestInit) {
-  return fetch(`${serverHttpUrl}${path}`, {
+  return fetch(`${serverHttpUrl()}${path}`, {
     ...init,
     headers: { ...init?.headers, authorization: `Bearer ${token}` },
     cache: "no-store",

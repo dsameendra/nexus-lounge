@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useLocalParticipant } from "@livekit/components-react";
+import { useConnectionState, useLocalParticipant } from "@livekit/components-react";
+import { ConnectionState } from "livekit-client";
+import { Avatar } from "./Avatar";
 import { HeadphonesIcon, HeadphonesOffIcon, LeaveIcon, MicIcon, MicOffIcon, ScreenIcon } from "./Icons";
 import { useRoom } from "./RoomProvider";
 import { useScreenShareSupport } from "./useScreenShareSupport";
@@ -30,14 +32,14 @@ function RoundButton({
       aria-label={label}
       aria-pressed={active}
       title={label}
-      className={`flex size-12 items-center justify-center rounded-full text-2xl transition active:scale-90 disabled:cursor-not-allowed disabled:opacity-35 ${tone}`}
+      className={`flex size-11 shrink-0 items-center justify-center rounded-full text-[22px] transition active:scale-90 disabled:cursor-not-allowed disabled:opacity-35 ${tone}`}
     >
       {children}
     </button>
   );
 }
 
-export function Dock({
+export function VoicePanel({
   deafened,
   onDeafenedChange,
   onLeave,
@@ -51,6 +53,7 @@ export function Dock({
   const serverMuted = Boolean(restriction?.muted || restriction?.deafened);
   const serverDeafened = Boolean(restriction?.deafened);
   const { localParticipant, isMicrophoneEnabled, isScreenShareEnabled } = useLocalParticipant();
+  const connection = useConnectionState();
   const supported = useScreenShareSupport();
   const shares = useScreenShares();
   const otherSharer = shares.find((share) => !share.participant.isLocal)?.participant;
@@ -85,43 +88,54 @@ export function Dock({
   }
 
   const canShare = supported && !self.guest;
+  const status = serverDeafened
+    ? { text: "Deafened by the owner", tone: "text-warn" }
+    : serverMuted
+      ? { text: "Muted by the owner", tone: "text-warn" }
+      : connection !== ConnectionState.Connected
+        ? { text: connection === ConnectionState.Connecting ? "Connecting…" : "Voice offline", tone: "text-label-2" }
+        : deafened
+          ? { text: "Deafened", tone: "text-danger" }
+          : !isMicrophoneEnabled
+            ? { text: "Muted", tone: "text-danger" }
+            : { text: "Voice connected", tone: "text-live" };
 
   return (
-    <div className="flex flex-col items-center gap-2 px-4 py-3">
-      <div className="material flex items-center gap-3 rounded-full border border-line px-3 py-2 shadow-xl">
-        <RoundButton
-          label={serverMuted ? "Muted by the room owner" : isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"}
-          danger={!isMicrophoneEnabled}
-          disabled={serverMuted}
-          onClick={toggleMute}
-        >
-          {isMicrophoneEnabled ? <MicIcon /> : <MicOffIcon />}
-        </RoundButton>
-        <RoundButton
-          label={serverDeafened ? "Deafened by the room owner" : deafened ? "Undeafen" : "Deafen"}
-          danger={deafened || serverDeafened}
-          disabled={serverDeafened}
-          onClick={toggleDeafen}
-        >
-          {deafened || serverDeafened ? <HeadphonesOffIcon /> : <HeadphonesIcon />}
-        </RoundButton>
-        {canShare && (
-          <RoundButton
-            label={isScreenShareEnabled ? "Stop sharing" : otherSharer ? `${otherSharer.name || otherSharer.identity} is sharing` : "Share screen"}
-            active={isScreenShareEnabled}
-            disabled={Boolean(otherSharer)}
-            onClick={toggleShare}
-          >
-            <ScreenIcon />
+    <div className="border-t border-line bg-panel/70 px-3 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+      <div className="flex items-center gap-2.5">
+        <Avatar name={self.name} image={self.image} className="size-10" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{self.name}</p>
+          <p className={`truncate text-xs ${status.tone}`}>{status.text}</p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <RoundButton label={isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"} danger={!isMicrophoneEnabled} disabled={serverMuted} onClick={toggleMute}>
+            {isMicrophoneEnabled ? <MicIcon /> : <MicOffIcon />}
           </RoundButton>
-        )}
-        <span className="mx-1 h-7 w-px bg-line" />
-        <RoundButton label="Leave room" danger onClick={onLeave}>
-          <LeaveIcon />
-        </RoundButton>
+          <RoundButton
+            label={serverDeafened ? "Deafened by the room owner" : deafened ? "Undeafen" : "Deafen"}
+            danger={deafened || serverDeafened}
+            disabled={serverDeafened}
+            onClick={toggleDeafen}
+          >
+            {deafened || serverDeafened ? <HeadphonesOffIcon /> : <HeadphonesIcon />}
+          </RoundButton>
+          {canShare && (
+            <RoundButton
+              label={isScreenShareEnabled ? "Stop sharing" : otherSharer ? `${otherSharer.name || otherSharer.identity} is sharing` : "Share screen"}
+              active={isScreenShareEnabled}
+              disabled={Boolean(otherSharer)}
+              onClick={toggleShare}
+            >
+              <ScreenIcon />
+            </RoundButton>
+          )}
+          <RoundButton label="Leave room" danger onClick={onLeave}>
+            <LeaveIcon />
+          </RoundButton>
+        </div>
       </div>
-      {shareError && <p className="text-xs text-danger">Couldn't start screen share.</p>}
-      {serverMuted && <p className="text-xs text-warn">{serverDeafened ? "The room owner deafened you." : "The room owner muted you."}</p>}
+      {shareError && <p className="mt-1.5 text-xs text-danger">Couldn&apos;t start screen share.</p>}
     </div>
   );
 }

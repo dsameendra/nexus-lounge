@@ -13,6 +13,7 @@ interface TwitchPlayer {
   setChannel(channel: string): void;
   setVideo(videoId: string, timestamp: number): void;
   setMuted(muted: boolean): void;
+  getMuted(): boolean;
   setVolume(volume: number): void;
   addEventListener(event: string, callback: () => void): void;
 }
@@ -56,6 +57,7 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
   private player: TwitchPlayer | null = null;
   private current: MediaSource | null = null;
   private pendingPlay = false;
+  private playedOnce = false;
   private muted = false;
   private volume = 1;
   private destroyed = false;
@@ -72,6 +74,7 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
   load(source: MediaSource, startAt: number | null, autoplay: boolean) {
     this.current = source;
     this.error = null;
+    this.playedOnce = false;
     this.pendingPlay = autoplay;
     if (!this.player) {
       void this.create(source, startAt, autoplay);
@@ -94,14 +97,17 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
         ...(source.isLive ? { channel: source.id } : { video: `v${source.id}`, time: timeString(startAt ?? 0) }),
         parent: [window.location.hostname],
         autoplay,
-        muted: this.muted,
+        muted: true,
       });
       this.player.addEventListener(Twitch.Player.READY, () => {
         this.ready = true;
         this.player?.setVolume(this.volume);
-        this.player?.setMuted(this.muted);
         if (this.pendingPlay) this.player?.play();
         this.emit("ready");
+      });
+      this.player.addEventListener(Twitch.Player.PLAYING, () => {
+        this.playedOnce = true;
+        this.player?.setMuted(this.muted);
       });
       for (const name of [Twitch.Player.PLAY, Twitch.Player.PLAYING, Twitch.Player.PAUSE, Twitch.Player.ENDED, Twitch.Player.SEEK]) {
         this.player.addEventListener(name, () => this.emit("state"));
@@ -157,9 +163,13 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
     return 1;
   }
 
+  get muteBlocked() {
+    return this.ready && this.playedOnce && !this.muted && Boolean(this.player?.getMuted());
+  }
+
   setMuted(muted: boolean) {
     this.muted = muted;
-    this.player?.setMuted(muted);
+    if (this.playedOnce) this.player?.setMuted(muted);
   }
 
   setVolume(volume: number) {

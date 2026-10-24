@@ -5,6 +5,7 @@ import {
   streamKey,
   type MediaSource,
   type Member,
+  type PendingRequest,
   type Restriction,
   type RoomInfo,
   type RoomState,
@@ -30,6 +31,9 @@ interface StoredRoom {
   featuredId: string | null;
   connections: Map<string, Connection>;
   restrictions: Map<string, Restriction>;
+  pending: Map<string, PendingRequest & { lastSeen: number }>;
+  admitted: Set<string>;
+  blocked: Map<string, "removed" | "declined">;
   emptySince: number | null;
 }
 
@@ -56,6 +60,9 @@ export function createRoom(hostId: string, password?: string): RoomInfo {
     featuredId: null,
     connections: new Map(),
     restrictions: new Map(),
+    pending: new Map(),
+    admitted: new Set(),
+    blocked: new Map(),
     emptySince: Date.now(),
   });
   return info;
@@ -74,13 +81,14 @@ export function checkRoomAccess(id: string, userId: string, password: string | u
   return timingSafeEqual(candidate, room.passwordHash.hash) ? ("ok" as const) : ("wrong_password" as const);
 }
 
-function snapshot(room: StoredRoom): RoomState {
+function snapshot(room: StoredRoom, forHost: boolean): RoomState {
   return {
     room: room.info,
     streams: room.streams,
     featuredId: room.featuredId,
     members: Array.from(room.connections.values(), (connection) => connection.member),
     restrictions: Object.fromEntries(room.restrictions),
+    pending: forHost ? Array.from(room.pending.values(), ({ lastSeen: _lastSeen, ...request }) => request) : [],
     serverTime: Date.now(),
   };
 }
@@ -88,16 +96,18 @@ function snapshot(room: StoredRoom): RoomState {
 export function broadcast(roomId: string) {
   const room = rooms.get(roomId);
   if (!room) return;
-  const message: ServerMessage = { type: "state", state: snapshot(room) };
-  const payload = JSON.stringify(message);
-  for (const connection of room.connections.values()) {
+  const hostPayload = JSON.stringify({ type: "state", state: snapshot(room, true) } satisfies ServerMessage);
+  const guestPayload = JSON.stringify({ type: "state", state: snapshot(room, false) } satisfies ServerMessage);
+  for (const [userId, connection] of room.connections) {
+    const payload = userId === room.info.hostId ? hostPayload : guestPayload;
     for (const socket of connection.sockets) if (socket.readyState === socket.OPEN) socket.send(payload);
   }
 }
 
 export function connect(roomId: string, user: SessionPayload, socket: WebSocket) {
   const room = rooms.get(roomId);
-  if (!room) return false;
+  if (!room) return "not_found" as const;
+  if (room.blocked.get(user.sub) === "removed") return "removed" as const;
   const existing = room.connections.get(user.sub);
   if (existing) {
     existing.sockets.add(socket);
@@ -111,7 +121,7 @@ export function connect(roomId: string, user: SessionPayload, socket: WebSocket)
   }
   room.emptySince = null;
   broadcast(roomId);
-  return true;
+  return "ok" as const;
 }
 
 export function disconnect(roomId: string, userId: string, socket: WebSocket) {
@@ -280,4 +290,82 @@ export function setModeration(
   else room.restrictions.delete(targetId);
   broadcast(roomId);
   return ok;
+}
+
+export function isMember(roomId: string, userId: string) {
+  return rooms.get(roomId)?.connections.has(userId) ?? false;
+}
+
+export function requestEntry(roomId: string, user: SessionPayload) {
+  const room = rooms.get(roomId);
+  if (!room) return "not_found" as const;
+  const blocked = room.blocked.get(user.sub);
+  if (blocked) return blocked;
+  if (!user.guest || room.admitted.has(user.sub)) return "ok" as const;
+
+  const existing = room.pending.get(user.sub);
+  if (existing) {
+    existing.lastSeen = Date.now();
+    existing.name = user.name;
+  } else {
+    room.pending.set(user.sub, { id: user.sub, name: user.name, image: user.image, requestedAt: Date.now(), lastSeen: Date.now() });
+    broadcast(roomId);
+  }
+  return "pending" as const;
+}
+
+export function isAdmitted(roomId: string, user: SessionPayload) {
+  const room = rooms.get(roomId);
+  return Boolean(room && !room.blocked.has(user.sub) && (!user.guest || room.admitted.has(user.sub)));
+}
+
+export function respondToJoin(roomId: string, user: SessionPayload, targetId: string, allow: boolean): Result {
+  const room = rooms.get(roomId);
+  if (!room) return fail("Room not found");
+  if (room.info.hostId !== user.sub) return fail("Only the room owner can let people in");
+  if (!room.pending.has(targetId)) return ok;
+  room.pending.delete(targetId);
+  if (allow) room.admitted.add(targetId);
+  else room.blocked.set(targetId, "declined");
+  broadcast(roomId);
+  return ok;
+}
+
+export function kickUser(roomId: string, user: SessionPayload, targetId: string): Result {
+  const room = rooms.get(roomId);
+  if (!room) return fail("Room not found");
+  if (room.info.hostId !== user.sub) return fail("Only the room owner can remove people");
+  if (targetId === user.sub) return fail("You can't remove yourself");
+
+  room.blocked.set(targetId, "removed");
+  room.admitted.delete(targetId);
+  room.pending.delete(targetId);
+  room.restrictions.delete(targetId);
+  room.info = { ...room.info, controllerIds: room.info.controllerIds.filter((id) => id !== targetId) };
+
+  const connection = room.connections.get(targetId);
+  if (connection) {
+    room.connections.delete(targetId);
+    for (const socket of connection.sockets) {
+      socket.send(JSON.stringify({ type: "kicked" } satisfies ServerMessage));
+      socket.close(4001, "Removed by the room owner");
+    }
+  }
+  if (room.connections.size === 0) room.emptySince = Date.now();
+  broadcast(roomId);
+  return ok;
+}
+
+export function pruneStalePending() {
+  const cutoff = Date.now() - 15_000;
+  for (const [roomId, room] of rooms) {
+    let changed = false;
+    for (const [id, request] of room.pending) {
+      if (request.lastSeen < cutoff) {
+        room.pending.delete(id);
+        changed = true;
+      }
+    }
+    if (changed) broadcast(roomId);
+  }
 }

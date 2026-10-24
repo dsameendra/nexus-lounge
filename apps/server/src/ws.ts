@@ -3,7 +3,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { verifySessionToken, type SessionPayload } from "@nexus/shared/session-token";
 import { clientMessageSchema, type ClientMessage, type ServerMessage } from "@nexus/shared";
 import { config } from "./config.ts";
-import { applyMicRestriction } from "./livekit.ts";
+import { applyMicRestriction, removeFromVoice } from "./livekit.ts";
 import * as rooms from "./rooms.ts";
 
 const MESSAGES_PER_SECOND = 30;
@@ -33,6 +33,13 @@ function handle(roomId: string, user: SessionPayload, message: Exclude<ClientMes
       }
       return result;
     }
+    case "moderation.kick": {
+      const result = rooms.kickUser(roomId, user, message.userId);
+      if (result.ok) void removeFromVoice(roomId, message.userId);
+      return result;
+    }
+    case "join.respond":
+      return rooms.respondToJoin(roomId, user, message.userId, message.allow);
     case "presence.watch":
       return rooms.setWatching(roomId, user.sub, message.streamId);
   }
@@ -74,8 +81,9 @@ export function attachWebSocket(server: Server) {
         if (!user || user.room !== message.roomId) {
           return send(socket, { type: "error", message: "Unauthorized", fatal: true });
         }
-        if (!rooms.connect(message.roomId, user, socket)) {
-          return send(socket, { type: "error", message: "Room not found", fatal: true });
+        const joined = rooms.connect(message.roomId, user, socket);
+        if (joined !== "ok") {
+          return send(socket, { type: "error", message: joined === "removed" ? "You were removed from this room" : "Room not found", fatal: true });
         }
         session = { roomId: message.roomId, user };
         return;

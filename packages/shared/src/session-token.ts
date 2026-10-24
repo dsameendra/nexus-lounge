@@ -7,6 +7,7 @@ const payloadSchema = z.object({
   image: z.string().nullable(),
   guest: z.boolean(),
   room: z.string().optional(),
+  tv: z.boolean().optional(),
   exp: z.number(),
 });
 export type SessionPayload = z.infer<typeof payloadSchema>;

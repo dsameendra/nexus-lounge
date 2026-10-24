@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { serverMessageSchema, type ClientMessage, type RoomState } from "@nexus/shared";
 import { ClockSync } from "./clock";
 
-export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "failed";
+export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "failed" | "kicked";
 
 export interface RoomConnection {
   state: RoomState | null;
@@ -67,11 +67,16 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
           setState(message.state);
           setStatus("open");
         }
+        if (message.type === "kicked") {
+          closed = true;
+          setStatus("kicked");
+          socket.close();
+        }
         if (message.type === "error") {
           setLastError({ message: message.message, at: Date.now() });
           if (message.fatal) {
             closed = true;
-            setStatus("failed");
+            setStatus(message.message.includes("removed") ? "kicked" : "failed");
             socket.close();
           }
         }

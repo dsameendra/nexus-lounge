@@ -150,3 +150,9 @@ export const SyncIcon = (p: P) => (
     <path d="M20 11a8 8 0 0 0-14.3-4.3L4 8.5M4 4v4.5h4.5M4 13a8 8 0 0 0 14.3 4.3L20 15.5M20 20v-4.5h-4.5" />
   </Icon>
 );
+export const TvIcon = (p: P) => (
+  <Icon {...p}>
+    <rect x="3" y="5" width="18" height="12.5" rx="2.4" />
+    <path d="M8.5 21h7M12 17.5V21" />
+  </Icon>
+);

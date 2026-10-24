@@ -17,7 +17,7 @@ export function StreamLibrary({ onAdd }: { onAdd: () => void }) {
   const empty = state.streams.length === 0 && !screenActive;
 
   return (
-    <section aria-label="Streams" className="px-4 pb-6 lg:px-0">
+    <section aria-label="Streams" className="px-4 pt-5 pb-6 lg:px-0 lg:pt-7">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Streams</h2>
         {canAdd && (

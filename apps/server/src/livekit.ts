@@ -36,3 +36,21 @@ export async function createLivekitToken(roomId: string, user: SessionPayload, m
   });
   return token.toJwt();
 }
+
+export async function createViewerToken(roomId: string, identity: string, name: string) {
+  const metadata: ParticipantMetadata = { image: null };
+  const token = new AccessToken(config.LIVEKIT_API_KEY, config.LIVEKIT_API_SECRET, {
+    identity,
+    name,
+    metadata: JSON.stringify(metadata),
+    ttl: "12h",
+  });
+  token.addGrant({ room: roomId, roomJoin: true, canSubscribe: true, canPublish: false, canPublishData: false });
+  return token.toJwt();
+}
+
+export async function removeFromVoice(roomId: string, identity: string) {
+  try {
+    await rooms.removeParticipant(roomId, identity);
+  } catch {}
+}

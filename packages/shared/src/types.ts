@@ -55,6 +55,14 @@ export const memberSchema = z.object({
 });
 export type Member = z.infer<typeof memberSchema>;
 
+export const pendingRequestSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  image: z.string().nullable(),
+  requestedAt: z.number(),
+});
+export type PendingRequest = z.infer<typeof pendingRequestSchema>;
+
 export const restrictionSchema = z.object({ muted: z.boolean(), deafened: z.boolean() });
 export type Restriction = z.infer<typeof restrictionSchema>;
 
@@ -64,6 +72,7 @@ export const roomStateSchema = z.object({
   featuredId: z.string().nullable(),
   members: z.array(memberSchema),
   restrictions: z.record(z.string(), restrictionSchema),
+  pending: z.array(pendingRequestSchema),
   serverTime: z.number(),
 });
 export type RoomState = z.infer<typeof roomStateSchema>;
@@ -82,3 +91,21 @@ export type JoinResponse = z.infer<typeof joinResponseSchema>;
 export function streamKey(source: MediaSource) {
   return source.type === "youtube" ? `youtube:${source.id}` : `twitch:${source.isLive ? "live" : "vod"}:${source.id}`;
 }
+
+export const tvCodeSchema = z.string().regex(/^[A-Z0-9]{6}$/);
+
+export const tvCredentialsSchema = z.object({
+  wsTicket: z.string(),
+  livekitToken: z.string(),
+  livekitUrl: z.string(),
+});
+export type TvCredentials = z.infer<typeof tvCredentialsSchema>;
+
+export const tvPairingSchema = z.object({ code: tvCodeSchema, secret: z.string(), expiresAt: z.number() });
+export type TvPairing = z.infer<typeof tvPairingSchema>;
+
+export const tvPollSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("pending") }),
+  z.object({ status: z.literal("approved") }).extend(tvCredentialsSchema.shape),
+]);
+export type TvPoll = z.infer<typeof tvPollSchema>;

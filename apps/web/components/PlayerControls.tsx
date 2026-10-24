@@ -21,11 +21,13 @@ const STATUS_LABEL: Record<SyncStatus, string> = {
 };
 
 export function PlayerControls({
+  variant,
   visible,
   playing,
   time,
   duration,
   live,
+  atEdge,
   canControl,
   canSeek,
   status,
@@ -37,12 +39,16 @@ export function PlayerControls({
   onMute,
   onFullscreen,
   onResync,
+  onGoLive,
+  canFullscreen,
 }: {
+  variant: "overlay" | "bar";
   visible: boolean;
   playing: boolean;
   time: number;
   duration: number;
   live: boolean;
+  atEdge: boolean;
   canControl: boolean;
   canSeek: boolean;
   status: SyncStatus;
@@ -54,6 +60,8 @@ export function PlayerControls({
   onMute: () => void;
   onFullscreen: () => void;
   onResync: () => void;
+  onGoLive: () => void;
+  canFullscreen: boolean;
 }) {
   const [scrub, setScrub] = useState<number | null>(null);
   const dot = status === "synced" ? "bg-live" : status === "unsynced" ? "bg-warn" : "bg-label-3 animate-pulse";
@@ -66,11 +74,15 @@ export function PlayerControls({
 
   return (
     <div
-      className={`absolute inset-x-3 bottom-3 z-20 transition duration-300 sm:inset-x-4 sm:bottom-4 ${
-        visible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"
-      }`}
+      className={
+        variant === "overlay"
+          ? `absolute inset-x-3 bottom-3 z-20 transition duration-300 sm:inset-x-4 sm:bottom-4 ${
+              visible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"
+            }`
+          : "px-3 pt-2 lg:px-0"
+      }
     >
-      <div className="material flex items-center gap-2 rounded-2xl px-2 py-1.5 sm:gap-3 sm:px-3">
+      <div className={`${variant === "overlay" ? "material" : "bg-panel"} flex items-center gap-2 rounded-2xl px-2 py-1.5 sm:gap-3 sm:px-3`}>
         {canControl && (
           <button
             onClick={onPlayPause}
@@ -103,7 +115,17 @@ export function PlayerControls({
         )}
 
         {live && (
-          <span className="rounded bg-danger px-1.5 py-0.5 text-[10px] font-bold tracking-wide uppercase">Live</span>
+          <button
+            onClick={onGoLive}
+            disabled={atEdge && !canControl}
+            title={atEdge ? "You're at the live edge" : canControl ? "Jump everyone to the live edge" : "Jump to where the room is"}
+            className={`flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold tracking-wide uppercase transition active:scale-95 ${
+              atEdge ? "bg-danger text-white" : "bg-white/15 text-label-2 hover:bg-white/25 hover:text-white"
+            }`}
+          >
+            <span className={`size-1.5 rounded-full ${atEdge ? "bg-white" : "bg-danger"}`} />
+            {atEdge ? "Live" : "Go live"}
+          </button>
         )}
 
         <button
@@ -136,13 +158,15 @@ export function PlayerControls({
           />
         </div>
 
-        <button
-          onClick={onFullscreen}
-          aria-label="Fullscreen"
-          className="flex size-10 shrink-0 items-center justify-center rounded-full text-xl transition hover:bg-white/10 active:scale-95"
-        >
-          <FullscreenIcon />
-        </button>
+        {canFullscreen && (
+          <button
+            onClick={onFullscreen}
+            aria-label="Fullscreen"
+            className="flex size-10 shrink-0 items-center justify-center rounded-full text-xl transition hover:bg-white/10 active:scale-95"
+          >
+            <FullscreenIcon />
+          </button>
+        )}
       </div>
     </div>
   );

@@ -1,98 +1,134 @@
 "use client";
 
-import { Avatar } from "./Avatar";
-import { Pill } from "./Badges";
-import { Sheet } from "./Sheet";
-import { Switch } from "./Switch";
+import { SCREEN_ID } from "@nexus/shared";
+import { useConnectionQualityIndicator, useIsSpeaking } from "@livekit/components-react";
+import { ConnectionQuality, type Participant } from "livekit-client";
+import { Avatar, parseImage } from "./Avatar";
+import { Pill, ProviderBadge } from "./Badges";
+import { MuteForMeRow, OwnerRows, VolumeRow } from "./PersonControls";
 import { useRoom } from "./RoomProvider";
-import { useVoiceSettings } from "./VoiceSettings";
+import { Sheet } from "./Sheet";
+import { StreamArt } from "./StreamArt";
 
-export function UserSheet({ userId, name, image, onClose }: { userId: string; name: string; image: string | null; onClose: () => void }) {
-  const { state, send, isHost, self, memberById } = useRoom();
-  const voice = useVoiceSettings();
+const QUALITY: Record<string, { label: string; tone: string }> = {
+  [ConnectionQuality.Excellent]: { label: "Excellent", tone: "text-live" },
+  [ConnectionQuality.Good]: { label: "Good", tone: "text-live" },
+  [ConnectionQuality.Poor]: { label: "Poor", tone: "text-warn" },
+  [ConnectionQuality.Lost]: { label: "Lost", tone: "text-danger" },
+};
+
+function Group({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <section className="mb-4 last:mb-0">
+      {title && <h3 className="mb-1.5 px-1 text-xs font-semibold tracking-wide text-label-2 uppercase">{title}</h3>}
+      <div className="divide-y divide-line overflow-hidden rounded-2xl bg-panel-2">{children}</div>
+    </section>
+  );
+}
+
+function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 px-4 py-3 text-[15px]">
+      <span className="shrink-0 text-label-2">{label}</span>
+      <span className="min-w-0 text-right">{children}</span>
+    </div>
+  );
+}
+
+export function UserSheet({ participant, onClose }: { participant: Participant; onClose: () => void }) {
+  const { state, isHost, self, memberById, select } = useRoom();
+  const speaking = useIsSpeaking(participant);
+  const { quality } = useConnectionQualityIndicator({ participant });
+  const userId = participant.identity;
+  const name = participant.name || userId;
   const member = memberById(userId);
-  const isMe = userId === self.id;
-  const personal = voice.get(userId);
-  const restriction = state.restrictions[userId] ?? { muted: false, deafened: false };
+  const isMe = userId === self.id || participant.isLocal;
+  const restriction = state.restrictions[userId];
   const isRoomHost = userId === state.room.hostId;
   const isController = state.room.controllerIds.includes(userId);
-  const percent = Math.round(personal.volume * 100);
-  const showOwnerControls = isHost && !isMe;
-  const canPromote = showOwnerControls && member && !member.guest;
+  const watchingId = member?.watching ?? null;
+  const watchingStream = watchingId && watchingId !== SCREEN_ID ? state.streams.find((stream) => stream.id === watchingId) : undefined;
+  const showOwner = isHost && !isMe;
+
+  const status = restriction?.deafened
+    ? { text: "Deafened by the room owner", tone: "text-warn" }
+    : restriction?.muted
+      ? { text: "Muted by the room owner", tone: "text-warn" }
+      : !participant.isMicrophoneEnabled
+        ? { text: "Microphone off", tone: "text-danger" }
+        : speaking
+          ? { text: "Speaking", tone: "text-live" }
+          : { text: "Listening", tone: "text-label-2" };
+  const connection = QUALITY[quality] ?? { label: "Unknown", tone: "text-label-2" };
 
   return (
     <Sheet title={name} onClose={onClose}>
-      <div className="mb-4 flex items-center gap-3">
-        <Avatar name={name} image={image} className="size-14" />
-        <div className="flex flex-wrap items-center gap-1.5">
+      <div className="mb-5 flex flex-col items-center text-center">
+        <span className={`rounded-full p-[3px] transition-colors ${speaking ? "bg-live" : "bg-transparent"}`}>
+          <span className="block rounded-full bg-panel p-[2px]">
+            <Avatar name={name} image={member?.image ?? parseImage(participant.metadata)} className="size-20 text-3xl" />
+          </span>
+        </span>
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
           {isMe && <Pill>You</Pill>}
           {isRoomHost && <Pill tone="warn">Room owner</Pill>}
           {isController && <Pill tone="accent">Controller</Pill>}
           {member?.guest && <Pill>Guest</Pill>}
-          {restriction.muted && <Pill tone="warn">Muted by owner</Pill>}
-          {restriction.deafened && <Pill tone="warn">Deafened by owner</Pill>}
         </div>
       </div>
 
+      <Group>
+        <InfoRow label="Status">
+          <span className={status.tone}>{status.text}</span>
+        </InfoRow>
+        <InfoRow label="Watching">
+          {watchingStream ? (
+            <span className="flex items-center justify-end gap-2.5">
+              <span className="line-clamp-1 text-sm">{watchingStream.title}</span>
+              <span className="aspect-video w-12 shrink-0 overflow-hidden rounded-md">
+                <StreamArt stream={watchingStream} className="size-full" />
+              </span>
+            </span>
+          ) : watchingId === SCREEN_ID ? (
+            "Screen share"
+          ) : (
+            <span className="text-label-2">Nothing</span>
+          )}
+        </InfoRow>
+        {participant.joinedAt && (
+          <InfoRow label="In the room since">{participant.joinedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</InfoRow>
+        )}
+        <InfoRow label="Connection">
+          <span className={connection.tone}>{connection.label}</span>
+        </InfoRow>
+        {watchingId && !isMe && !self.guest && (
+          <button
+            onClick={() => {
+              select(watchingId);
+              onClose();
+            }}
+            className="flex w-full items-center justify-center gap-2 px-4 py-3 text-[15px] font-medium text-accent transition hover:bg-white/5"
+          >
+            {watchingStream && <ProviderBadge source={watchingStream.source} />}
+            Watch what they're watching
+          </button>
+        )}
+      </Group>
+
       {!isMe && (
-        <section className="mb-4">
-          <h3 className="mb-1.5 px-1 text-xs font-semibold tracking-wide text-label-2 uppercase">Just for you</h3>
-          <div className="divide-y divide-line overflow-hidden rounded-2xl bg-panel-2">
-            <div className="px-4 py-3">
-              <div className="mb-2 flex items-center justify-between text-[15px]">
-                <label htmlFor={`volume-${userId}`}>Volume</label>
-                <span className="text-label-2 tabular-nums">{personal.muted ? "Muted" : `${percent}%`}</span>
-              </div>
-              <input
-                id={`volume-${userId}`}
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={personal.muted ? 0 : percent}
-                onChange={(event) => voice.set(userId, { volume: Number(event.target.value) / 100, muted: false })}
-                className="h-1.5 w-full accent-white"
-              />
-              {percent !== 100 && !personal.muted && (
-                <button onClick={() => voice.set(userId, { volume: 1 })} className="mt-2 text-xs text-accent hover:underline">
-                  Reset to 100%
-                </button>
-              )}
-            </div>
-            <Switch checked={personal.muted} onChange={(muted) => voice.set(userId, { muted })} label="Mute for me" description="Only you won't hear them." />
-          </div>
-        </section>
+        <Group title="Just for you">
+          <VolumeRow userId={userId} />
+          <MuteForMeRow userId={userId} />
+        </Group>
       )}
 
-      {showOwnerControls && (
-        <section>
-          <h3 className="mb-1.5 px-1 text-xs font-semibold tracking-wide text-label-2 uppercase">Room owner</h3>
-          <div className="divide-y divide-line overflow-hidden rounded-2xl bg-panel-2">
-            <Switch
-              checked={restriction.muted || restriction.deafened}
-              onChange={(muted) => send({ type: "moderation.set", userId, muted, ...(muted ? {} : { deafened: false }) })}
-              label="Mute for everyone"
-              description="They can't use their microphone until you undo this."
-            />
-            <Switch
-              checked={restriction.deafened}
-              onChange={(deafened) => send({ type: "moderation.set", userId, deafened })}
-              label="Deafen for everyone"
-              description="They can't hear the room, and are muted too."
-            />
-            {canPromote && !isRoomHost && (
-              <Switch
-                checked={isController}
-                onChange={(enabled) => send({ type: "role.setController", userId, enabled })}
-                label="Controller"
-                description="Can play, pause, seek and choose what the room watches."
-              />
-            )}
-          </div>
-        </section>
+      {showOwner && (
+        <Group title="Room owner">
+          <OwnerRows userId={userId} name={name} withRole onRemoved={onClose} />
+        </Group>
       )}
 
-      {isMe && <p className="rounded-2xl bg-panel-2 px-4 py-3 text-sm text-label-2">Use the microphone and headphones buttons below the video to control your own sound.</p>}
+      {isMe && <p className="rounded-2xl bg-panel-2 px-4 py-3 text-sm text-label-2">Use the buttons at the bottom of the side panel to control your own sound.</p>}
     </Sheet>
   );
 }

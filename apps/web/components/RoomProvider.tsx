@@ -65,7 +65,7 @@ export function RoomProvider({
     };
   }, [connection, state, self, selection, select]);
 
-  if (!value) return <>{fallback(connection.status)}</>;
+  if (!value || connection.status === "kicked") return <>{fallback(connection.status)}</>;
   return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;
 }
 

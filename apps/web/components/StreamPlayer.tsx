@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { computeCorrection, expectedPosition, median, type Stream } from "@nexus/shared";
+import { createPortal } from "react-dom";
+import { atLiveEdge, computeCorrection, expectedPosition, liveEdgeTarget, median, type Stream } from "@nexus/shared";
 import { YouTubeAdapter } from "@/lib/players/youtube";
 import { TwitchAdapter } from "@/lib/players/twitch";
 import type { PlayerAdapter } from "@/lib/players/types";
@@ -9,6 +10,7 @@ import { PlayIcon } from "./Icons";
 import { PlayerControls, type SyncStatus } from "./PlayerControls";
 import { useRoom } from "./RoomProvider";
 import { StreamArt } from "./StreamArt";
+import { useFullscreenSupport } from "./useFullscreenSupport";
 
 function sourceUrl(stream: Stream) {
   const { type, id, isLive } = stream.source;
@@ -26,22 +28,32 @@ interface UiState {
   time: number;
   duration: number;
   live: boolean;
+  atEdge: boolean;
   error: string | null;
+  muteBlocked: boolean;
+  ended: boolean;
   stalled: boolean;
   debug: string;
 }
 
-const INITIAL_UI: UiState = { status: "syncing", blocked: false, loading: true, playing: false, time: 0, duration: 0, live: false, error: null, stalled: false, debug: "" };
+const INITIAL_UI: UiState = { status: "syncing", blocked: false, loading: true, playing: false, time: 0, duration: 0, live: false, atEdge: false, error: null, muteBlocked: false, ended: false, stalled: false, debug: "" };
 
 export function StreamPlayer({
   stream,
   visible,
   onFullscreen,
+  bare = false,
+  fullscreen = false,
+  controlsSlot = null,
 }: {
   stream: Stream | null;
   visible: boolean;
   onFullscreen: () => void;
+  bare?: boolean;
+  fullscreen?: boolean;
+  controlsSlot?: HTMLElement | null;
 }) {
+  const canFullscreen = useFullscreenSupport();
   const { clock, send, canControlStream } = useRoom();
   const hostRefs = { youtube: useRef<HTMLDivElement>(null), twitch: useRef<HTMLDivElement>(null) };
   const adapters = useRef<Partial<Record<Provider, PlayerAdapter>>>({});
@@ -150,7 +162,7 @@ export function StreamPlayer({
     const state = adapter.getState();
     const live = adapter.isLive() || stream.source.isLive;
     const stalled = state === "idle" && !adapter.error && now - m.loadedAt > 8000;
-    patch({ playing: state === "playing" || state === "buffering", loading: state === "idle", live, error: adapter.error, stalled });
+    patch({ playing: state === "playing" || state === "buffering", loading: state === "idle", live, error: adapter.error, stalled, muteBlocked: Boolean(adapter.muteBlocked) });
     if (debugRef.current) {
       const exp = syncable ? expectedPosition(playback, clock.now()) : null;
       patch({
@@ -170,6 +182,15 @@ export function StreamPlayer({
     }
 
     const expected = expectedPosition(playback, clock.now());
+
+    const length = adapter.getDuration();
+    const past = !live && length > 0 && expected !== null && expected >= length - 0.5;
+    if (past) {
+      if (state === "playing") adapter.pause();
+      patch({ ended: true, blocked: false, status: "synced" });
+      return;
+    }
+    patch({ ended: false });
 
     if (want && state === "paused" && now - m.lastPlayCmd > 1200) {
       adapter.play();
@@ -268,7 +289,10 @@ export function StreamPlayer({
     if (!visible || !stream) return;
     const id = setInterval(() => {
       const adapter = adapters.current[stream.source.type];
-      if (adapter?.ready) patch({ time: Math.floor(adapter.getTime() * 2) / 2, duration: Math.floor(adapter.getDuration()) });
+      if (!adapter?.ready) return;
+      const time = adapter.getTime();
+      const duration = adapter.getDuration();
+      patch({ time: Math.floor(time * 2) / 2, duration: Math.floor(duration), atEdge: atLiveEdge(time, duration) });
     }, 500);
     return () => clearInterval(id);
   }, [visible, stream, patch]);
@@ -300,6 +324,7 @@ export function StreamPlayer({
   const activeAdapter = stream ? adapters.current[stream.source.type] : undefined;
   const syncable = Boolean(stream && !(stream.source.type === "twitch" && stream.source.isLive));
   const canControl = Boolean(stream && syncable && canControlStream(stream));
+  const passthrough = stream?.source.type === "twitch" && (ui.blocked || ui.muteBlocked);
   const showControls = controlsShown || !ui.playing || ui.blocked;
 
   function togglePlay() {
@@ -307,6 +332,10 @@ export function StreamPlayer({
     if (!syncable) {
       if (ui.playing) activeAdapter?.pause();
       else activeAdapter?.play();
+      return;
+    }
+    if (ui.ended) {
+      send({ type: "stream.control", streamId: stream.id, action: "play", position: 0 });
       return;
     }
     const expected = expectedPosition(stream.playback, clock.now());
@@ -322,6 +351,20 @@ export function StreamPlayer({
     if (stream.playback.playing) activeAdapter.play();
   }
 
+  function goLive() {
+    if (!stream || !activeAdapter) return;
+    if (!syncable) {
+      activeAdapter.play();
+      return;
+    }
+    const duration = activeAdapter.getDuration();
+    if (canControl && duration > 0) {
+      send({ type: "stream.control", streamId: stream.id, action: "play", position: liveEdgeTarget(duration) });
+    } else {
+      resync();
+    }
+  }
+
   function retry() {
     mem.current.loadedId = null;
     patch({ stalled: false, error: null, loading: true });
@@ -333,6 +376,34 @@ export function StreamPlayer({
     activeAdapter?.play();
   }
 
+  const controls = stream && (
+          <PlayerControls
+      variant={fullscreen ? "overlay" : "bar"}
+      visible={fullscreen ? showControls : true}
+      playing={ui.playing}
+      time={ui.time}
+      duration={ui.duration}
+      live={ui.live}
+      atEdge={syncable ? ui.atEdge : ui.playing}
+      canControl={canControl || !syncable}
+      canSeek={canControl && stream.playback.position !== null}
+      status={ui.status}
+      volume={volume}
+      muted={muted}
+      onPlayPause={togglePlay}
+      onSeek={(seconds) => send({ type: "stream.control", streamId: stream.id, action: "seek", position: seconds })}
+      onVolume={(value) => {
+        setVolume(value);
+        setMuted(false);
+      }}
+      onMute={() => setMuted((value) => !value)}
+      onFullscreen={onFullscreen}
+      onResync={resync}
+      onGoLive={goLive}
+      canFullscreen={canFullscreen}
+    />
+  );
+
   return (
     <div className="absolute inset-0 bg-black" onPointerMove={revealControls}>
       <div ref={hostRefs.youtube} className={`absolute inset-0 ${stream?.source.type === "youtube" && visible ? "" : "pointer-events-none opacity-0"}`} />
@@ -340,7 +411,13 @@ export function StreamPlayer({
 
       {visible && stream && (
         <>
-          <div className="absolute inset-0 z-10" onClick={revealControls} />
+          <div className={`absolute inset-0 z-10 ${passthrough ? "pointer-events-none" : ""}`} onClick={revealControls} />
+
+          {passthrough && !ui.error && (
+            <div className="material animate-fade pointer-events-none absolute top-3 left-1/2 z-30 max-w-[90%] -translate-x-1/2 rounded-full px-4 py-2 text-center text-sm">
+              {ui.muteBlocked ? "Click the video once to turn the sound on" : "Click the play button in the video to start"}
+            </div>
+          )}
 
           {ui.loading && !ui.blocked && !ui.error && (
             <div className="animate-fade absolute inset-0 z-10 flex items-center justify-center bg-black">
@@ -374,8 +451,16 @@ export function StreamPlayer({
             </pre>
           )}
 
-          {ui.blocked && (
+          {ui.ended && !ui.error && (
+            <div className="material animate-fade pointer-events-none absolute top-1/2 left-1/2 z-30 max-w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-2xl px-6 py-4 text-center">
+              <p className="font-semibold">This video has ended</p>
+              {canControl && <p className="mt-1 text-sm text-label-2">Press play to watch it again.</p>}
+            </div>
+          )}
+
+          {ui.blocked && !passthrough && !ui.error && (
             <button
+              autoFocus={bare}
               onClick={startPlayback}
               className="animate-fade absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/60"
             >
@@ -386,27 +471,7 @@ export function StreamPlayer({
             </button>
           )}
 
-          <PlayerControls
-            visible={showControls}
-            playing={ui.playing}
-            time={ui.time}
-            duration={ui.duration}
-            live={ui.live}
-            canControl={canControl || !syncable}
-            canSeek={canControl && stream.playback.position !== null}
-            status={ui.status}
-            volume={volume}
-            muted={muted}
-            onPlayPause={togglePlay}
-            onSeek={(seconds) => send({ type: "stream.control", streamId: stream.id, action: "seek", position: seconds })}
-            onVolume={(value) => {
-              setVolume(value);
-              setMuted(false);
-            }}
-            onMute={() => setMuted((value) => !value)}
-            onFullscreen={onFullscreen}
-            onResync={resync}
-          />
+          {!bare && (fullscreen ? controls : controlsSlot ? createPortal(controls, controlsSlot) : null)}
         </>
       )}
     </div>

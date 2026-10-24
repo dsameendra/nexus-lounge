@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
 import { CreateRoomButton } from "@/components/CreateRoomButton";
+import { InstallPrompt } from "@/components/InstallPrompt";
 
 export default async function HomePage() {
   const session = await auth();
@@ -26,6 +27,7 @@ export default async function HomePage() {
             <CreateRoomButton />
           )}
         </div>
+        <InstallPrompt />
         <form
           className="mt-5 text-center"
           action={async () => {

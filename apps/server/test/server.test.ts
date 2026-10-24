@@ -49,6 +49,7 @@ class Client {
   socket = new WebSocket(`ws://localhost:${PORT}/ws`);
   state: RoomState | null = null;
   errors: string[] = [];
+  kicked = false;
   private waiters: (() => void)[] = [];
 
   constructor() {
@@ -56,6 +57,7 @@ class Client {
       const message = JSON.parse(raw.toString()) as ServerMessage;
       if (message.type === "state") this.state = message.state;
       if (message.type === "error") this.errors.push(message.message);
+      if (message.type === "kicked") this.kicked = true;
       this.waiters.splice(0).forEach((wake) => wake());
     });
   }
@@ -77,7 +79,14 @@ class Client {
   }
 }
 
-async function join(roomId: string, sub: string, guest = false) {
+async function join(roomId: string, sub: string, guest = false, host?: Client) {
+  if (guest) {
+    assert.ok(host, "guests need the host to let them in");
+    assert.equal((await ticketFor(roomId, sub, true)).status, 202);
+    await host.until(() => host.state!.pending.some((request) => request.id === sub));
+    host.send({ type: "join.respond", userId: sub, allow: true });
+    await host.until(() => !host.state!.pending.some((request) => request.id === sub));
+  }
   const { body } = await ticketFor(roomId, sub, guest);
   const client = new Client();
   await client.open();
@@ -93,7 +102,7 @@ test("permission matrix", async () => {
   const { id } = await createRoom("host");
   const host = await join(id, "host");
   const alice = await join(id, "alice");
-  const guest = await join(id, "guest-1", true);
+  const guest = await join(id, "guest-1", true, host);
 
   guest.send({ type: "stream.add", source: yt });
   await guest.until(() => guest.errors.length > 0);
@@ -163,7 +172,7 @@ test("only the host can mute or deafen, and it sticks across reconnects", async 
   const { id } = await createRoom("host");
   const host = await join(id, "host");
   const alice = await join(id, "alice");
-  const guest = await join(id, "guest-2", true);
+  const guest = await join(id, "guest-2", true, host);
 
   alice.send({ type: "moderation.set", userId: "guest-2", muted: true });
   await alice.until(() => alice.errors.length > 0);
@@ -222,9 +231,9 @@ test("establish only sets an unset position, once", async () => {
 test("twitch live cannot be controlled", async () => {
   const { id } = await createRoom("host");
   const host = await join(id, "host");
-  host.send({ type: "stream.add", source: { type: "twitch", id: "caedrel", isLive: true } });
+  host.send({ type: "stream.add", source: { type: "twitch", id: "examplechannel", isLive: true } });
   await host.until(() => host.state!.streams.length === 1);
-  host.send({ type: "stream.control", streamId: "twitch:live:caedrel", action: "play", position: 1 });
+  host.send({ type: "stream.control", streamId: "twitch:live:examplechannel", action: "play", position: 1 });
   await host.until(() => host.errors.length > 0);
   host.socket.close();
 });
@@ -256,4 +265,122 @@ test("password and ticket enforcement", async () => {
   badMessage.send({ type: "stream.add", source: { type: "youtube", id: "../etc", isLive: false } });
   await badMessage.until(() => badMessage.errors.length > 0);
   [forged, wrongRoom, badMessage].forEach((client) => client.socket.close());
+});
+
+test("tv pairing: code, member approval, single use, view-only", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+
+  const created = await fetch(`${base}/tv/pairings`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ roomId: id }) });
+  assert.equal(created.status, 201);
+  const { code, secret } = (await created.json()) as { code: string; secret: string };
+  assert.match(code, /^[A-Z0-9]{6}$/);
+
+  const poll = (c: string, s: string) => fetch(`${base}/tv/pairings/${c}`, { headers: { "x-pairing-secret": s } });
+  assert.deepEqual(await (await poll(code, secret)).json(), { status: "pending" });
+  assert.equal((await poll(code, "wrong")).status, 404);
+
+  const approve = (sub: string, c: string) =>
+    fetch(`${base}/rooms/${id}/tv/approve`, { method: "POST", headers: bearer(sub), body: JSON.stringify({ code: c }) });
+  assert.equal((await approve("stranger", code)).status, 403, "only room members can approve");
+  assert.equal((await approve("host", "AAAAAA")).status, 404);
+  assert.equal((await approve("host", code)).status, 200);
+
+  const approved = (await (await poll(code, secret)).json()) as { status: string; wsTicket: string; livekitToken: string };
+  assert.equal(approved.status, "approved");
+  assert.equal((await poll(code, secret)).status, 404, "credentials can only be collected once");
+
+  const tv = new Client();
+  await tv.open();
+  tv.send({ type: "join", roomId: id, ticket: approved.wsTicket });
+  await tv.until(() => tv.state !== null);
+  const member = tv.state!.members.find((m) => m.name.startsWith("TV"));
+  assert.ok(member?.guest, "tv joins as a view-only guest");
+
+  tv.send({ type: "stream.add", source: yt });
+  await tv.until(() => tv.errors.length > 0);
+  assert.equal(host.state!.streams.length, 0);
+
+  const other = await createRoom("host");
+  const wrongRoom = await fetch(`${base}/rooms/${other.id}/tv/approve`, { method: "POST", headers: bearer("host"), body: JSON.stringify({ code }) });
+  assert.equal(wrongRoom.status, 403);
+  [host, tv].forEach((client) => client.socket.close());
+});
+
+test("tv session: signed-in users skip the code, passwords still apply", async () => {
+  const open = await createRoom("host");
+  const direct = await fetch(`${base}/rooms/${open.id}/tv/session`, { method: "POST", headers: bearer("alice"), body: "{}" });
+  assert.equal(direct.status, 200);
+  assert.ok(((await direct.json()) as { wsTicket: string }).wsTicket);
+
+  const locked = await createRoom("host", "hunter2");
+  const denied = await fetch(`${base}/rooms/${locked.id}/tv/session`, { method: "POST", headers: bearer("alice"), body: "{}" });
+  assert.equal(denied.status, 403);
+  const allowed = await fetch(`${base}/rooms/${locked.id}/tv/session`, { method: "POST", headers: bearer("alice"), body: JSON.stringify({ password: "hunter2" }) });
+  assert.equal(allowed.status, 200);
+
+  const missing = await fetch(`${base}/tv/pairings`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ roomId: "zzzzzzzz" }) });
+  assert.equal(missing.status, 404);
+});
+
+test("guests wait for the owner; others never see the queue", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const alice = await join(id, "alice");
+
+  assert.equal((await ticketFor(id, "guest-a", true)).status, 202);
+  assert.equal((await ticketFor(id, "guest-a", true)).status, 202, "asking again keeps one request");
+  await host.until(() => host.state!.pending.length === 1);
+  assert.equal(host.state!.pending[0]!.id, "guest-a");
+  assert.deepEqual(alice.state!.pending, [], "only the owner sees who is waiting");
+
+  alice.send({ type: "join.respond", userId: "guest-a", allow: true });
+  await alice.until(() => alice.errors.length > 0);
+  assert.equal(host.state!.pending.length, 1, "non-owners cannot admit");
+
+  host.send({ type: "join.respond", userId: "guest-a", allow: true });
+  await host.until(() => host.state!.pending.length === 0);
+  assert.equal((await ticketFor(id, "guest-a", true)).status, 200);
+
+  assert.equal((await ticketFor(id, "guest-b", true)).status, 202);
+  await host.until(() => host.state!.pending.length === 1);
+  host.send({ type: "join.respond", userId: "guest-b", allow: false });
+  await host.until(() => host.state!.pending.length === 0);
+  const declined = await ticketFor(id, "guest-b", true);
+  assert.equal(declined.status, 403);
+
+  assert.equal((await ticketFor(id, "someone")).status, 200, "Discord users walk straight in");
+  [host, alice].forEach((client) => client.socket.close());
+});
+
+test("owner can remove people, who then cannot come back", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const alice = await join(id, "alice");
+  const guest = await join(id, "guest-k", true, host);
+  const oldTicket = (await ticketFor(id, "alice")).body!.wsTicket;
+
+  alice.send({ type: "moderation.kick", userId: "guest-k" });
+  await alice.until(() => alice.errors.length > 0);
+  host.send({ type: "moderation.kick", userId: "host" });
+  await host.until(() => host.errors.length > 0);
+  assert.equal(host.state!.members.length, 3, "nobody was removed by those");
+
+  host.send({ type: "role.setController", userId: "alice", enabled: true });
+  await host.until(() => host.state!.room.controllerIds.includes("alice"));
+  host.send({ type: "moderation.kick", userId: "alice" });
+  await alice.until(() => alice.kicked);
+  await host.until(() => host.state!.members.length === 2);
+  assert.deepEqual(host.state!.room.controllerIds, [], "removed people lose their roles");
+
+  assert.equal((await ticketFor(id, "alice")).status, 403, "cannot request a new ticket");
+  const sneaky = new Client();
+  await sneaky.open();
+  sneaky.send({ type: "join", roomId: id, ticket: oldTicket });
+  await sneaky.until(() => sneaky.errors.some((message) => message.includes("removed")));
+
+  host.send({ type: "moderation.kick", userId: "guest-k" });
+  await guest.until(() => guest.kicked);
+  assert.equal((await ticketFor(id, "guest-k", true)).status, 403, "removed guests cannot re-knock");
+  [host, sneaky].forEach((client) => client.socket.close());
 });

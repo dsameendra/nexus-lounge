@@ -1,5 +1,5 @@
 import { joinRoomRequestSchema, livekitTokenResponseSchema, type JoinResponse } from "@nexus/shared";
-import { getSessionToken, serverFetch } from "@/lib/server-api";
+import { getSessionToken, serverFetch, serverWsUrl } from "@/lib/server-api";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -10,12 +10,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     headers: { "content-type": "application/json" },
     body: JSON.stringify(joinRoomRequestSchema.parse(await request.json().catch(() => ({})))),
   });
+  if (response.status === 202) return Response.json({ status: "pending" }, { status: 202 });
   if (response.status === 404) return Response.json({ error: "Room not found" }, { status: 404 });
   if (response.status === 403) return Response.json(await response.json(), { status: 403 });
   if (!response.ok) return Response.json({ error: "Could not join room" }, { status: 502 });
   const body: JoinResponse = {
     ...livekitTokenResponseSchema.parse(await response.json()),
-    wsUrl: process.env.NEXT_PUBLIC_SERVER_WS_URL ?? "ws://localhost:4000/ws",
+    wsUrl: serverWsUrl(),
   };
   return Response.json(body);
 }

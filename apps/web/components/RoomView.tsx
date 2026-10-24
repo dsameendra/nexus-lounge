@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { AddStreamSheet } from "./AddStreamSheet";
 import { Chat } from "./Chat";
 import { ChatIcon, FilmIcon, PeopleIcon } from "./Icons";
-import { Dock } from "./Dock";
+import { VoicePanel } from "./Dock";
+import { JoinRequests } from "./JoinRequests";
 import { PeoplePanel } from "./PeoplePanel";
 import { RoomHeader } from "./RoomHeader";
 import { useRoom } from "./RoomProvider";
@@ -19,10 +20,14 @@ export function RoomView({
   deafened,
   onDeafenedChange,
   onLeave,
+  voiceLost,
+  onReconnectVoice,
 }: {
   deafened: boolean;
   onDeafenedChange: (value: boolean) => void;
   onLeave: () => void;
+  voiceLost: boolean;
+  onReconnectVoice: () => void;
 }) {
   const { send, status, lastError } = useRoom();
   const { effectiveId } = useEffectiveSource();
@@ -45,19 +50,26 @@ export function RoomView({
   const openAdd = () => setAdding(true);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
       <RoomHeader />
+      {voiceLost && (
+        <div role="alert" className="flex items-center justify-center gap-3 bg-warn/15 px-4 py-2 text-sm text-warn">
+          Voice disconnected.
+          <button onClick={onReconnectVoice} className="rounded-full bg-warn px-3 py-1 text-xs font-semibold text-black transition active:scale-95">
+            Reconnect
+          </button>
+        </div>
+      )}
 
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <main className="scroll-thin flex shrink-0 flex-col lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:p-6 lg:pb-0">
+      <div className="flex min-h-0 flex-1 flex-col max-lg:landscape:flex-row lg:flex-row">
+        <main className="scroll-thin flex shrink-0 flex-col max-lg:landscape:min-h-0 max-lg:landscape:flex-1 max-lg:landscape:shrink max-lg:landscape:overflow-y-auto lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:p-6 lg:pb-0">
           <Stage onAdd={openAdd} />
-          <Dock deafened={deafened} onDeafenedChange={onDeafenedChange} onLeave={onLeave} />
           <div className="hidden lg:block">
             <StreamLibrary onAdd={openAdd} />
           </div>
         </main>
 
-        <aside className="flex min-h-0 flex-1 flex-col border-line bg-bg lg:w-[22rem] lg:flex-none lg:border-l xl:w-96">
+        <aside className="flex min-h-0 flex-1 flex-col border-line bg-bg max-lg:landscape:w-72 max-lg:landscape:flex-none max-lg:landscape:border-l lg:w-[22rem] lg:flex-none lg:border-l xl:w-96">
           <div className="p-3 lg:hidden">
             <Segmented
               value={tab}
@@ -93,8 +105,11 @@ export function RoomView({
               </div>
             )}
           </div>
+          <VoicePanel deafened={deafened} onDeafenedChange={onDeafenedChange} onLeave={onLeave} />
         </aside>
       </div>
+
+      <JoinRequests />
 
       {adding && <AddStreamSheet onClose={() => setAdding(false)} />}
 
