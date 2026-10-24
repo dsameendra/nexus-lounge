@@ -70,6 +70,25 @@ Node 22.18+ (the server runs TypeScript directly), pnpm 10+, and Docker only if 
 | `NEXT_PUBLIC_SERVER_WS_URL` | web | WebSocket URL of the Fastify server (the HTTP URL is derived from it) |
 | `PORT` | server | Server port (default 4000) |
 
-## Deploy
+## Deploy on Railway
 
-Web: Vercel or Railway, with all variables above except `PORT`. Server: Railway (`pnpm --filter @nexus/server start`), with `AUTH_SECRET` and the LiveKit variables. Set `NEXT_PUBLIC_SERVER_WS_URL` to the server's public `wss://…/ws` URL.
+Two services built from the Dockerfiles in `apps/server` and `apps/web` (the build context is the repo root, so the shared package is included). LiveKit must be [LiveKit Cloud](https://cloud.livekit.io), since Railway doesn't support UDP.
+
+```
+railway login
+railway link --project nexus-lounge
+railway add --service server --variables RAILWAY_DOCKERFILE_PATH=apps/server/Dockerfile
+railway add --service web    --variables RAILWAY_DOCKERFILE_PATH=apps/web/Dockerfile
+railway domain --service server && railway domain --service web
+```
+
+Variables (set with `railway variables --service <name> --set KEY=VALUE`):
+
+| Service | Variables |
+| --- | --- |
+| `server` | `AUTH_SECRET`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` |
+| `web` | `AUTH_SECRET` (same value as the server), `AUTH_URL` (the web domain), `NEXT_PUBLIC_SERVER_WS_URL` (`wss://<server domain>/ws`), `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` |
+
+Railway sets `PORT` itself. Add `https://<web domain>/api/auth/callback/discord` as a redirect in the Discord developer portal. Deploy with `railway up --service server --ci` and `railway up --service web --ci`, or connect the GitHub repo to each service in the Railway dashboard for deploys on push (set the service's Dockerfile path variable as above).
+
+Rooms live in the server's memory, so every server deploy or restart ends all rooms. Keep the server at a single instance.
