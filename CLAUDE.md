@@ -18,12 +18,21 @@ Virtual watch-party PWA: rooms with LiveKit voice/chat/screen share, synced YouT
 - Match surrounding code: few comments, small components, Apple-style UI (restrained, rounded, blur, system font).
 - Sheets and popovers render through portals (popovers into the fullscreen element when active).
 
+## Layout variants
+- `pl:` = phone landscape (short, landscape, under 1024px wide). `compact:` = phone portrait or phone landscape. Defined in `globals.css`; use them instead of `max-sm:`/`landscape:` so the two phone orientations stay in sync.
+- Use container queries (`@container`, `@md:`) inside the player controls: the stage can be narrow because of the side panel, not because of the viewport.
+- Use `overflow-clip`, not `overflow-hidden`, on layout shells: hidden containers can be scrolled by focus and shift the whole app sideways on iOS.
+- Menus use `Popover` (portal, fixed); never position dropdowns inside cards.
+
 ## Gotchas
 - **Never overlay a Twitch embed.** Twitch pauses playback if anything covers it. Tear down and recreate the Twitch player on every stream switch.
 - YouTube embeds cannot be told a quality (the write APIs are no-ops); the player's pixel size drives what YouTube serves. Reads work. Captions use an undocumented module, so guard every call (`safe()`).
 - Per-stream clock: `{position, playing, updatedAt}`; correct drift with playback rate first, seek rarely and debounced.
 - Screen share stream ids are `screen:<identity>`.
-- iPhone has no Fullscreen API for elements: `useStageFullscreen` falls back to an immersive CSS mode, and in it YouTube is rebuilt with its own native controls (`fs=1`) so its fullscreen button opens iOS's native player (Twitch always shows its own controls). Cross-origin iframes can't be sent to native fullscreen programmatically.
+- iPhone has no Fullscreen API for elements: `useStageFullscreen` falls back to an immersive CSS mode. Decide at creation time, never rebuild a YouTube iframe (iOS blocks autoplay on a new one): on devices without the API, viewers who cannot control the stream get YouTube's own controls (`fs=1`, whose fullscreen button opens the native iOS player); controllers keep our synced controls. Twitch always shows its own controls. Screen shares call `video.webkitEnterFullscreen()`. Cross-origin iframes can't be sent to native fullscreen programmatically.
+- Twitch needs 400x300: smaller stages scale the whole embed down (`TwitchAdapter` ResizeObserver) instead of cropping its controls.
+- Join state: everyone joins muted and deafened; `LiveKitRoom audio={false}` so the mic is only requested on unmute.
+- Queue: `room.queue` is explicit (`queue.*` messages); with an empty queue `queue.advance` falls back to library order. Playlists are YouTube only, scraped server-side from the playlist page (`playlists.ts`, no API key), items are sent on demand with `playlist.open`.
 - `useWakeLock` keeps the screen on in rooms and TV mode (Screen Wake Lock API, re-acquired on visibility change).
 - `NEXT_PUBLIC_*` values are baked at build time; `SERVER_WS_URL` is the runtime override.
 - iCloud can create `* 2.ts` duplicates inside `.next`; tsconfig excludes them.
@@ -33,5 +42,8 @@ Virtual watch-party PWA: rooms with LiveKit voice/chat/screen share, synced YouT
 - Never commit `.env`, `.env.railway` or `.tmp-*` (all ignored). `.env.example` is the only env file in git.
 - Railway services `server` and `web` are connected to GitHub and deploy on every push to `main`. Config templates and steps: `docs/railway-deploy.md`, `docs/railway/`.
 
+## Tests
+`pnpm --filter @nexus/shared test`, `pnpm --filter @nexus/server test`, and the browser suites in `e2e/` (`cd e2e && node run.mjs`; see its README). Add an e2e check for UI behaviour, and assert geometry (rects, `elementFromPoint`) rather than eyeballing screenshots.
+
 ## Manual testing
-Run server and web with a LiveKit instance and Discord keys, or use guest login. Use two browser windows in one room. The Playwright harness used during development (fake mic and screen capture, minted Auth.js session cookies) lives outside the repo; `AUTH_SECRET` must match between web and server.
+Run server and web with a LiveKit instance and Discord keys, or use guest login. Use two browser windows in one room. `AUTH_SECRET` must match between web and server.

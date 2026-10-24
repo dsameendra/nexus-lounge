@@ -10,6 +10,8 @@ export function Popover({
   label,
   placement = "below",
   width = "w-72",
+  anchor = null,
+  closeOnBlur = true,
   children,
 }: {
   x: number;
@@ -18,6 +20,8 @@ export function Popover({
   label: string;
   placement?: "below" | "above";
   width?: string;
+  anchor?: HTMLElement | null;
+  closeOnBlur?: boolean;
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -41,16 +45,23 @@ export function Popover({
     document.addEventListener("pointerdown", away, true);
     document.addEventListener("keydown", escape);
     window.addEventListener("resize", onClose);
-    window.addEventListener("blur", onClose);
-    document.addEventListener("scroll", onClose, true);
+    if (closeOnBlur) window.addEventListener("blur", onClose);
+    const openedAt = Date.now();
+    const scrolled = (event: Event) => {
+      if (Date.now() - openedAt < 250) return;
+      const target = event.target;
+      if (anchor && target instanceof Node && target !== document && !target.contains(anchor)) return;
+      onClose();
+    };
+    document.addEventListener("scroll", scrolled, true);
     return () => {
       document.removeEventListener("pointerdown", away, true);
       document.removeEventListener("keydown", escape);
       window.removeEventListener("resize", onClose);
       window.removeEventListener("blur", onClose);
-      document.removeEventListener("scroll", onClose, true);
+      document.removeEventListener("scroll", scrolled, true);
     };
-  }, [onClose]);
+  }, [onClose, anchor, closeOnBlur]);
 
   return createPortal(
     <div

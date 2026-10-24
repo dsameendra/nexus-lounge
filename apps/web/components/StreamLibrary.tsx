@@ -1,11 +1,13 @@
 "use client";
 
-import { screenId, type Stream } from "@nexus/shared";
+import { screenId, streamKey, type Stream } from "@nexus/shared";
 import { useLocalParticipant } from "@livekit/components-react";
 import { Avatar } from "./Avatar";
 import { Pill, ProviderBadge } from "./Badges";
-import { BroadcastIcon, ChevronDownIcon, ChevronUpIcon, PlusIcon, QueueNextIcon, ScreenIcon, TrashIcon } from "./Icons";
+import { BroadcastIcon, ChevronDownIcon, ChevronUpIcon, PlaylistIcon, PlusIcon, QueueNextIcon, ScreenIcon, TrashIcon } from "./Icons";
 import { MenuButton, type MenuItem } from "./Menu";
+import { PlaylistCard } from "./PlaylistCard";
+import { QueueSection } from "./QueueSection";
 import { useRoom } from "./RoomProvider";
 import { StreamArt } from "./StreamArt";
 import { shareName, useEffectiveSource } from "./useEffectiveSource";
@@ -16,9 +18,16 @@ export function StreamLibrary({ onAdd }: { onAdd: () => void }) {
   const { localParticipant } = useLocalParticipant();
 
   const featuredIndex = state.streams.findIndex((stream) => stream.id === featuredId);
-  const upNextId = state.room.settings.autoplayNext && featuredIndex >= 0 ? state.streams[featuredIndex + 1]?.id : undefined;
+  const queuedHead = state.queue[0];
+  const upNextId = !state.room.settings.autoplayNext
+    ? undefined
+    : queuedHead
+      ? streamKey(queuedHead.source)
+      : featuredIndex >= 0
+        ? state.streams[featuredIndex + 1]?.id
+        : undefined;
   const watchers = (id: string) => state.members.filter((member) => member.watching === id);
-  const empty = state.streams.length === 0 && shares.length === 0;
+  const empty = state.streams.length === 0 && shares.length === 0 && state.playlists.length === 0;
 
   return (
     <section aria-label="Streams" className="px-4 pt-5 pb-6 lg:px-0 lg:pt-7">
@@ -46,7 +55,20 @@ export function StreamLibrary({ onAdd }: { onAdd: () => void }) {
         </div>
       )}
 
-      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+      <QueueSection />
+
+      {state.playlists.length > 0 && (
+        <section aria-label="Playlists" className="mb-5 space-y-2">
+          <h3 className="text-sm font-semibold">Playlists</h3>
+          {state.playlists.map((playlist) => (
+            <PlaylistCard key={playlist.id} playlist={playlist} />
+          ))}
+        </section>
+      )}
+
+      {(state.streams.length > 0 || shares.length > 0) && state.playlists.length + state.queue.length > 0 && <h3 className="mb-2 text-sm font-semibold">Library</h3>}
+
+      <ul className="grid gap-3 sm:grid-cols-2 pl:grid-cols-1 lg:grid-cols-1 xl:grid-cols-2">
         {shares.map((share) => {
           const id = screenId(share.participant.identity);
           const mine = share.participant.isLocal;
@@ -109,8 +131,11 @@ export function StreamLibrary({ onAdd }: { onAdd: () => void }) {
                         : { label: "Show to everyone", icon: <BroadcastIcon />, onSelect: () => send({ type: "stream.feature", streamId: stream.id }) },
                     ]
                   : []),
-                ...(isController && featuredId !== stream.id && index !== featuredIndex + 1
-                  ? [{ label: "Play next", icon: <QueueNextIcon />, onSelect: () => send({ type: "stream.move", streamId: stream.id, direction: "next" }) }]
+                ...(canAdd && !stream.source.isLive
+                  ? [
+                      { label: "Add to queue", icon: <PlaylistIcon />, onSelect: () => send({ type: "queue.addStream", streamId: stream.id, position: "end" }) },
+                      { label: "Play next", icon: <QueueNextIcon />, onSelect: () => send({ type: "queue.addStream", streamId: stream.id, position: "next" }) },
+                    ]
                   : []),
                 ...(isController && index > 0
                   ? [{ label: "Move up", icon: <ChevronUpIcon />, onSelect: () => send({ type: "stream.move", streamId: stream.id, direction: "up" }) }]

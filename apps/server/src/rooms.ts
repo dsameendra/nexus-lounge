@@ -1,8 +1,13 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { WebSocket } from "ws";
 import {
+  LIMITS,
   defaultRoomSettings,
   isScreenId,
+  isQueueable,
+  type PlaylistItem,
+  type PlaylistSummary,
+  type QueueItem,
   type RoomSettings,
   streamKey,
   type MediaSource,
@@ -16,6 +21,7 @@ import {
   type Stream,
 } from "@nexus/shared";
 import type { SessionPayload } from "@nexus/shared/session-token";
+import { fetchPlaylist } from "./playlists.ts";
 import { fallbackTitle, fetchTitle } from "./titles.ts";
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -31,6 +37,8 @@ interface StoredRoom {
   info: RoomInfo;
   passwordHash?: { salt: Buffer; hash: Buffer };
   streams: Stream[];
+  queue: QueueItem[];
+  playlists: { summary: PlaylistSummary; items: PlaylistItem[] }[];
   featuredId: string | null;
   connections: Map<string, Connection>;
   restrictions: Map<string, Restriction>;
@@ -69,6 +77,8 @@ export function createRoom(hostId: string, password?: string, name = ""): RoomIn
     info,
     passwordHash: password ? { salt, hash: hashPassword(password, salt) } : undefined,
     streams: [],
+    queue: [],
+    playlists: [],
     featuredId: null,
     connections: new Map(),
     restrictions: new Map(),
@@ -98,6 +108,8 @@ function snapshot(room: StoredRoom, forHost: boolean): RoomState {
   return {
     room: room.info,
     streams: room.streams,
+    queue: room.queue,
+    playlists: room.playlists.map((playlist) => playlist.summary),
     featuredId: room.featuredId,
     members: Array.from(room.connections.values(), (connection) => connection.member),
     restrictions: Object.fromEntries(room.restrictions),
@@ -451,6 +463,13 @@ export function advanceQueue(roomId: string, user: SessionPayload, fromStreamId:
   if (user.guest || !isController(room, user.sub)) return fail("Only the host or controllers can advance the queue");
   if (!room.info.settings.autoplayNext || room.featuredId !== fromStreamId) return ok;
 
+  const queued = room.queue.shift();
+  if (queued) {
+    startQueued(room, queued);
+    broadcast(roomId);
+    return ok;
+  }
+
   const index = room.streams.findIndex((stream) => stream.id === fromStreamId);
   const next = room.streams[index + 1];
   if (index === -1 || !next) return ok;
@@ -526,5 +545,155 @@ export function checkStopShare(roomId: string, user: SessionPayload, targetId: s
   if (user.guest || !isController(room, user.sub)) return fail("Only the host or controllers can stop someone's screen share");
   if (targetId === room.info.hostId && user.sub !== room.info.hostId) return fail("Only the room owner can stop the owner's screen share");
   if (!room.connections.has(targetId)) return fail("That person isn't in the room");
+  return ok;
+}
+
+const newQueueId = () => randomBytes(6).toString("hex");
+
+function startQueued(room: StoredRoom, item: QueueItem) {
+  const id = streamKey(item.source);
+  let stream = room.streams.find((candidate) => candidate.id === id);
+  if (!stream) {
+    while (room.streams.length >= MAX_STREAMS) {
+      const index = room.streams.findIndex((candidate) => candidate.id !== room.featuredId);
+      if (index === -1) break;
+      room.streams.splice(index, 1);
+    }
+    stream = {
+      id,
+      source: item.source,
+      title: item.title,
+      addedBy: item.addedBy,
+      addedAt: Date.now(),
+      playback: { position: 0, playing: true, updatedAt: Date.now() },
+    };
+    room.streams.push(stream);
+  }
+  stream.playback = { position: 0, playing: true, updatedAt: Date.now() };
+  room.featuredId = id;
+  for (const connection of room.connections.values()) {
+    if (connection.member.watching && !isScreenId(connection.member.watching) && connection.member.watching !== id && !room.streams.some((s) => s.id === connection.member.watching)) {
+      connection.member.watching = null;
+    }
+  }
+}
+
+function canQueue(user: SessionPayload) {
+  return !user.guest;
+}
+
+function pushQueue(room: StoredRoom, entries: QueueItem[], position: "end" | "next") {
+  if (room.queue.length + entries.length > LIMITS.queue) return false;
+  if (position === "next") room.queue.unshift(...entries);
+  else room.queue.push(...entries);
+  return true;
+}
+
+export async function addPlaylist(roomId: string, user: SessionPayload, listId: string): Promise<Result> {
+  const room = rooms.get(roomId);
+  if (!room) return fail("Room not found");
+  if (!canQueue(user)) return fail("Sign in with Discord to add playlists");
+  if (room.playlists.some((playlist) => playlist.summary.id === listId)) return ok;
+  if (room.playlists.length >= LIMITS.playlists) return fail("This room has too many playlists. Remove one first.");
+  const loaded = await fetchPlaylist(listId);
+  if (!loaded) return fail("Couldn't load that playlist. It may be private or empty.");
+  if (!rooms.has(roomId) || room.playlists.some((playlist) => playlist.summary.id === listId) || room.playlists.length >= LIMITS.playlists) return ok;
+  room.playlists.push({
+    summary: { id: listId, title: loaded.title, count: loaded.items.length, addedBy: { id: user.sub, name: user.name }, addedAt: Date.now() },
+    items: loaded.items,
+  });
+  broadcast(roomId);
+  return ok;
+}
+
+export function removePlaylist(roomId: string, user: SessionPayload, listId: string): Result {
+  const room = rooms.get(roomId);
+  const playlist = room?.playlists.find((candidate) => candidate.summary.id === listId);
+  if (!room || !playlist) return fail("Playlist not found");
+  if (!isController(room, user.sub) && playlist.summary.addedBy.id !== user.sub) return fail("Only the host, controllers or the person who added it can remove this");
+  room.playlists = room.playlists.filter((candidate) => candidate !== playlist);
+  broadcast(roomId);
+  return ok;
+}
+
+export function playlistItems(roomId: string, listId: string): PlaylistItem[] | null {
+  return rooms.get(roomId)?.playlists.find((playlist) => playlist.summary.id === listId)?.items ?? null;
+}
+
+export function queuePlaylist(roomId: string, user: SessionPayload, listId: string, videoIds: string[] | undefined, position: "end" | "next"): Result {
+  const room = rooms.get(roomId);
+  if (!room) return fail("Room not found");
+  if (!canQueue(user)) return fail("Sign in with Discord to add to the queue");
+  const playlist = room.playlists.find((candidate) => candidate.summary.id === listId);
+  if (!playlist) return fail("Playlist not found");
+  const wanted = videoIds ? new Set(videoIds) : null;
+  const picked = playlist.items.filter((item) => !wanted || wanted.has(item.id));
+  if (picked.length === 0) return fail("Pick at least one video");
+  const entries: QueueItem[] = picked.map((item) => ({
+    id: newQueueId(),
+    source: { type: "youtube", id: item.id, isLive: false },
+    title: item.title,
+    addedBy: { id: user.sub, name: user.name },
+  }));
+  if (!pushQueue(room, entries, position)) return fail(`The queue is full (${LIMITS.queue} videos max)`);
+  broadcast(roomId);
+  return ok;
+}
+
+export function queueStream(roomId: string, user: SessionPayload, streamId: string, position: "end" | "next"): Result {
+  const room = rooms.get(roomId);
+  if (!room) return fail("Room not found");
+  if (!canQueue(user)) return fail("Sign in with Discord to add to the queue");
+  const stream = room.streams.find((candidate) => candidate.id === streamId);
+  if (!stream) return fail("Stream not found");
+  if (!isQueueable(stream.source)) return fail("Live streams can't be queued");
+  const entry: QueueItem = { id: newQueueId(), source: stream.source, title: stream.title, addedBy: { id: user.sub, name: user.name } };
+  if (!pushQueue(room, [entry], position)) return fail(`The queue is full (${LIMITS.queue} videos max)`);
+  broadcast(roomId);
+  return ok;
+}
+
+export function removeQueued(roomId: string, user: SessionPayload, queueId: string): Result {
+  const room = rooms.get(roomId);
+  const item = room?.queue.find((candidate) => candidate.id === queueId);
+  if (!room || !item) return fail("That item is no longer in the queue");
+  if (!isController(room, user.sub) && item.addedBy.id !== user.sub) return fail("Only the host, controllers or the person who queued it can remove this");
+  room.queue = room.queue.filter((candidate) => candidate !== item);
+  broadcast(roomId);
+  return ok;
+}
+
+export function moveQueued(roomId: string, user: SessionPayload, queueId: string, direction: "up" | "down" | "top"): Result {
+  const room = rooms.get(roomId);
+  if (!room) return fail("Room not found");
+  if (user.guest || !isController(room, user.sub)) return fail("Only the host or controllers can reorder the queue");
+  const index = room.queue.findIndex((candidate) => candidate.id === queueId);
+  if (index === -1) return fail("That item is no longer in the queue");
+  const target = direction === "up" ? index - 1 : direction === "down" ? index + 1 : 0;
+  if (target < 0 || target >= room.queue.length || target === index) return ok;
+  const [moved] = room.queue.splice(index, 1);
+  room.queue.splice(target, 0, moved!);
+  broadcast(roomId);
+  return ok;
+}
+
+export function clearQueue(roomId: string, user: SessionPayload): Result {
+  const room = rooms.get(roomId);
+  if (!room) return fail("Room not found");
+  if (user.guest || !isController(room, user.sub)) return fail("Only the host or controllers can clear the queue");
+  room.queue = [];
+  broadcast(roomId);
+  return ok;
+}
+
+export function playQueuedNow(roomId: string, user: SessionPayload, queueId: string): Result {
+  const room = rooms.get(roomId);
+  if (!room) return fail("Room not found");
+  if (user.guest || !isController(room, user.sub)) return fail("Only the host or controllers can choose what the room watches");
+  const index = room.queue.findIndex((candidate) => candidate.id === queueId);
+  if (index === -1) return fail("That item is no longer in the queue");
+  const [item] = room.queue.splice(index, 1);
+  startQueued(room, item!);
+  broadcast(roomId);
   return ok;
 }

@@ -17,11 +17,15 @@ I built it so my friends and I could watch League of Legends Worlds together, bu
 
 | Phone | Phone: streams | Phone: landscape |
 | :---: | :---: | :---: |
-| <img src="docs/screenshots/mobile-chat.png" width="200" /> | <img src="docs/screenshots/mobile-streams.png" width="200" /> | <img src="docs/screenshots/mobile-landscape-fullscreen.png" width="330" /> |
+| <img src="docs/screenshots/mobile-chat.png" width="200" /> | <img src="docs/screenshots/mobile-streams.png" width="200" /> | <img src="docs/screenshots/mobile-landscape.png" width="330" /> |
 
 | Collapsed side panel | People | Room settings |
 | :---: | :---: | :---: |
 | <img src="docs/screenshots/panel-collapsed.png" width="290" /> | <img src="docs/screenshots/people-menu.png" width="290" /> | <img src="docs/screenshots/room-settings.png" width="290" /> |
+
+| Playlists and queue | Landscape with chat open |
+| :---: | :---: |
+| <img src="docs/screenshots/queue-playlists.png" width="430" /> | <img src="docs/screenshots/mobile-landscape-panel.png" width="430" /> |
 
 <details><summary>TV mode</summary>
 <img src="docs/screenshots/tv-mode.png" alt="TV mode shows only the video" />
@@ -37,7 +41,9 @@ I built it so my friends and I could watch League of Legends Worlds together, bu
 - Roles: the owner can make other Discord users controllers, who can pick what the room watches, control playback, reorder the queue, put a screen share on air, and stop someone's screen share.
 
 **Watching**
-- Paste any YouTube or Twitch link (video, live stream, channel, past broadcast) to add it to the room's stream list, and reorder it as a queue. When a video ends, the next one starts (a controller needs to be watching).
+- Paste any YouTube or Twitch link (video, live stream, channel, past broadcast) to add it to the room's stream list.
+- **Queue:** an "Up next" list that everyone sees. Signed-in people add videos to the end or to the front ("Play next"); controllers reorder, play now, remove and clear. When a video ends, the next one in the queue starts (a controller needs to be watching). Live streams can't be queued, and with an empty queue the library order is used.
+- **Playlists:** paste a YouTube playlist link and it shows up as one expandable item. Add the whole playlist to the queue, or tick just the videos you want.
 - Every stream has its own shared clock, so some people can watch one stream while others watch another, and anyone can switch without losing sync. The owner or a controller can put one stream "on air" for everyone; guests always follow it.
 - Playback stays in sync across everyone's devices, with smooth correction instead of constant skipping.
 - On a live YouTube stream, **Go live** jumps everyone to the live edge.
@@ -52,18 +58,22 @@ I built it so my friends and I could watch League of Legends Worlds together, bu
 - AirPlay: screen shares offer the AirPlay picker where Safari supports it; for YouTube and Twitch (which can't be sent to AirPlay directly) the TV sheet explains how to mirror the clean TV view to an Apple TV.
 
 **Voice and chat**
-- Always-on voice with mute, deafen, push-to-talk (any key, or hold the mic button), and speaking indicators that match what everyone hears.
+- Voice joins muted and deafened. Unmuting also undeafens you, and the browser only asks for the microphone at that moment. Mute, deafen, push-to-talk (any key, or hold the mic button) and speaking indicators match what everyone hears.
 - Everyone's state is visible to everyone: muted, deafened, muted or deafened by the owner, and who is sharing their screen.
 - Click someone for their profile; right-click for per-person volume and "mute for me". The owner can mute or deafen anyone for everyone.
 - Text chat in the side panel, with an unread badge.
 
 **Phones and tablets**
-- The phone layout keeps the video, tabs and chat visible with a compact voice dock below; nothing covers the content.
-- Fullscreen on every device: the native Fullscreen API where it exists, and an immersive mode on iPhone (which has none) that fills the screen and locks to landscape where the browser allows.
+- Portrait: the video, tabs and chat stay visible above a compact voice dock, and the player controls float over the video instead of taking space.
+- Landscape: a slim header and a full-height video; the side panel (chat, streams, people) opens beside it on demand and the voice controls live in the header.
+- Fullscreen everywhere: the browser's Fullscreen API where it exists (desktop, Android, iPad). iPhone has none, so there is an immersive mode, and viewers get YouTube's own controls whose fullscreen button opens iOS's native player (Twitch always has its own). Screen shares go to the native iOS player directly.
+- Gestures: double-tap the left or right side of a video to skip 10 seconds (controllers), double-tap the middle (or double-click) for fullscreen, tap to show the controls.
+- The screen stays on while you're in a room or TV mode (Screen Wake Lock).
 - Installable PWA with an offline page, app shortcuts and install screenshots.
 
 **Desktop**
 - Hide the side panel (button or the `\` key) to be fully immersed. Voice controls move into the header and an unread badge keeps you posted on chat.
+- Keyboard: `F` fullscreen, `M` mute, and for controllers `Space`/`K` play and pause, `←`/`→` skip 5 seconds, `J`/`L` skip 10 seconds. Shortcuts are ignored while typing.
 
 **Any screen**
 - Responsive on phone, tablet, laptop and desktop (including landscape phones).
@@ -144,6 +154,8 @@ pnpm --filter @nexus/server test   # spawns the server; permissions, guest appro
 ```
 
 CI runs the same checks plus a production build on every push.
+
+Browser end-to-end suites (Chrome plus WebKit for the iPhone-style checks) live in [`e2e/`](e2e/README.md): rooms, voice, push to talk, fullscreen, the queue and playlists, gestures, phone layouts and "nothing covers the Twitch player".
 
 ## Deploy on Railway
 

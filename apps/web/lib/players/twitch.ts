@@ -57,6 +57,10 @@ declare global {
 
 let counter = 0;
 
+// Twitch needs at least 400x300 to play and show its controls; smaller stages scale the whole player down instead of cropping it.
+const MIN_WIDTH = 400;
+const MIN_HEIGHT = 300;
+
 function timeString(seconds: number) {
   const total = Math.max(0, Math.floor(seconds));
   return `${Math.floor(total / 3600)}h${Math.floor((total % 3600) / 60)}m${total % 60}s`;
@@ -76,13 +80,28 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
   private volume = 1;
   private destroyed = false;
   private mount: HTMLElement;
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(host: HTMLElement) {
     super();
     this.mount = document.createElement("div");
     this.mount.id = `twitch-player-${++counter}`;
-    this.mount.style.cssText = "position:absolute;inset:0;min-width:400px;min-height:300px";
+    this.mount.style.cssText = "position:absolute;left:0;top:0;transform-origin:0 0";
     host.appendChild(this.mount);
+    const fit = () => {
+      const width = host.clientWidth;
+      const height = host.clientHeight;
+      if (!width || !height) return;
+      const scale = Math.min(1, width / MIN_WIDTH, height / MIN_HEIGHT);
+      this.mount.style.width = `${width / scale}px`;
+      this.mount.style.height = `${height / scale}px`;
+      this.mount.style.transform = scale < 1 ? `scale(${scale})` : "";
+    };
+    fit();
+    if (typeof ResizeObserver !== "undefined") {
+      this.resizeObserver = new ResizeObserver(fit);
+      this.resizeObserver.observe(host);
+    }
   }
 
   load(source: MediaSource, startAt: number | null, autoplay: boolean) {
@@ -253,6 +272,7 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
 
   destroy() {
     clearInterval(this.playTimer);
+    this.resizeObserver?.disconnect();
     this.destroyed = true;
     this.mount.remove();
     this.player = null;

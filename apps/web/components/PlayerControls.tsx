@@ -41,6 +41,7 @@ export interface PlayerControlsProps {
   volume: number;
   muted: boolean;
   canFullscreen: boolean;
+  hideVolume?: boolean;
   qualityOptions: QualityOption[];
   quality: string;
   qualityNote?: string;
@@ -61,7 +62,7 @@ export interface PlayerControlsProps {
 
 export function PlayerControls(props: PlayerControlsProps) {
   const {
-    variant, visible, minimal = false, playing, time, duration, live, atEdge, canControl, canSeek, status, volume, muted, canFullscreen,
+    variant, visible, minimal = false, playing, time, duration, live, atEdge, canControl, canSeek, status, volume, muted, canFullscreen, hideVolume = false,
     qualityOptions, quality, qualityNote, qualityLink, onPlayPause, onSeek, onVolume, onMute, onFullscreen, onResync, onGoLive, onQuality, onAirPlay, captions, onCaptionTrack, onCaptionSize,
   } = props;
   const [scrub, setScrub] = useState<number | null>(null);
@@ -77,13 +78,13 @@ export function PlayerControls(props: PlayerControlsProps) {
     <div
       className={
         variant === "overlay"
-          ? `absolute inset-x-3 bottom-3 z-20 transition duration-300 sm:inset-x-4 sm:bottom-4 ${
+          ? `@container absolute right-[max(0.75rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-[max(0.75rem,env(safe-area-inset-left))] z-20 transition duration-300 ${
               visible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"
             }`
-          : "px-3 pt-2 lg:px-0"
+          : "@container px-3 pt-2 lg:px-0"
       }
     >
-      <div className={`${variant === "overlay" ? "material" : "bg-panel"} flex items-center gap-2 rounded-2xl px-2 py-1.5 sm:gap-3 sm:px-3`}>
+      <div className={`${variant === "overlay" ? "material" : "bg-panel"} flex items-center gap-1.5 rounded-2xl px-2 py-1.5 @md:gap-3 @md:px-3`}>
         {!minimal && (
           <>
             {canControl && (
@@ -130,7 +131,7 @@ export function PlayerControls(props: PlayerControlsProps) {
             <button
               onClick={onResync}
               title={status === "unsynced" ? "This source can't be time-synced" : "Resync with the room"}
-              className="hidden shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-label-2 transition hover:bg-white/10 sm:flex"
+              className="hidden shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-label-2 transition hover:bg-white/10 @lg:flex"
             >
               <span className={`size-1.5 rounded-full ${dot}`} />
               {STATUS_LABEL[status]}
@@ -164,7 +165,7 @@ export function PlayerControls(props: PlayerControlsProps) {
               step={0.02}
               value={muted || isSilent(volume) ? 0 : volume}
               onChange={(event) => onVolume(Number(event.target.value))}
-              className="hidden h-1 w-20 accent-white sm:block"
+              className={`hidden h-1 w-20 accent-white ${hideVolume ? "" : "@md:block"}`}
             />
           </div>
         )}

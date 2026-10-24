@@ -11,6 +11,9 @@ import { PlayerControls, type SyncStatus } from "./PlayerControls";
 import { useRoom } from "./RoomProvider";
 import { StreamArt } from "./StreamArt";
 import { openTvSheet, useAppleAirPlaySupport } from "./useAirPlay";
+import { COMPACT_SCREEN, PHONE_LANDSCAPE, hasElementFullscreen, useMediaQuery } from "./useMediaQuery";
+import { isTypingTarget } from "@nexus/shared";
+import { FullscreenIcon } from "./Icons";
 
 function sourceUrl(stream: Stream) {
   const { type, id, isLive } = stream.source;
@@ -71,7 +74,6 @@ export function StreamPlayer({
   onFullscreen,
   bare = false,
   fullscreen = false,
-  immersive = false,
   controlsSlot = null,
 }: {
   stream: Stream | null;
@@ -79,13 +81,18 @@ export function StreamPlayer({
   onFullscreen: () => void;
   bare?: boolean;
   fullscreen?: boolean;
-  immersive?: boolean;
   controlsSlot?: HTMLElement | null;
 }) {
   const canFullscreen = true;
   const appleAirPlay = useAppleAirPlaySupport();
   const { clock, send, canControlStream, state: roomState, isController } = useRoom();
   const advancedFor = useRef<string | null>(null);
+  const canControlRef = useRef(canControlStream);
+  const compactScreen = useMediaQuery(COMPACT_SCREEN);
+  const phoneLand = useMediaQuery(PHONE_LANDSCAPE);
+  const [ripple, setRipple] = useState<{ zone: "left" | "right"; key: number } | null>(null);
+  const lastTap = useRef({ time: 0, zone: "" });
+  const touchAt = useRef(0);
   const hostRefs = { youtube: useRef<HTMLDivElement>(null), twitch: useRef<HTMLDivElement>(null) };
   const adapters = useRef<Partial<Record<Provider, PlayerAdapter>>>({});
   const mem = useRef({
@@ -117,6 +124,7 @@ export function StreamPlayer({
 
   useEffect(() => {
     latest.current = { stream, visible, volume, muted };
+    canControlRef.current = canControlStream;
   });
 
   const patch = useCallback((next: Partial<UiState>) => {
@@ -128,7 +136,7 @@ export function StreamPlayer({
       let adapter = adapters.current[type];
       const host = hostRefs[type].current;
       if (!adapter && host) {
-        adapter = type === "youtube" ? new YouTubeAdapter(host, nativeYoutube.current) : new TwitchAdapter(host);
+        adapter = type === "youtube" ? new YouTubeAdapter(host, !hasElementFullscreen() && !(latest.current.stream && canControlRef.current(latest.current.stream))) : new TwitchAdapter(host);
         adapter.subscribe((event) => {
           if (event === "blocked") patch({ blocked: true });
         });
@@ -139,20 +147,6 @@ export function StreamPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [patch],
   );
-
-  const nativeYoutube = useRef(false);
-  const ytNative = immersive && stream?.source.type === "youtube";
-
-  useEffect(() => {
-    if (nativeYoutube.current === ytNative) return;
-    nativeYoutube.current = ytNative;
-    const existing = adapters.current.youtube;
-    if (!existing) return;
-    existing.destroy();
-    delete adapters.current.youtube;
-    mem.current.loadedId = null;
-    patch({ loading: true });
-  }, [ytNative, patch]);
 
   const resetTwitch = useCallback(() => {
     const existing = adapters.current.twitch;
@@ -396,6 +390,9 @@ export function StreamPlayer({
   const syncable = Boolean(stream && !(stream.source.type === "twitch" && stream.source.isLive));
   const canControl = Boolean(stream && syncable && canControlStream(stream));
   const isTwitch = stream?.source.type === "twitch";
+  const ytNative = Boolean(stream?.source.type === "youtube" && (activeAdapter as YouTubeAdapter | undefined)?.native);
+  const overlayControls = !isTwitch && !ytNative && (fullscreen || compactScreen);
+  const hideBar = phoneLand && !fullscreen && (isTwitch || ytNative);
   const showControls = controlsShown || !ui.playing || ui.blocked;
 
   function togglePlay() {
@@ -448,7 +445,7 @@ export function StreamPlayer({
     activeAdapter?.play();
   }
 
-  const showBar = !(isTwitch && !syncable) || ui.qualityCount > 0 || appleAirPlay;
+  const showBar = (!(isTwitch && !syncable) || ui.qualityCount > 0 || appleAirPlay) && !hideBar;
 
   const twitchNote =
     stream && isTwitch
@@ -463,10 +460,66 @@ export function StreamPlayer({
               : null
       : null;
 
+  function seekBy(delta: number) {
+    if (!stream || !canControl || stream.playback.position === null) return;
+    const base = expectedPosition(stream.playback, clock.now()) ?? ui.time;
+    const duration = ui.duration > 0 ? ui.duration : Infinity;
+    send({ type: "stream.control", streamId: stream.id, action: "seek", position: Math.min(duration, Math.max(0, base + delta)) });
+  }
+
+  function handleTouchTap(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== "touch") return;
+    touchAt.current = Date.now();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width;
+    const zone = x < 0.33 ? "left" : x > 0.67 ? "right" : "center";
+    const now = Date.now();
+    const double = now - lastTap.current.time < 350 && lastTap.current.zone === zone;
+    lastTap.current = { time: double ? 0 : now, zone };
+    if (!double) {
+      revealControls();
+      return;
+    }
+    if (zone === "center") {
+      onFullscreen();
+      return;
+    }
+    if (!canControl) return;
+    seekBy(zone === "left" ? -10 : 10);
+    setRipple({ zone, key: now });
+    setTimeout(() => setRipple((current) => (current?.key === now ? null : current)), 650);
+  }
+
+  const shortcuts = useRef<(event: KeyboardEvent) => void>(() => {});
+  useEffect(() => {
+    shortcuts.current = (event) => {
+      if (bare || !stream || !visible || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (isTypingTarget(target?.tagName, Boolean(target?.isContentEditable))) return;
+      if (target?.closest("[role=dialog],[role=slider],input,select,button,a")) return;
+      const key = event.key.toLowerCase();
+      if (key === "f") onFullscreen();
+      else if (key === "m") setMuted((value) => !value);
+      else if (canControl && (key === " " || key === "k")) togglePlay();
+      else if (canControl && key === "arrowleft") seekBy(-5);
+      else if (canControl && key === "arrowright") seekBy(5);
+      else if (canControl && key === "j") seekBy(-10);
+      else if (canControl && key === "l") seekBy(10);
+      else return;
+      event.preventDefault();
+      revealControls();
+    };
+  });
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => shortcuts.current(event);
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   const controls = stream && (
           <PlayerControls
-      variant={fullscreen && !isTwitch && !ytNative ? "overlay" : "bar"}
-      visible={fullscreen && !isTwitch && !ytNative ? showControls : true}
+      variant={overlayControls ? "overlay" : "bar"}
+      visible={overlayControls ? showControls : true}
       playing={ui.playing}
       time={ui.time}
       duration={ui.duration}
@@ -485,6 +538,7 @@ export function StreamPlayer({
       }}
       onMute={() => setMuted((value) => !value)}
       onFullscreen={onFullscreen}
+      hideVolume={!hasElementFullscreen()}
       onResync={resync}
       onGoLive={goLive}
       canFullscreen={canFullscreen}
@@ -519,10 +573,28 @@ export function StreamPlayer({
         <>
           {!isTwitch && (
             <>
-          <div className="absolute inset-0 z-10" onClick={revealControls} />
+          {!ytNative && (
+            <div
+              className="absolute inset-0 z-10 touch-manipulation select-none"
+              onClick={revealControls}
+              onDoubleClick={() => {
+                if (Date.now() - touchAt.current > 800) onFullscreen();
+              }}
+              onPointerUp={handleTouchTap}
+            >
+              {ripple && (
+                <span
+                  key={ripple.key}
+                  className={`animate-fade pointer-events-none absolute top-1/2 flex size-20 -translate-y-1/2 items-center justify-center rounded-full bg-white/20 text-sm font-semibold ${ripple.zone === "left" ? "left-[12%]" : "right-[12%]"}`}
+                >
+                  {ripple.zone === "left" ? "−10s" : "+10s"}
+                </span>
+              )}
+            </div>
+          )}
 
           {ui.loading && !ui.blocked && !ui.error && (
-            <div className="animate-fade absolute inset-0 z-10 flex items-center justify-center bg-black">
+            <div className="animate-fade pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black">
               <StreamArt stream={stream} className="absolute inset-0 size-full opacity-40 blur-sm" />
               <span className="relative size-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
             </div>
@@ -577,8 +649,16 @@ export function StreamPlayer({
           )}
 
           {!bare &&
-            (fullscreen && !isTwitch && !ytNative ? (
+            (overlayControls ? (
               controls
+            ) : ytNative && fullscreen ? (
+              <button
+                onClick={onFullscreen}
+                aria-label="Exit fullscreen"
+                className="material absolute top-[max(0.75rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] z-20 flex size-11 items-center justify-center rounded-full text-xl transition active:scale-95"
+              >
+                <FullscreenIcon />
+              </button>
             ) : controlsSlot ? (
               createPortal(
                 <>

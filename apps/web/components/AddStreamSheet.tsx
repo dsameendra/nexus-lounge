@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { parseMediaUrl, streamKey } from "@nexus/shared";
-import { CheckIcon, LinkIcon } from "./Icons";
+import { parseMediaUrl, parsePlaylistId, streamKey } from "@nexus/shared";
+import { CheckIcon, LinkIcon, PlaylistIcon } from "./Icons";
 import { useRoom } from "./RoomProvider";
 import { Sheet } from "./Sheet";
 
@@ -11,6 +11,7 @@ export function AddStreamSheet({ onClose }: { onClose: () => void }) {
   const [value, setValue] = useState("");
   const result = useMemo(() => (value.trim() ? parseMediaUrl(value) : null), [value]);
   const source = result?.ok ? result.source : null;
+  const listId = useMemo(() => parsePlaylistId(value), [value]);
 
   function add(mode: "library" | "everyone" | "me") {
     if (!source) return;
@@ -24,6 +25,12 @@ export function AddStreamSheet({ onClose }: { onClose: () => void }) {
     onClose();
   }
 
+  function addPlaylist() {
+    if (!listId) return;
+    send({ type: "playlist.add", listId });
+    onClose();
+  }
+
   const primary = isController ? "everyone" : "me";
   const label = source ? (source.type === "youtube" ? (source.isLive ? "YouTube live" : "YouTube video") : source.isLive ? `Twitch channel · ${source.id}` : "Twitch broadcast") : null;
 
@@ -32,7 +39,8 @@ export function AddStreamSheet({ onClose }: { onClose: () => void }) {
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          add(primary);
+          if (listId && !source) addPlaylist();
+          else add(primary);
         }}
         className="space-y-4"
       >
@@ -52,16 +60,31 @@ export function AddStreamSheet({ onClose }: { onClose: () => void }) {
         </label>
 
         <div className="min-h-6 text-sm">
-          {result && !result.ok && <p className="text-danger">{result.reason}</p>}
-          {label && (
+          {result && !result.ok && !listId && <p className="text-danger">{result.reason}</p>}
+          {listId && (
+            <p className="flex items-center gap-2 text-live">
+              <PlaylistIcon /> YouTube playlist{source ? " (this link also has a single video)" : ""}
+            </p>
+          )}
+          {label && !listId && (
             <p className="flex items-center gap-2 text-live">
               <CheckIcon /> {label}
             </p>
           )}
-          {!result && <p className="text-label-2">Videos, past broadcasts, live streams and channels all work.</p>}
+          {!result && <p className="text-label-2">Videos, playlists, past broadcasts, live streams and channels all work.</p>}
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row-reverse">
+        {listId && (
+          <button
+            type="button"
+            onClick={addPlaylist}
+            className="h-12 w-full rounded-xl bg-accent px-4 font-semibold transition hover:brightness-110 active:scale-[0.99]"
+          >
+            Add playlist
+          </button>
+        )}
+
+        <div className={`flex flex-col gap-2 sm:flex-row-reverse ${listId && !source ? "hidden" : ""}`}>
           <button
             type="submit"
             disabled={!source}

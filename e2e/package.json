@@ -1,0 +1,12 @@
+{
+  "name": "nexus-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Browser end-to-end suites. Not part of the pnpm workspace; run them against a running stack.",
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.64.1"
+  }
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { isTypingTarget } from "@nexus/shared";
 import { useChat, useParticipants } from "@livekit/components-react";
 import { AddStreamSheet } from "./AddStreamSheet";
@@ -16,18 +16,20 @@ import { Segmented } from "./Segmented";
 import { Stage } from "./Stage";
 import { StreamLibrary } from "./StreamLibrary";
 import { useEffectiveSource } from "./useEffectiveSource";
-import { useMediaQuery } from "./useMediaQuery";
+import { PHONE_LANDSCAPE, useMediaQuery } from "./useMediaQuery";
 import { useWakeLock } from "./useWakeLock";
 
 type Tab = "chat" | "streams" | "people";
 
 const PANEL_KEY = "nexus-panel-open";
+const LAND_PANEL_KEY = "nexus-panel-open-landscape";
 
-function loadPanelOpen() {
+function loadPanelOpen(key: string, fallback: boolean) {
   try {
-    return localStorage.getItem(PANEL_KEY) !== "0";
+    const value = localStorage.getItem(key);
+    return value === null ? fallback : value === "1";
   } catch {
-    return true;
+    return fallback;
   }
 }
 
@@ -69,7 +71,10 @@ export function RoomView({
   const { effectiveId } = useEffectiveSource();
   const desktop = useMediaQuery("(min-width: 1024px)");
   const [tab, setTab] = useState<Tab>("chat");
-  const [panelOpen, setPanelOpen] = useState(loadPanelOpen);
+  const landscapePhone = useMediaQuery(PHONE_LANDSCAPE);
+  const [deskOpen, setDeskOpen] = useState(() => loadPanelOpen(PANEL_KEY, true));
+  const [landOpen, setLandOpen] = useState(() => loadPanelOpen(LAND_PANEL_KEY, false));
+  const panelOpen = landscapePhone ? landOpen : deskOpen;
   const [adding, setAdding] = useState(false);
   const { chatMessages } = useChat();
   const participantCount = useParticipants().length;
@@ -93,14 +98,16 @@ export function RoomView({
     return () => clearTimeout(id);
   }, [lastError]);
 
-  function togglePanel() {
-    setPanelOpen((open) => {
+  const togglePanel = useCallback(() => {
+    const phone = window.matchMedia(PHONE_LANDSCAPE).matches;
+    const [key, set] = phone ? ([LAND_PANEL_KEY, setLandOpen] as const) : ([PANEL_KEY, setDeskOpen] as const);
+    set((open) => {
       try {
-        localStorage.setItem(PANEL_KEY, open ? "0" : "1");
+        localStorage.setItem(key, open ? "0" : "1");
       } catch {}
       return !open;
     });
-  }
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -112,10 +119,10 @@ export function RoomView({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [togglePanel]);
 
   const sideTab = tab === "people" ? "people" : "chat";
-  const collapsed = desktop && !panelOpen;
+  const collapsed = (desktop || landscapePhone) && !panelOpen;
   const chatVisible = tab === "chat" && !collapsed;
   const unread = chatVisible ? 0 : chatMessages.slice(seenChat).filter((message) => !message.from?.isLocal).length;
 
@@ -126,7 +133,7 @@ export function RoomView({
 
   return (
     <div
-      className="relative flex flex-col overflow-hidden pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]"
+      className="relative flex flex-col overflow-clip pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]"
       style={{ height: "var(--app-height, 100dvh)", top: "var(--app-top, 0px)" }}
     >
       <RoomHeader panelOpen={panelOpen} onTogglePanel={togglePanel} unread={unread} deafened={deafened} onDeafenedChange={onDeafenedChange} onLeave={onLeave} />
@@ -139,8 +146,8 @@ export function RoomView({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col max-lg:landscape:flex-row lg:flex-row">
-        <main className="scroll-thin flex shrink-0 flex-col max-lg:landscape:min-h-0 max-lg:landscape:flex-1 max-lg:landscape:shrink max-lg:landscape:overflow-y-auto lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:p-6 lg:pb-0">
+      <div className="flex min-h-0 flex-1 flex-col pl:flex-row lg:flex-row">
+        <main className="scroll-thin flex shrink-0 flex-col pl:min-h-0 pl:flex-1 pl:shrink pl:overflow-y-auto lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:p-6 lg:pb-0">
           <div className="w-full lg:mx-auto lg:max-w-[max(24rem,calc((100dvh-15rem)*16/9))]">
             <Stage onAdd={openAdd} />
             <div className="hidden lg:block">
@@ -152,12 +159,12 @@ export function RoomView({
         <aside
           inert={collapsed}
           aria-hidden={collapsed}
-          className={`flex min-h-0 flex-1 flex-col overflow-hidden border-line bg-bg transition-[width,opacity] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] max-lg:landscape:w-72 max-lg:landscape:flex-none max-lg:landscape:border-l lg:flex-none lg:border-l ${
-            panelOpen ? "lg:w-[22rem] xl:w-96" : "lg:w-0 lg:border-l-0 lg:opacity-0"
+          className={`flex min-h-0 flex-1 flex-col overflow-clip border-line bg-bg transition-[width,opacity] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] pl:flex-none pl:border-l lg:flex-none lg:border-l ${
+            panelOpen ? "pl:w-72 lg:w-[22rem] xl:w-96" : "pl:w-0 pl:border-l-0 pl:opacity-0 lg:w-0 lg:border-l-0 lg:opacity-0"
           }`}
         >
-          <div className="flex min-h-0 flex-1 flex-col lg:w-[22rem] xl:w-96">
-            <div className="p-3 lg:hidden">
+          <div className="flex min-h-0 flex-1 flex-col pl:w-72 lg:w-[22rem] xl:w-96">
+            <div className="p-3 pl:p-2 lg:hidden">
               <Segmented
                 value={tab}
                 onChange={setTab}

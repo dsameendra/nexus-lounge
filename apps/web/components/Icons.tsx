@@ -205,3 +205,9 @@ export const SidebarIcon = (p: P) => (
     <path d="M15 4.5v15" />
   </Icon>
 );
+export const PlaylistIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M4 7h11M4 12h11M4 17h6" />
+    <path d="M18 14.5v5l4-2.5-4-2.5Z" fill="currentColor" />
+  </Icon>
+);

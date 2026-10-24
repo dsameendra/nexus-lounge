@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { serverMessageSchema, type ClientMessage, type ReactionEmoji, type RoomState } from "@nexus/shared";
+import { serverMessageSchema, type ClientMessage, type PlaylistItem, type ReactionEmoji, type RoomState } from "@nexus/shared";
 import { ClockSync } from "./clock";
 
 export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "failed" | "kicked";
@@ -18,6 +18,8 @@ export interface RoomConnection {
   clock: ClockSync;
   send: (message: ClientMessage) => void;
   lastError: { message: string; at: number } | null;
+  playlistItems: Record<string, PlaylistItem[]>;
+  openPlaylist: (listId: string) => void;
   onReaction: (listener: (reaction: ReactionEvent) => void) => () => void;
 }
 
@@ -28,6 +30,7 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
   const [state, setState] = useState<RoomState | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [lastError, setLastError] = useState<RoomConnection["lastError"]>(null);
+  const [playlistItems, setPlaylistItems] = useState<Record<string, PlaylistItem[]>>({});
   const clockRef = useRef<ClockSync>(new ClockSync());
   const socketRef = useRef<WebSocket | null>(null);
   const reactionListeners = useRef(new Set<(reaction: ReactionEvent) => void>());
@@ -43,6 +46,13 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
     const socket = socketRef.current;
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
   }, []);
+
+  const openPlaylist = useCallback(
+    (listId: string) => {
+      send({ type: "playlist.open", listId });
+    },
+    [send],
+  );
 
   useEffect(() => {
     let closed = false;
@@ -82,6 +92,7 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
           setState(message.state);
           setStatus("open");
         }
+        if (message.type === "playlist.items") setPlaylistItems((previous) => ({ ...previous, [message.listId]: message.items }));
         if (message.type === "reaction") reactionListeners.current.forEach((listener) => listener(message));
         if (message.type === "kicked") {
           closed = true;
@@ -116,5 +127,5 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
     };
   }, [roomId, ticket, wsUrl]);
 
-  return { state, status, clock: clockRef.current, send, lastError, onReaction };
+  return { state, status, clock: clockRef.current, send, lastError, playlistItems, openPlaylist, onReaction };
 }

@@ -10,6 +10,7 @@ import { BroadcastIcon, FilmIcon, PlusIcon, SyncIcon } from "./Icons";
 import { useRoom } from "./RoomProvider";
 import { StreamPlayer } from "./StreamPlayer";
 import { shareName, useEffectiveSource } from "./useEffectiveSource";
+import { hasElementFullscreen } from "./useMediaQuery";
 import { useStageFullscreen } from "./useStageFullscreen";
 import { WatchArea } from "./WatchArea";
 
@@ -21,6 +22,19 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
   const { active: fullscreen, immersive, toggle: toggleFullscreen } = useStageFullscreen(boxRef);
 
   const showingScreen = Boolean(share);
+
+  function toggleStage() {
+    if (share && !fullscreen && !hasElementFullscreen()) {
+      const video = boxRef.current?.querySelector("video") as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+      if (video?.webkitEnterFullscreen) {
+        try {
+          video.webkitEnterFullscreen();
+          return;
+        } catch {}
+      }
+    }
+    toggleFullscreen();
+  }
   const twitchLive = stream?.source.type === "twitch" && stream.source.isLive;
   const twitchActive = stream?.source.type === "twitch" && !showingScreen;
   const reactionsOn = state.room.settings.reactions;
@@ -36,7 +50,7 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
         ref={boxRef}
         className={
           immersive
-            ? "fixed inset-0 z-[70] flex flex-col bg-black pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]"
+            ? "fixed inset-0 z-[70] flex flex-col bg-black"
             : fullscreen
               ? "flex h-full w-full flex-col bg-black"
               : "bg-black lg:bg-transparent"
@@ -46,22 +60,21 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
         className={`relative w-full overflow-hidden bg-black ${
           fullscreen
             ? "min-h-0 flex-1"
-            : "aspect-video max-lg:landscape:aspect-auto max-lg:landscape:h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-6rem)] lg:rounded-2xl"
+            : "aspect-video pl:aspect-auto pl:h-[calc(var(--app-height,100dvh)-2.75rem-env(safe-area-inset-top))] lg:rounded-2xl"
         }`}
       >
         <StreamPlayer
           stream={stream}
           visible={Boolean(stream) && !showingScreen}
-          onFullscreen={toggleFullscreen}
+          onFullscreen={toggleStage}
           fullscreen={fullscreen}
-          immersive={immersive}
           controlsSlot={slot}
         />
 
         {reactionsOn && !twitchActive && effectiveId && <FloatingReactions />}
 
         {share && (
-          <div className="absolute inset-0 z-10">
+          <div className="absolute inset-0 z-10" onDoubleClick={toggleStage}>
             <WatchArea share={share} />
           </div>
         )}
@@ -88,9 +101,9 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
           </div>
         )}
       </div>
-      <div ref={setSlot} />
+      <div ref={setSlot} className={immersive ? "pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]" : undefined} />
       {reactionsOn && twitchActive && <ReactionStrip />}
-      {share && slot && createPortal(<ScreenBar share={share} container={boxRef.current} onFullscreen={toggleFullscreen} />, slot)}
+      {share && slot && createPortal(<ScreenBar share={share} container={boxRef.current} onFullscreen={toggleStage} />, slot)}
       </div>
 
       <div className="space-y-3 px-4 pt-3 lg:px-0">
@@ -102,7 +115,7 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
                 {share && <Pill tone="live">Live</Pill>}
                 {featuredId === effectiveId && <Pill tone="accent">On air</Pill>}
               </div>
-              <h1 className="line-clamp-2 text-base leading-snug font-semibold sm:text-lg">{heading}</h1>
+              <h1 className="line-clamp-1 text-base leading-snug font-semibold sm:line-clamp-2 sm:text-lg">{heading}</h1>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {effectiveId && reactionsOn && (

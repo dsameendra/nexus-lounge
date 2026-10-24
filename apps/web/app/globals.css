@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+@custom-variant pl (@media (orientation: landscape) and (max-height: 500px) and (max-width: 1023px));
+@custom-variant compact {
+  @media (max-width: 639px) {
+    @slot;
+  }
+  @media (orientation: landscape) and (max-height: 500px) and (max-width: 1023px) {
+    @slot;
+  }
+}
+
 @theme {
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;

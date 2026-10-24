@@ -49,17 +49,17 @@ export function RoomHeader({
   }
 
   return (
-    <header className="material z-30 shrink-0 border-b border-line pt-[env(safe-area-inset-top)] pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))]">
-      <div className="flex h-14 items-center justify-between">
+    <header className="material z-30 shrink-0 border-b border-line pt-[env(safe-area-inset-top)] max-lg:px-4 lg:px-4 pl:px-3">
+      <div className="flex h-14 items-center justify-between pl:h-11">
       <div className="flex min-w-0 items-center gap-3">
         <Logo size={28} />
         <span className="max-w-[40vw] truncate text-[15px] font-semibold tracking-tight">{title}</span>
-        <span className="hidden rounded-md bg-white/10 px-2 py-0.5 font-mono text-xs text-label-2 sm:inline-block">{roomId}</span>
+        <span className="hidden rounded-md bg-white/10 px-2 py-0.5 font-mono text-xs text-label-2 sm:inline-block pl:hidden">{roomId}</span>
         {status === "reconnecting" && <span className="text-xs text-warn">Reconnecting…</span>}
       </div>
       <div className="flex items-center gap-2">
         {!panelOpen && (
-          <div className="mr-1 hidden lg:block">
+          <div className="mr-1 hidden lg:block pl:block">
             <VoiceToolbar deafened={deafened} onDeafenedChange={onDeafenedChange} onLeave={onLeave} />
           </div>
         )}
@@ -67,7 +67,7 @@ export function RoomHeader({
           <button
             onClick={() => setSettingsOpen(true)}
             aria-label="Room settings"
-            className="flex size-9 items-center justify-center rounded-full bg-white/10 text-lg transition hover:bg-white/15 active:scale-95"
+            className="flex size-9 items-center justify-center rounded-full bg-white/10 text-lg pl:size-8 transition hover:bg-white/15 active:scale-95"
           >
             <GearIcon />
           </button>
@@ -75,23 +75,23 @@ export function RoomHeader({
         <button
           onClick={() => setTvOpen(true)}
           aria-label="TV mode"
-          className="flex h-9 items-center gap-2 rounded-full bg-white/10 px-3.5 text-sm font-medium transition hover:bg-white/15 active:scale-95"
+          className="flex h-9 items-center gap-2 rounded-full bg-white/10 px-3.5 text-sm pl:h-8 pl:px-3 font-medium transition hover:bg-white/15 active:scale-95"
         >
-          <TvIcon /> <span className="hidden sm:inline">TV</span>
+          <TvIcon /> <span className="hidden sm:inline pl:sr-only">TV</span>
         </button>
         <button
           onClick={copyInvite}
-          className="flex h-9 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-medium transition hover:bg-white/15 active:scale-95"
+          className="flex h-9 items-center gap-2 rounded-full bg-white/10 px-4 text-sm pl:h-8 pl:px-3 font-medium transition hover:bg-white/15 active:scale-95"
         >
           {copied ? <CheckIcon className="text-live" /> : <LinkIcon />}
-          {copied ? "Link copied" : "Invite"}
+          <span className="pl:sr-only">{copied ? "Link copied" : "Invite"}</span>
         </button>
         <button
           onClick={onTogglePanel}
           aria-label={panelOpen ? "Hide side panel" : "Show side panel"}
           aria-pressed={!panelOpen}
           title={`${panelOpen ? "Hide" : "Show"} side panel (\\)`}
-          className="relative hidden size-9 items-center justify-center rounded-full bg-white/10 text-lg transition hover:bg-white/15 active:scale-95 lg:flex"
+          className="relative hidden size-9 items-center justify-center rounded-full bg-white/10 text-lg transition hover:bg-white/15 active:scale-95 pl:size-8 lg:flex pl:flex"
         >
           <SidebarIcon />
           {!panelOpen && unread > 0 && (

@@ -84,6 +84,30 @@ export const streamSchema = z.object({
 });
 export type Stream = z.infer<typeof streamSchema>;
 
+export const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
+
+export const playlistItemSchema = z.object({ id: z.string().regex(YOUTUBE_VIDEO_ID), title: z.string().max(120) });
+export type PlaylistItem = z.infer<typeof playlistItemSchema>;
+
+export const playlistSummarySchema = z.object({
+  id: z.string().min(2).max(64),
+  title: z.string().max(120),
+  count: z.number().int().min(0),
+  addedBy: z.object({ id: z.string(), name: z.string() }),
+  addedAt: z.number(),
+});
+export type PlaylistSummary = z.infer<typeof playlistSummarySchema>;
+
+export const queueItemSchema = z.object({
+  id: z.string(),
+  source: mediaSourceSchema,
+  title: z.string().max(140),
+  addedBy: z.object({ id: z.string(), name: z.string() }),
+});
+export type QueueItem = z.infer<typeof queueItemSchema>;
+
+export const LIMITS = { queue: 100, playlists: 5, playlistItems: 100 } as const;
+
 export const memberSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -108,6 +132,8 @@ export type Restriction = z.infer<typeof restrictionSchema>;
 export const roomStateSchema = z.object({
   room: roomInfoSchema,
   streams: z.array(streamSchema),
+  queue: z.array(queueItemSchema),
+  playlists: z.array(playlistSummarySchema),
   featuredId: z.string().nullable(),
   members: z.array(memberSchema),
   restrictions: z.record(z.string(), restrictionSchema),

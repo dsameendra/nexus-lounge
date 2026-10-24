@@ -13,7 +13,7 @@ function send(socket: WebSocket, message: ServerMessage) {
   socket.send(JSON.stringify(message));
 }
 
-function handle(roomId: string, user: SessionPayload, message: Exclude<ClientMessage, { type: "join" | "ping" }>) {
+function handle(roomId: string, user: SessionPayload, message: Exclude<ClientMessage, { type: "join" | "ping" | "playlist.open" }>) {
   switch (message.type) {
     case "stream.add":
       return rooms.addStream(roomId, user, message.source);
@@ -52,6 +52,22 @@ function handle(roomId: string, user: SessionPayload, message: Exclude<ClientMes
       return rooms.moveStream(roomId, user, message.streamId, message.direction);
     case "queue.advance":
       return rooms.advanceQueue(roomId, user, message.fromStreamId);
+    case "playlist.add":
+      return rooms.addPlaylist(roomId, user, message.listId);
+    case "playlist.remove":
+      return rooms.removePlaylist(roomId, user, message.listId);
+    case "queue.addPlaylist":
+      return rooms.queuePlaylist(roomId, user, message.listId, message.videoIds, message.position);
+    case "queue.addStream":
+      return rooms.queueStream(roomId, user, message.streamId, message.position);
+    case "queue.remove":
+      return rooms.removeQueued(roomId, user, message.queueId);
+    case "queue.move":
+      return rooms.moveQueued(roomId, user, message.queueId, message.direction);
+    case "queue.clear":
+      return rooms.clearQueue(roomId, user);
+    case "queue.playNow":
+      return rooms.playQueuedNow(roomId, user, message.queueId);
     case "reaction.send":
       return rooms.sendReaction(roomId, user, message.emoji);
     case "presence.voice":
@@ -111,8 +127,15 @@ export function attachWebSocket(server: Server) {
       }
 
       if (!session) return send(socket, { type: "error", message: "Join a room first" });
-      const result = handle(session.roomId, session.user, message);
-      if (!result.ok) send(socket, { type: "error", message: result.message });
+      if (message.type === "playlist.open") {
+        const items = rooms.isMember(session.roomId, session.user.sub) ? rooms.playlistItems(session.roomId, message.listId) : null;
+        if (items) send(socket, { type: "playlist.items", listId: message.listId, items });
+        return;
+      }
+      const roomId = session.roomId;
+      void Promise.resolve(handle(roomId, session.user, message)).then((result) => {
+        if (!result.ok && socket.readyState === socket.OPEN) send(socket, { type: "error", message: result.message });
+      });
     });
 
     socket.on("close", () => {

@@ -199,3 +199,16 @@ test("room codes can be typed, pasted or taken from an invite link", () => {
   assert.equal(parseRoomCode(""), null);
   assert.equal(parseRoomCode("hello world!"), null);
 });
+
+test("playlist links: only real playlists, on YouTube", async () => {
+  const { parsePlaylistId, isQueueable } = await import("../src/index.ts");
+  assert.equal(parsePlaylistId("https://www.youtube.com/playlist?list=PL6B3937A5D230E335"), "PL6B3937A5D230E335");
+  assert.equal(parsePlaylistId("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL6B3937A5D230E335&index=2"), "PL6B3937A5D230E335");
+  assert.equal(parsePlaylistId("music.youtube.com/playlist?list=OLAK5uy_abcdefghijklmnop"), "OLAK5uy_abcdefghijklmnop");
+  assert.equal(parsePlaylistId("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ"), null, "auto-generated mixes are not playlists");
+  assert.equal(parsePlaylistId("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), null);
+  assert.equal(parsePlaylistId("https://example.com/?list=PL6B3937A5D230E335"), null);
+  assert.equal(parsePlaylistId("nonsense"), null);
+  assert.equal(isQueueable({ type: "youtube", id: "dQw4w9WgXcQ", isLive: false }), true);
+  assert.equal(isQueueable({ type: "twitch", id: "someone", isLive: true }), false);
+});

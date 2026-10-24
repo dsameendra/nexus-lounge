@@ -59,3 +59,24 @@ export function parseMediaUrl(input: string): ParseResult {
 function youtube(id: string, isLive: boolean): ParseResult {
   return { ok: true, source: { type: "youtube", id, isLive } };
 }
+
+export const PLAYLIST_ID = /^(PL|OLAK5uy_|UU|FL)[A-Za-z0-9_-]{10,60}$/;
+
+export function parsePlaylistId(input: string): string | null {
+  const text = input.trim();
+  if (!text) return null;
+  let url: URL;
+  try {
+    url = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
+  } catch {
+    return null;
+  }
+  const host = url.hostname.toLowerCase().replace(/^(www\.|m\.|music\.)/, "");
+  if (host !== "youtube.com" && host !== "youtube-nocookie.com" && host !== "youtu.be") return null;
+  const list = url.searchParams.get("list");
+  return list && PLAYLIST_ID.test(list) ? list : null;
+}
+
+export function isQueueable(source: MediaSource) {
+  return !source.isLive;
+}

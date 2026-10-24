@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { MoreIcon } from "./Icons";
+import { Popover } from "./Popover";
 
 export interface MenuItem {
   label: string;
@@ -10,58 +11,58 @@ export interface MenuItem {
   onSelect: () => void;
 }
 
-export function MenuButton({ items, label = "More actions" }: { items: MenuItem[]; label?: string }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+const MENU_WIDTH = 224;
 
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: Event) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const escape = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false);
-    document.addEventListener("pointerdown", close);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("pointerdown", close);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [open]);
+export function MenuButton({ items, label = "More actions" }: { items: MenuItem[]; label?: string }) {
+  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const closedAt = useRef(0);
 
   if (items.length === 0) return null;
 
+  const dismiss = () => {
+    closedAt.current = Date.now();
+    setAnchor(null);
+  };
+
   return (
-    <div ref={ref} className="relative">
+    <>
       <button
+        ref={trigger}
         aria-label={label}
-        aria-expanded={open}
+        aria-expanded={anchor !== null}
+        aria-haspopup="menu"
         onClick={(event) => {
           event.stopPropagation();
-          setOpen((value) => !value);
+          if (anchor || Date.now() - closedAt.current < 250) return;
+          const box = event.currentTarget.getBoundingClientRect();
+          setAnchor({ x: box.right - MENU_WIDTH, y: box.bottom + 4 });
         }}
         className="flex size-9 items-center justify-center rounded-full text-lg text-label-2 transition hover:bg-white/10 hover:text-white"
       >
         <MoreIcon />
       </button>
-      {open && (
-        <div role="menu" className="material animate-fade absolute top-10 right-0 z-40 min-w-48 overflow-hidden rounded-xl border border-line p-1 shadow-2xl">
-          {items.map((item) => (
-            <button
-              key={item.label}
-              role="menuitem"
-              onClick={(event) => {
-                event.stopPropagation();
-                setOpen(false);
-                item.onSelect();
-              }}
-              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-white/10 ${item.danger ? "text-danger" : ""}`}
-            >
-              <span className="text-base">{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
-        </div>
+      {anchor && (
+        <Popover x={anchor.x} y={anchor.y} label={label} onClose={dismiss} width="w-56" anchor={trigger.current} closeOnBlur={false}>
+          <div className="p-1">
+            {items.map((item) => (
+              <button
+                key={item.label}
+                role="menuitem"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setAnchor(null);
+                  item.onSelect();
+                }}
+                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-white/10 ${item.danger ? "text-danger" : ""}`}
+              >
+                <span className="text-base">{item.icon}</span>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </Popover>
       )}
-    </div>
+    </>
   );
 }

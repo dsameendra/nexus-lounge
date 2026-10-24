@@ -1,4 +1,4 @@
-const VERSION = "v3";
+const VERSION = "v4";
 const SHELL = `nexus-shell-${VERSION}`;
 const ASSETS = `nexus-assets-${VERSION}`;
 const PRECACHE = ["/offline.html", "/icons/192", "/icons/512", "/icons/apple", "/icons/svg"];

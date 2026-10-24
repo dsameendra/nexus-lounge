@@ -104,7 +104,7 @@ export class YouTubeAdapter extends Emitter implements PlayerAdapter {
 
   private host: HTMLElement;
 
-  private native: boolean;
+  readonly native: boolean;
 
   constructor(host: HTMLElement, native = false) {
     super();

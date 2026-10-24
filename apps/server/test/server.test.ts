@@ -494,6 +494,83 @@ test("queue: reorder, play next, auto-advance", async () => {
   [host, alice].forEach((client) => client.socket.close());
 });
 
+test("explicit queue: add, order, permissions, play now, auto-advance, no live streams", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const alice = await join(id, "alice");
+  const guest = await join(id, "guest-q", true, host);
+  const vid = (letter: string) => ({ type: "youtube", id: letter.repeat(11), isLive: false });
+  const key = (letter: string) => `youtube:${letter.repeat(11)}`;
+  const queued = () => host.state!.queue.map((item) => item.source.id[0]).join("");
+
+  for (const letter of "abcd") host.send({ type: "stream.add", source: vid(letter) });
+  await host.until(() => host.state!.streams.length === 4);
+  host.send({ type: "stream.add", source: { type: "twitch", id: "examplechannel", isLive: true } });
+  await host.until(() => host.state!.streams.length === 5);
+
+  host.send({ type: "queue.addStream", streamId: key("a") });
+  host.send({ type: "queue.addStream", streamId: key("b") });
+  host.send({ type: "queue.addStream", streamId: key("c"), position: "next" });
+  await host.until(() => queued() === "cab");
+
+  host.send({ type: "queue.addStream", streamId: "twitch:live:examplechannel" });
+  await host.until(() => host.errors.includes("Live streams can't be queued"));
+  assert.equal(queued(), "cab");
+
+  guest.send({ type: "queue.addStream", streamId: key("d") });
+  await guest.until(() => guest.errors.length > 0);
+  alice.send({ type: "queue.addStream", streamId: key("d") });
+  await host.until(() => queued() === "cabd");
+  const aliceItem = host.state!.queue[3]!;
+  assert.equal(aliceItem.addedBy.id, "alice");
+
+  alice.send({ type: "queue.move", queueId: aliceItem.id, direction: "top" });
+  await alice.until(() => alice.errors.some((message) => message.includes("reorder")));
+  alice.send({ type: "queue.remove", queueId: host.state!.queue[0]!.id });
+  await alice.until(() => alice.errors.some((message) => message.includes("remove")));
+  alice.send({ type: "queue.remove", queueId: aliceItem.id });
+  await host.until(() => queued() === "cab");
+  alice.send({ type: "queue.addStream", streamId: key("d") });
+  await host.until(() => queued() === "cabd");
+
+  host.send({ type: "queue.move", queueId: host.state!.queue[3]!.id, direction: "top" });
+  await host.until(() => queued() === "dcab");
+  host.send({ type: "queue.move", queueId: host.state!.queue[0]!.id, direction: "down" });
+  await host.until(() => queued() === "cdab");
+  host.send({ type: "queue.move", queueId: host.state!.queue[1]!.id, direction: "up" });
+  await host.until(() => queued() === "dcab");
+
+  host.send({ type: "queue.playNow", queueId: host.state!.queue[2]!.id });
+  await host.until(() => host.state!.featuredId === key("a"));
+  assert.equal(queued(), "dcb");
+  assert.equal(host.state!.streams.find((stream) => stream.id === key("a"))!.playback.playing, true);
+
+  host.send({ type: "queue.advance", fromStreamId: key("a") });
+  await host.until(() => host.state!.featuredId === key("d"));
+  assert.equal(queued(), "cb");
+
+  host.send({ type: "queue.clear" });
+  await host.until(() => host.state!.queue.length === 0);
+  host.send({ type: "queue.advance", fromStreamId: key("d") });
+  await host.until(() => host.state!.featuredId === "twitch:live:examplechannel"); // empty queue falls back to library order
+  [host, alice, guest].forEach((client) => client.socket.close());
+});
+
+test("playlists: rejected for guests and unknown lists, queue needs a loaded playlist", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const guest = await join(id, "guest-p", true, host);
+
+  guest.send({ type: "playlist.add", listId: "PLaaaaaaaaaaaaaaaa" });
+  await guest.until(() => guest.errors.some((message) => message.includes("Sign in")));
+  host.send({ type: "playlist.add", listId: "PLzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" });
+  await host.until(() => host.errors.some((message) => message.includes("Couldn't load that playlist")), 12000);
+  assert.equal(host.state!.playlists.length, 0);
+  host.send({ type: "queue.addPlaylist", listId: "PLnone" });
+  await host.until(() => host.errors.includes("Playlist not found"));
+  [host, guest].forEach((client) => client.socket.close());
+});
+
 test("reactions: broadcast, whitelist, rate limit, owner switch", async () => {
   const { id } = await createRoom("host");
   const host = await join(id, "host");

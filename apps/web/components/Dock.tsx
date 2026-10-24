@@ -39,15 +39,21 @@ export function useVoiceControls({ deafened, onDeafenedChange }: Pick<Props, "de
   const ptt = usePushToTalk();
   const micBeforeDeafen = useRef(false);
   const [shareError, setShareError] = useState(false);
+  const [micError, setMicError] = useState(false);
 
   useEffect(() => {
     if (serverMuted && isMicrophoneEnabled) void localParticipant.setMicrophoneEnabled(false);
   }, [serverMuted, isMicrophoneEnabled, localParticipant]);
 
-  function toggleMute() {
+  async function toggleMute() {
     playCue(isMicrophoneEnabled && !deafened ? "mute" : "unmute");
     if (deafened) onDeafenedChange(false);
-    void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
+    setMicError(false);
+    try {
+      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
+    } catch {
+      setMicError(true);
+    }
   }
 
   function toggleDeafen() {
@@ -96,7 +102,7 @@ export function useVoiceControls({ deafened, onDeafenedChange }: Pick<Props, "de
                 : { text: "Voice connected", tone: "text-live" };
 
   return {
-    self, ptt, speaking, status, shareError, showShare, shareAllowed, serverMuted, serverDeafened, deafened,
+    self, ptt, speaking, status, shareError, micError, showShare, shareAllowed, serverMuted, serverDeafened, deafened,
     micOn: isMicrophoneEnabled, sharing: isScreenShareEnabled, localParticipant,
     toggleMute, toggleDeafen, toggleShare,
   };
@@ -135,12 +141,12 @@ function ActionButton({
       disabled={disabled}
       aria-label={title ?? label}
       title={title ?? label}
-      className={`flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl text-[11px] font-medium transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 max-sm:h-12 max-lg:landscape:h-11 ${TONES[tone]} ${
-        ring ? "max-sm:ring-2 max-sm:ring-live" : ""
+      className={`flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl text-[11px] font-medium transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 compact:h-12 ${TONES[tone]} ${
+        ring ? "compact:ring-2 compact:ring-live" : ""
       }`}
     >
       <span className="text-[22px] leading-none">{children}</span>
-      <span className="max-w-full truncate px-1 max-sm:sr-only">{label}</span>
+      <span className="max-w-full truncate px-1 compact:sr-only">{label}</span>
     </button>
   );
 }
@@ -149,14 +155,14 @@ export function VoicePanel(props: Props) {
   const voice = useVoiceControls(props);
   const { self, ptt, status, speaking, showShare, shareAllowed, serverMuted, serverDeafened, deafened, micOn, sharing } = voice;
   const [voiceSettings, setVoiceSettings] = useState(false);
-  const columns = showShare ? "grid-cols-4 max-sm:grid-cols-5" : "grid-cols-3 max-sm:grid-cols-4";
+  const columns = showShare ? "grid-cols-4 compact:grid-cols-5" : "grid-cols-3 compact:grid-cols-4";
 
   return (
-    <div className="border-t border-line bg-panel/70 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:pt-2 max-lg:landscape:pt-2">
+    <div className="border-t border-line bg-panel/70 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] compact:pt-2">
       <button
         onClick={() => setVoiceSettings(true)}
         aria-label="Voice settings"
-        className="-mx-1 flex w-[calc(100%+0.5rem)] items-center gap-3 rounded-xl p-1 text-left transition hover:bg-white/5 active:bg-white/10 max-sm:hidden max-lg:landscape:hidden"
+        className="-mx-1 flex w-[calc(100%+0.5rem)] items-center gap-3 rounded-xl p-1 text-left transition hover:bg-white/5 active:bg-white/10 compact:hidden"
       >
         <SpeakingRing speaking={speaking}>
           <Avatar name={self.name} image={self.image} className="size-10" />
@@ -170,7 +176,7 @@ export function VoicePanel(props: Props) {
         </span>
       </button>
 
-      <div className={`mt-3 grid gap-2 max-sm:mt-0 max-lg:landscape:mt-0 ${columns}`}>
+      <div className={`mt-3 grid gap-2 compact:mt-0 ${columns}`}>
         {ptt.enabled ? (
           <ActionButton
             label="Hold"
@@ -215,7 +221,7 @@ export function VoicePanel(props: Props) {
             <ScreenIcon />
           </ActionButton>
         )}
-        <span className="hidden max-sm:contents">
+        <span className="hidden compact:contents">
           <ActionButton label="Settings" title="Voice settings" onClick={() => setVoiceSettings(true)}>
             <GearIcon />
           </ActionButton>
@@ -225,7 +231,8 @@ export function VoicePanel(props: Props) {
         </ActionButton>
       </div>
       {voice.shareError && <p className="mt-2 text-xs text-danger">Couldn&apos;t start screen share.</p>}
-      {showShare && !shareAllowed && !sharing && <p className="mt-2 text-xs text-label-2 max-sm:hidden">Only controllers can share their screen in this room.</p>}
+      {voice.micError && <p role="alert" className="mt-2 text-xs text-danger">Microphone access is blocked. Allow it in your browser settings, then unmute again.</p>}
+      {showShare && !shareAllowed && !sharing && <p className="mt-2 text-xs text-label-2 compact:hidden">Only controllers can share their screen in this room.</p>}
       {voiceSettings && <VoiceSettingsSheet onClose={() => setVoiceSettings(false)} />}
     </div>
   );

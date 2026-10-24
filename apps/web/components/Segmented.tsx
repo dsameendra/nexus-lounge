@@ -24,7 +24,7 @@ export function Segmented<T extends string>({
           }`}
         >
           {option.icon}
-          {option.label}
+          <span className="pl:sr-only">{option.label}</span>
           {option.badge !== undefined && option.badge > 0 && (
             <span
               className={`min-w-5 rounded-full px-1.5 py-0.5 text-[11px] leading-none font-semibold tabular-nums ${

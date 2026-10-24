@@ -14,7 +14,11 @@ import { unlockAudio } from "@/lib/sounds";
 import { PushToTalkProvider } from "./PushToTalk";
 import { VoiceSettingsProvider } from "./VoiceSettings";
 
-const roomOptions: RoomOptions = { adaptiveStream: true, dynacast: true };
+const roomOptions: RoomOptions = {
+  adaptiveStream: true,
+  dynacast: true,
+  audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+};
 
 type State =
   | { status: "loading" }
@@ -38,7 +42,7 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
   const router = useRouter();
   const [state, setState] = useState<State>({ status: "loading" });
   const [joined, setJoined] = useState(false);
-  const [deafened, setDeafened] = useState(false);
+  const [deafened, setDeafened] = useState(true);
   const [voiceLost, setVoiceLost] = useState(false);
   const [voiceKey, setVoiceKey] = useState(0);
   const [passwordDraft, setPasswordDraft] = useState("");
@@ -162,7 +166,7 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
         <h1 className="text-xl font-semibold">Join room {roomId}</h1>
         <p className="mt-2 text-sm text-label-2">
           You'll join as {self.name}
-          {self.guest ? " (guest)" : ""}. Your browser will ask for microphone access.
+          {self.guest ? " (guest)" : ""}, muted and deafened. Unmute whenever you like; your browser only asks for the microphone then.
         </p>
         <div className="mt-6">
           <PrimaryButton
@@ -211,7 +215,7 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
         token={data.token}
         serverUrl={data.url}
         connect
-        audio={{ echoCancellation: true, noiseSuppression: true, autoGainControl: true }}
+        audio={false}
         video={false}
         options={roomOptions}
         onConnected={() => setVoiceLost(false)}
