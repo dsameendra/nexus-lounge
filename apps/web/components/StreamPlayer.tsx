@@ -15,6 +15,7 @@ import { COMPACT_SCREEN, PHONE_LANDSCAPE, hasElementFullscreen, useMediaQuery } 
 import { isTypingTarget } from "@nexus/shared";
 import { FullscreenIcon } from "./Icons";
 import { useVideoFit } from "./useVideoFit";
+import { useTvOutput } from "./useTvOutput";
 
 function sourceUrl(stream: Stream) {
   const { type, id, isLive } = stream.source;
@@ -92,6 +93,7 @@ export function StreamPlayer({
   const compactScreen = useMediaQuery(COMPACT_SCREEN);
   const phoneLand = useMediaQuery(PHONE_LANDSCAPE);
   const { fit, toggle: toggleFit } = useVideoFit();
+  const { mode: outputMode, localSound, setSound } = useTvOutput();
   const [ripple, setRipple] = useState<{ zone: "left" | "right"; key: number } | null>(null);
   const lastTap = useRef({ time: 0, zone: "" });
   const touchAt = useRef(0);
@@ -124,8 +126,9 @@ export function StreamPlayer({
   const [controlsShown, setControlsShown] = useState(true);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  const silenced = muted || !localSound;
   useEffect(() => {
-    latest.current = { stream, visible, volume, muted };
+    latest.current = { stream, visible, volume, muted: silenced };
     canControlRef.current = canControlStream;
   });
 
@@ -346,11 +349,23 @@ export function StreamPlayer({
   }, [ui.ended, ui.endedFor, stream, bare, isController, roomState.featuredId, roomState.room.settings.autoplayNext, send]);
 
   useEffect(() => {
-    for (const adapter of Object.values(adapters.current)) applyVolume(adapter, volume, muted);
+    for (const adapter of Object.values(adapters.current)) applyVolume(adapter, volume, silenced);
+  }, [volume, silenced]);
+
+  useEffect(() => {
     try {
       localStorage.setItem(VOLUME_KEY, JSON.stringify({ volume, muted }));
     } catch {}
   }, [volume, muted]);
+
+  function toggleMute() {
+    if (!localSound && outputMode === "both") {
+      setSound(true);
+      setMuted(false);
+      return;
+    }
+    setMuted((value) => !value);
+  }
 
   useEffect(() => {
     if (!visible || !stream) return;
@@ -503,7 +518,7 @@ export function StreamPlayer({
       if (target?.closest("[role=dialog],[role=slider],input,select,button,a")) return;
       const key = event.key.toLowerCase();
       if (key === "f") onFullscreen();
-      else if (key === "m") setMuted((value) => !value);
+      else if (key === "m") toggleMute();
       else if (canControl && (key === " " || key === "k")) togglePlay();
       else if (canControl && key === "arrowleft") seekBy(-5);
       else if (canControl && key === "arrowright") seekBy(5);
@@ -533,14 +548,15 @@ export function StreamPlayer({
       canSeek={canControl && stream.playback.position !== null}
       status={ui.status}
       volume={volume}
-      muted={muted}
+      muted={silenced}
       onPlayPause={togglePlay}
       onSeek={(seconds) => send({ type: "stream.control", streamId: stream.id, action: "seek", position: seconds })}
       onVolume={(value) => {
         setVolume(value <= SILENT_BELOW ? 0 : value);
         setMuted(false);
+        if (outputMode === "both") setSound(true);
       }}
-      onMute={() => setMuted((value) => !value)}
+      onMute={toggleMute}
       onFullscreen={onFullscreen}
       hideVolume={!hasElementFullscreen()}
       fit={fillable ? fit : undefined}
@@ -548,6 +564,7 @@ export function StreamPlayer({
       onResync={resync}
       onGoLive={goLive}
       canFullscreen={canFullscreen}
+      fullscreen={fullscreen}
       minimal={isTwitch && !syncable}
       qualityOptions={activeAdapter?.qualities() ?? []}
       quality={ui.qualityValue}

@@ -10,12 +10,16 @@ export function QualityMenu({
   value,
   note,
   link,
+  fullscreen,
+  onFullscreen,
   onSelect,
 }: {
   options: QualityOption[];
   value: string;
   note?: string;
   link?: { href: string; label: string };
+  fullscreen?: boolean;
+  onFullscreen?: () => void;
   onSelect: (id: string) => void;
 }) {
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
@@ -40,7 +44,15 @@ export function QualityMenu({
       </button>
       {anchor && (
         <Popover x={anchor.x} y={anchor.y} placement="above" width="w-56" label="Video quality" onClose={() => setAnchor(null)}>
-          <QualityPanel options={options} value={value} note={note} link={link} onSelect={(id) => { onSelect(id); setAnchor(null); }} />
+          <QualityPanel
+            options={options}
+            value={value}
+            note={note}
+            link={link}
+            fullscreen={fullscreen}
+            onFullscreen={onFullscreen && (() => { setAnchor(null); onFullscreen(); })}
+            onSelect={(id) => { onSelect(id); setAnchor(null); }}
+          />
         </Popover>
       )}
     </>
@@ -52,12 +64,16 @@ export function QualityPanel({
   value,
   note,
   link,
+  fullscreen,
+  onFullscreen,
   onSelect,
 }: {
   options: QualityOption[];
   value: string;
   note?: string;
   link?: { href: string; label: string };
+  fullscreen?: boolean;
+  onFullscreen?: () => void;
   onSelect: (id: string) => void;
 }) {
   return (
@@ -85,6 +101,15 @@ export function QualityPanel({
             Auto <CheckIcon className="text-accent" />
           </p>
           <p className="mt-2 text-xs leading-relaxed text-label-2">{note}</p>
+          {fullscreen ? (
+            <p className="mt-2 text-xs leading-relaxed text-label-2">You&apos;re fullscreen, so what you see now depends on your connection.</p>
+          ) : (
+            onFullscreen && (
+              <button onClick={onFullscreen} className="mt-2 flex h-9 w-full items-center justify-center rounded-lg bg-white/10 text-xs font-semibold transition hover:bg-white/15 active:scale-95">
+                Go fullscreen for best quality
+              </button>
+            )
+          )}
           {link && (
             <a href={link.href} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-accent hover:underline">
               {link.label}

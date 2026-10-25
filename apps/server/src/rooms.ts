@@ -140,7 +140,7 @@ export function connect(roomId: string, user: SessionPayload, socket: WebSocket)
     existing.member.image = user.image;
   } else {
     room.connections.set(user.sub, {
-      member: { id: user.sub, name: user.name, image: user.image, guest: user.guest, deafened: false, watching: null },
+      member: { id: user.sub, name: user.name, image: user.image, guest: user.guest, deafened: false, watching: null, tvOf: user.tv ? (user.tvOf ?? null) : null },
       sockets: new Set([socket]),
     });
   }

@@ -115,6 +115,7 @@ export const memberSchema = z.object({
   guest: z.boolean(),
   deafened: z.boolean(),
   watching: z.string().nullable(),
+  tvOf: z.string().nullable(),
 });
 export type Member = z.infer<typeof memberSchema>;
 

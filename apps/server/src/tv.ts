@@ -51,20 +51,20 @@ export function createPairing(roomId: string) {
   return { code, secret, expiresAt };
 }
 
-export async function mintCredentials(roomId: string, label: string): Promise<TvCredentials> {
+export async function mintCredentials(roomId: string, label: string, ownerId: string): Promise<TvCredentials> {
   const identity = `tv-${randomBytes(6).toString("hex")}`;
   const name = label ? `TV (${label})` : "TV";
   return {
-    wsTicket: signSessionToken({ sub: identity, name, image: null, guest: true, room: roomId, tv: true }, config.AUTH_SECRET, 12 * 60 * 60),
+    wsTicket: signSessionToken({ sub: identity, name, image: null, guest: true, room: roomId, tv: true, tvOf: ownerId }, config.AUTH_SECRET, 12 * 60 * 60),
     livekitToken: await createViewerToken(roomId, identity, name),
     livekitUrl: config.LIVEKIT_URL,
   };
 }
 
-export async function approvePairing(code: string, roomId: string, label: string) {
+export async function approvePairing(code: string, roomId: string, label: string, ownerId: string) {
   const pairing = pairings.get(code);
   if (!pairing || pairing.expiresAt < Date.now() || pairing.roomId !== roomId) return false;
-  pairing.credentials = await mintCredentials(roomId, label);
+  pairing.credentials = await mintCredentials(roomId, label, ownerId);
   return true;
 }
 

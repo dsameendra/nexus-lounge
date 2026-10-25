@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAppleAirPlaySupport } from "./useAirPlay";
 import { CheckIcon, LinkIcon, TvIcon } from "./Icons";
 import { useRoom } from "./RoomProvider";
+import { OutputPicker } from "./OutputPicker";
 import { Sheet } from "./Sheet";
 
 export function TvSheet({ onClose }: { onClose: () => void }) {
@@ -54,6 +55,8 @@ export function TvSheet({ onClose }: { onClose: () => void }) {
       <p className="mb-4 text-sm text-label-2">
         TV mode shows only the video on a big screen. Voice and chat stay on this device.
       </p>
+
+      <OutputPicker className="mb-4 rounded-2xl bg-panel-2 p-4" />
 
       <section className="mb-4">
         <h3 className="mb-1.5 px-1 text-xs font-semibold tracking-wide text-label-2 uppercase">Pair a TV</h3>

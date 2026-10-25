@@ -42,6 +42,7 @@ export interface PlayerControlsProps {
   volume: number;
   muted: boolean;
   canFullscreen: boolean;
+  fullscreen?: boolean;
   hideVolume?: boolean;
   fit?: "fit" | "fill";
   onFit?: () => void;
@@ -65,7 +66,7 @@ export interface PlayerControlsProps {
 
 export function PlayerControls(props: PlayerControlsProps) {
   const {
-    variant, visible, minimal = false, playing, time, duration, live, atEdge, canControl, canSeek, status, volume, muted, canFullscreen, hideVolume = false, fit, onFit,
+    variant, visible, minimal = false, playing, time, duration, live, atEdge, canControl, canSeek, status, volume, muted, canFullscreen, fullscreen = false, hideVolume = false, fit, onFit,
     qualityOptions, quality, qualityNote, qualityLink, onPlayPause, onSeek, onVolume, onMute, onFullscreen, onResync, onGoLive, onQuality, onAirPlay, captions, onCaptionTrack, onCaptionSize,
   } = props;
   const [scrub, setScrub] = useState<number | null>(null);
@@ -148,7 +149,7 @@ export function PlayerControls(props: PlayerControlsProps) {
         {captions && onCaptionTrack && onCaptionSize && <CaptionsMenu captions={captions} onTrack={onCaptionTrack} onSize={onCaptionSize} />}
 
         <div className="hidden @md:contents">
-          <QualityMenu options={qualityOptions} value={quality} note={qualityNote} link={qualityLink} onSelect={onQuality} />
+          <QualityMenu options={qualityOptions} value={quality} note={qualityNote} link={qualityLink} fullscreen={fullscreen} onFullscreen={canFullscreen ? onFullscreen : undefined} onSelect={onQuality} />
 
           {onAirPlay && (
             <button onClick={onAirPlay} aria-label="AirPlay and screen mirroring" title="AirPlay and screen mirroring" className={iconButton}>
@@ -181,6 +182,8 @@ export function PlayerControls(props: PlayerControlsProps) {
           qualityNote={qualityNote}
           qualityLink={qualityLink}
           onQuality={onQuality}
+          fullscreen={fullscreen}
+          onFullscreen={canFullscreen ? onFullscreen : undefined}
           fit={minimal ? undefined : fit}
           onFit={minimal ? undefined : onFit}
           onAirPlay={onAirPlay}

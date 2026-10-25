@@ -92,7 +92,7 @@ export class YouTubeAdapter extends Emitter implements PlayerAdapter {
   readonly type = "youtube" as const;
   ready = false;
   error: string | null = null;
-  readonly qualityNote = "YouTube chooses the quality automatically for embedded videos.";
+  readonly qualityNote = "Quality is automatic. YouTube picks it from your connection speed and the size of the player: a bigger player gets a sharper picture.";
   private player: YTPlayer | null = null;
   private wanted: { source: MediaSource; startAt: number | null; autoplay: boolean } | null = null;
   private destroyed = false;

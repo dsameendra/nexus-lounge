@@ -34,6 +34,8 @@ Virtual watch-party PWA: rooms with LiveKit voice/chat/screen share, synced YouT
 - Twitch needs 400x300: smaller stages scale the whole embed down (`TwitchAdapter` ResizeObserver) instead of cropping its controls.
 - Join state: everyone joins muted and deafened; `LiveKitRoom audio={false}` so the mic is only requested on unmute.
 - Queue: `room.queue` is explicit (`queue.*` messages); with an empty queue `queue.advance` falls back to library order. Playlists are YouTube only, scraped server-side from the playlist page (`playlists.ts`, no API key), items are sent on demand with `playlist.open`.
+- TV output: the TV is a guest member whose ticket carries `tvOf` (the owner id). `useTvOutput` (per-room localStorage choice: here/tv/both) drives `Stage`, `StreamPlayer` and `VoiceAudio`; "tv only" sets the local player `visible=false`, "both" mutes this device until the user turns sound on. With no TV connected the mode falls back to "here".
+- Player bar: below `@md` Quality, Fit/Fill and AirPlay collapse into `MoreMenu`; Subtitles always stay on the bar.
 - `useWakeLock` keeps the screen on in rooms and TV mode (Screen Wake Lock API, re-acquired on visibility change).
 - `NEXT_PUBLIC_*` values are baked at build time; `SERVER_WS_URL` is the runtime override.
 - iCloud can create `* 2.ts` duplicates inside `.next`; tsconfig excludes them.

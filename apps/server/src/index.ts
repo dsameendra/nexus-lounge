@@ -79,7 +79,7 @@ app.post<{ Params: { id: string } }>("/rooms/:id/tv/approve", async (request, re
   if (!isMember(roomId, user.sub)) return reply.code(403).send({ error: "Join the room first" });
   const body = z.object({ code: tvCodeSchema }).safeParse(request.body);
   if (!body.success) return reply.code(400).send({ error: "Enter the 6-character code from your TV" });
-  if (!(await approvePairing(body.data.code.toUpperCase(), roomId, user.name))) {
+  if (!(await approvePairing(body.data.code.toUpperCase(), roomId, user.name, user.sub))) {
     return reply.code(404).send({ error: "That code isn't valid or has expired" });
   }
   return { ok: true };
@@ -97,7 +97,7 @@ app.post<{ Params: { id: string } }>("/rooms/:id/tv/session", async (request, re
   const entry = checkEntry(room.id, user);
   if (entry === "pending") return reply.code(403).send({ error: "not_admitted" });
   if (entry !== "ok") return reply.code(403).send({ error: entry });
-  return mintCredentials(room.id, user.name);
+  return mintCredentials(room.id, user.name, user.sub);
 });
 
 attachWebSocket(app.server);

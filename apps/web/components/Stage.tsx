@@ -4,21 +4,25 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FloatingReactions, ReactionBar, ReactionPicker, ReactionStrip } from "./Reactions";
 import { ScreenBar } from "./ScreenBar";
-import { isScreenId, screenIdentity } from "@nexus/shared";
+import { expectedPosition, isScreenId, screenIdentity } from "@nexus/shared";
 import { Pill, ProviderBadge } from "./Badges";
-import { BroadcastIcon, FilmIcon, PlusIcon, SyncIcon } from "./Icons";
+import { BroadcastIcon, FilmIcon, PauseIcon, PlayIcon, PlusIcon, SyncIcon, TvIcon } from "./Icons";
+import { OutputPicker } from "./OutputPicker";
 import { useRoom } from "./RoomProvider";
 import { StreamPlayer } from "./StreamPlayer";
 import { shareName, useEffectiveSource } from "./useEffectiveSource";
 import { PHONE_LANDSCAPE, hasElementFullscreen, useMediaQuery } from "./useMediaQuery";
 import { useVideoFit } from "./useVideoFit";
 import { useStageFullscreen } from "./useStageFullscreen";
+import { useTvOutput } from "./useTvOutput";
 import { WatchArea } from "./WatchArea";
 
 const SAFE = "[--safe-l:env(safe-area-inset-left)] [--safe-r:env(safe-area-inset-right)]";
 
 export function Stage({ onAdd }: { onAdd: () => void }) {
-  const { state, self, select, send, isController, canAdd } = useRoom();
+  const { state, self, select, send, isController, canAdd, clock, canControlStream } = useRoom();
+  const output = useTvOutput();
+  const tvOnly = output.mode === "tv";
   const { effectiveId, stream, share, shares, featuredId, isFollowing } = useEffectiveSource();
   const boxRef = useRef<HTMLDivElement>(null);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
@@ -71,7 +75,7 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
       >
         <StreamPlayer
           stream={stream}
-          visible={Boolean(stream) && !showingScreen}
+          visible={Boolean(stream) && !showingScreen && !tvOnly}
           onFullscreen={toggleStage}
           fullscreen={fullscreen}
           controlsSlot={slot}
@@ -79,10 +83,38 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
 
         {reactionsOn && !twitchActive && effectiveId && <FloatingReactions />}
 
-        {share && (
+        {tvOnly && Boolean(stream || share) && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black px-6 text-center">
+            <span className="flex size-14 items-center justify-center rounded-full bg-panel text-2xl text-label-2">
+              <TvIcon />
+            </span>
+            <div>
+              <p className="font-semibold">Playing on your TV</p>
+              <p className="mt-1 text-sm text-label-2">The video is off on this device. Voice and chat still work here.</p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {stream && !(stream.source.type === "twitch" && stream.source.isLive) && canControlStream(stream) && (
+                <button
+                  onClick={() => send({ type: "stream.control", streamId: stream.id, action: stream.playback.playing ? "pause" : "play", position: expectedPosition(stream.playback, clock.now()) })}
+                  className="flex h-10 items-center gap-1.5 rounded-full bg-white/10 px-4 text-sm font-medium transition hover:bg-white/15 active:scale-95"
+                >
+                  {stream.playback.playing ? <PauseIcon /> : <PlayIcon />} {stream.playback.playing ? "Pause for everyone" : "Play for everyone"}
+                </button>
+              )}
+              <button
+                onClick={() => output.setMode("both")}
+                className="flex h-10 items-center gap-1.5 rounded-full bg-accent px-5 text-sm font-semibold transition hover:brightness-110 active:scale-95"
+              >
+                Watch here too
+              </button>
+            </div>
+          </div>
+        )}
+
+        {share && !tvOnly && (
           <div className="absolute inset-y-0 right-[var(--safe-r,0px)] left-[var(--safe-l,0px)] z-10" onDoubleClick={toggleStage}>
             <WatchArea share={share} fill={fillable && fit === "fill"} />
-            {share && phoneLand && !fullscreen && <ScreenBar share={share} container={boxRef.current} onFullscreen={toggleStage} fillable overlay />}
+            {share && !tvOnly && phoneLand && !fullscreen && <ScreenBar share={share} container={boxRef.current} onFullscreen={toggleStage} fillable overlay />}
           </div>
         )}
 
@@ -110,7 +142,7 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
       </div>
       <div ref={setSlot} className={immersive ? "pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]" : undefined} />
       {reactionsOn && twitchActive && <ReactionStrip />}
-      {share && slot && !(phoneLand && !fullscreen) && createPortal(<ScreenBar share={share} container={boxRef.current} onFullscreen={toggleStage} fillable={fullscreen} />, slot)}
+      {share && !tvOnly && slot && !(phoneLand && !fullscreen) && createPortal(<ScreenBar share={share} container={boxRef.current} onFullscreen={toggleStage} fillable={fullscreen} />, slot)}
       </div>
 
       <div className="space-y-3 px-4 pt-3 lg:px-0">
@@ -141,6 +173,8 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
             </div>
           </div>
         )}
+
+        <OutputPicker />
 
         {effectiveId && reactionsOn && (
           <div className="hidden lg:block">

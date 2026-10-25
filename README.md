@@ -79,6 +79,7 @@ I built it so my friends and I could watch League of Legends Worlds together, bu
 **Any screen**
 - Responsive on phone, tablet, laptop and desktop (including landscape phones).
 - Installable as a PWA.
+- TV output: when your own TV is connected you choose where the video plays: this device, the TV only, or both.
 - TV mode: open the TV view on a TV browser (enter the code it shows in your room) or cast a browser tab. It shows only the video, with no controls.
 
 ## Architecture

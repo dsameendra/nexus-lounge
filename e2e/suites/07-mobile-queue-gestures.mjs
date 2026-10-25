@@ -244,7 +244,8 @@ console.log("Player bar on a narrow screen (Subtitles stay, the rest moves into 
   await more.tap();
   check(await visible(p.getByRole("menuitem", { name: /Quality/ }), 3000), "More lists Quality");
   await p.getByRole("menuitem", { name: /Quality/ }).tap();
-  check(await visible(p.getByRole("menuitemradio").first(), 3000) || await visible(p.getByText(/chooses the quality automatically/), 3000), "Quality opens inside More");
+  check(await visible(p.getByRole("menuitemradio").first(), 3000) || await visible(p.getByText(/Quality is automatic/), 3000), "Quality opens inside More");
+  check(await visible(p.getByRole("button", { name: "Go fullscreen for best quality" }), 3000), "the quality panel suggests fullscreen for the best picture");
   await p.keyboard.press("Escape");
   await narrow.context.close(); await host.context.close();
 }

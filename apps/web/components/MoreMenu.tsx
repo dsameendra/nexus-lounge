@@ -14,6 +14,8 @@ export function MoreMenu({
   qualityNote,
   qualityLink,
   onQuality,
+  fullscreen,
+  onFullscreen,
   fit,
   onFit,
   onAirPlay,
@@ -23,6 +25,8 @@ export function MoreMenu({
   qualityNote?: string;
   qualityLink?: { href: string; label: string };
   onQuality: (id: string) => void;
+  fullscreen?: boolean;
+  onFullscreen?: () => void;
   fit?: "fit" | "fill";
   onFit?: () => void;
   onAirPlay?: () => void;
@@ -65,6 +69,11 @@ export function MoreMenu({
                 value={quality}
                 note={qualityNote}
                 link={qualityLink}
+                fullscreen={fullscreen}
+                onFullscreen={onFullscreen && (() => {
+                  close();
+                  onFullscreen();
+                })}
                 onSelect={(id) => {
                   onQuality(id);
                   close();
