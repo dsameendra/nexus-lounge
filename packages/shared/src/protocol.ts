@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { PLAYLIST_ID } from "./parse-url.ts";
-import { YOUTUBE_VIDEO_ID, mediaSourceSchema, playlistItemSchema, reactionEmojiSchema, roomIdSchema, roomNameSchema, roomSettingsSchema, roomStateSchema } from "./types.ts";
+import { YOUTUBE_VIDEO_ID, mediaSourceSchema, playlistItemSchema, reactionEmojiSchema, roomIdSchema, roomNameSchema, roomSettingsSchema, roomStateSchema, tvModeSchema } from "./types.ts";
 
 const streamId = z.string().min(1).max(100);
 const listId = z.string().min(2).max(64);
@@ -40,6 +40,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("presence.voice"), deafened: z.boolean() }),
   z.object({ type: z.literal("share.stop"), userId: z.string() }),
   z.object({ type: z.literal("presence.watch"), streamId: streamId.nullable() }),
+  z.object({ type: z.literal("tv.output"), mode: tvModeSchema }),
 ]);
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 

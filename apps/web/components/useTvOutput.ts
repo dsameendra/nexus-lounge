@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import type { TvMode } from "@nexus/shared";
 import { useRoom } from "./RoomProvider";
 
-export type Output = "here" | "tv" | "both";
+export type Output = TvMode;
 
 const KEY = (roomId: string) => `nexus-output-${roomId}`;
 const listeners = new Set<() => void>();
@@ -18,9 +19,9 @@ const subscribe = (listener: () => void) => {
 function read(roomId: string): Output {
   try {
     const value = localStorage.getItem(KEY(roomId));
-    return value === "tv" || value === "both" ? value : "here";
+    return value === "tv" || value === "here" ? value : "both";
   } catch {
-    return "here";
+    return "both";
   }
 }
 
@@ -29,8 +30,8 @@ export function useTvOutput() {
   const roomId = state.room.id;
   const tvs = state.members.filter((member) => member.tvOf === self.id);
   const connected = tvs.length > 0;
-  const preference = useSyncExternalStore(subscribe, () => read(roomId), () => "here" as Output);
-  const sound = useSyncExternalStore(subscribe, () => soundOn.get(roomId) ?? false, () => false);
+  const preference = useSyncExternalStore(subscribe, () => read(roomId), () => "both" as Output);
+  const sound = useSyncExternalStore(subscribe, () => soundOn.get(roomId) ?? true, () => true);
   const mode: Output = connected ? preference : "here";
 
   const setMode = useCallback(
@@ -38,7 +39,7 @@ export function useTvOutput() {
       try {
         localStorage.setItem(KEY(roomId), next);
       } catch {}
-      soundOn.set(roomId, false);
+      soundOn.set(roomId, true);
       notify();
     },
     [roomId],
@@ -54,6 +55,7 @@ export function useTvOutput() {
   return {
     tvs,
     connected,
+    preference,
     mode,
     setMode,
     localVideo: mode !== "tv",
@@ -61,4 +63,20 @@ export function useTvOutput() {
     soundOn: sound,
     setSound,
   };
+}
+
+export function useTvOutputSync() {
+  const { send, status } = useRoom();
+  const { tvs, connected, preference, setMode } = useTvOutput();
+  const key = tvs.map((tv) => tv.id).join(",");
+  const wasConnected = useRef(connected);
+
+  useEffect(() => {
+    if (connected && !wasConnected.current) setMode("both");
+    wasConnected.current = connected;
+  }, [connected, setMode]);
+
+  useEffect(() => {
+    if (connected && status === "open") send({ type: "tv.output", mode: preference });
+  }, [connected, key, preference, status, send]);
 }

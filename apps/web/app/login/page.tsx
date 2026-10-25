@@ -1,13 +1,15 @@
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/auth";
+import { LegalLinks } from "@/components/LegalLinks";
 import { Logo } from "@/components/Logo";
 
 function safeCallback(value: string | undefined) {
   return value && value.startsWith("/") && !value.startsWith("//") ? value : "/";
 }
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string }> }) {
-  const callbackUrl = safeCallback((await searchParams).callbackUrl);
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string; deleted?: string }> }) {
+  const params = await searchParams;
+  const callbackUrl = safeCallback(params.callbackUrl);
   if ((await auth())?.user) redirect(callbackUrl);
 
   return (
@@ -17,6 +19,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <Logo size={84} />
           <h1 className="mt-5 text-4xl font-bold tracking-tight">Nexus Lounge</h1>
           <p className="mt-2 text-label-2">Watch together. Talk like you're in the same room.</p>
+          {params.deleted && <p role="status" className="mt-3 rounded-xl bg-live/15 px-4 py-2 text-sm text-live">Your account was deleted.</p>}
         </div>
         <div className="rounded-[var(--radius-sheet)] bg-panel p-5">
           <form
@@ -55,6 +58,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </form>
           <p className="mt-4 text-center text-xs text-label-2">Guests can watch what the room is watching, talk and chat.</p>
         </div>
+        <p className="mt-5 text-center text-xs text-label-3">By continuing you agree to the Terms of Service and Privacy Policy.</p>
+        <LegalLinks className="mt-2" />
       </div>
     </main>
   );

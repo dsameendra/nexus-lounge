@@ -16,7 +16,14 @@ type Phase =
   | { kind: "ready"; credentials: Credentials }
   | { kind: "playing"; credentials: Credentials };
 
-const TV_SELF = { id: "tv", name: "TV", image: null, guest: true };
+function tvSelf(ticket: string) {
+  let id = "tv";
+  try {
+    const payload = JSON.parse(atob((ticket.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/"))) as { sub?: string };
+    if (payload.sub) id = payload.sub;
+  } catch {}
+  return { id, name: "TV", image: null, guest: true };
+}
 
 export function TvClient({ roomId, signedIn }: { roomId: string; signedIn: boolean }) {
   useWakeLock();
@@ -103,11 +110,11 @@ export function TvClient({ roomId, signedIn }: { roomId: string; signedIn: boole
             void document.documentElement.requestFullscreen?.().catch(() => {});
             setPhase({ kind: "playing", credentials: phase.credentials });
           }}
-          className="mt-10 h-24 rounded-full bg-accent px-16 text-4xl font-semibold outline-offset-4 transition focus:scale-105 focus:outline-4 focus:outline-white"
+          className="mt-10 h-24 cursor-pointer rounded-full bg-accent px-16 text-4xl font-semibold outline-offset-4 transition hover:scale-105 focus:scale-105 focus:outline-4 focus:outline-white"
         >
           Start watching
         </button>
-        <p className="mt-6 text-xl text-label-3">Press OK on your remote</p>
+        <p className="mt-6 text-xl text-label-3">Press OK on your remote, or click the button</p>
       </Screen>
     );
   }
@@ -118,7 +125,7 @@ export function TvClient({ roomId, signedIn }: { roomId: string; signedIn: boole
       roomId={roomId}
       ticket={credentials.wsTicket}
       wsUrl={credentials.wsUrl}
-      self={TV_SELF}
+      self={tvSelf(credentials.wsTicket)}
       fallback={(status) => <Screen>{status === "failed" ? "Couldn't connect to the room." : "Connecting…"}</Screen>}
     >
       <LiveKitRoom token={credentials.livekitToken} serverUrl={credentials.livekitUrl} connect audio={false} video={false} className="h-dvh">
@@ -129,5 +136,5 @@ export function TvClient({ roomId, signedIn }: { roomId: string; signedIn: boole
 }
 
 function Screen({ children }: { children: React.ReactNode }) {
-  return <main className="flex min-h-dvh cursor-none flex-col items-center justify-center bg-black p-12 text-center text-3xl">{children}</main>;
+  return <main className="flex min-h-dvh flex-col items-center justify-center bg-black p-12 text-center text-3xl">{children}</main>;
 }

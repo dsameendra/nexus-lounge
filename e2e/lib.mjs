@@ -19,8 +19,8 @@ export async function launch(opts = {}) {
   if (!CHROME) throw new Error("Chrome not found. Install Google Chrome or set CHROME=/path/to/chrome.");
   return chromium.launch({
     executablePath: CHROME,
-    headless: true,
-    args: ["--disable-blink-features=AutomationControlled", "--autoplay-policy=no-user-gesture-required", ...(opts.args ?? [])],
+    headless: !process.env.HEADED,
+    args: ["--disable-blink-features=AutomationControlled", ...(opts.strictAutoplay ? [] : ["--autoplay-policy=no-user-gesture-required"]), ...(opts.args ?? [])],
   });
 }
 

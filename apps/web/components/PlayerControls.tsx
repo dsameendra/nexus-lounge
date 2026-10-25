@@ -158,23 +158,21 @@ export function PlayerControls(props: PlayerControlsProps) {
           )}
         </div>
 
-        {!minimal && (
-          <div className="flex shrink-0 items-center">
-            <button onClick={onMute} aria-label={muted ? "Unmute" : "Mute"} className={iconButton}>
-              {muted || isSilent(volume) ? <VolumeOffIcon /> : <VolumeIcon />}
-            </button>
-            <input
-              type="range"
-              aria-label="Volume"
-              min={0}
-              max={1}
-              step={0.02}
-              value={muted || isSilent(volume) ? 0 : volume}
-              onChange={(event) => onVolume(Number(event.target.value))}
-              className={`hidden h-1 w-20 accent-white ${hideVolume ? "" : "@md:block"}`}
-            />
-          </div>
-        )}
+        <div className="flex shrink-0 items-center">
+          <button onClick={onMute} aria-label={muted ? "Unmute" : "Mute"} className={iconButton}>
+            {muted || isSilent(volume) ? <VolumeOffIcon /> : <VolumeIcon />}
+          </button>
+          <input
+            type="range"
+            aria-label="Volume"
+            min={0}
+            max={1}
+            step={0.02}
+            value={muted || isSilent(volume) ? 0 : volume}
+            onChange={(event) => onVolume(Number(event.target.value))}
+            className={`hidden h-1 w-20 accent-white ${hideVolume ? "" : "@md:block"}`}
+          />
+        </div>
 
         <MoreMenu
           qualityOptions={qualityOptions}

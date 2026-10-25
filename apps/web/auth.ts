@@ -6,7 +6,7 @@ import { z } from "zod";
 
 const guestSchema = z.object({ name: z.string().trim().min(2).max(24) });
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   providers: [
     Discord({
       issuer: "https://discord.com",
@@ -26,8 +26,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: { signIn: "/login" },
   trustHost: true,
   callbacks: {
+    jwt({ token, trigger, session }) {
+      if (trigger === "update" && session && typeof session === "object" && "profile" in session) {
+        token.profile = session.profile;
+      }
+      return token;
+    },
     session({ session, token }) {
       if (token.sub) session.user.id = token.sub;
+      const profile = token.profile as { name?: string; image?: string | null } | undefined;
+      if (profile?.name) session.user.name = profile.name;
+      if (profile && "image" in profile) session.user.image = profile.image ?? null;
       return session;
     },
   },

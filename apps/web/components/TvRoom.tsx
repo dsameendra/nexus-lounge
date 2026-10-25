@@ -23,8 +23,32 @@ function ScreenAudio({ effectiveId }: { effectiveId: string | null }) {
   );
 }
 
+function useIdleCursor(delay = 3000) {
+  const [idle, setIdle] = useState(false);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const wake = () => {
+      setIdle(false);
+      clearTimeout(timer);
+      timer = setTimeout(() => setIdle(true), delay);
+    };
+    wake();
+    window.addEventListener("mousemove", wake);
+    window.addEventListener("mousedown", wake);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("mousemove", wake);
+      window.removeEventListener("mousedown", wake);
+    };
+  }, [delay]);
+  return idle;
+}
+
 export function TvRoom() {
-  const { send, status, state } = useRoom();
+  const idleCursor = useIdleCursor();
+  const { send, status, state, self } = useRoom();
+  const mode = state.members.find((member) => member.id === self.id)?.tvMode ?? "both";
+  const playing = mode !== "here";
   const { effectiveId, stream, share } = useEffectiveSource();
   const [toast, setToast] = useState(false);
   const showingScreen = Boolean(share);
@@ -42,20 +66,27 @@ export function TvRoom() {
   }, [title]);
 
   return (
-    <div className="fixed inset-0 cursor-none overflow-hidden bg-black">
-      <ScreenAudio effectiveId={effectiveId} />
+    <div className={`fixed inset-0 overflow-hidden bg-black ${idleCursor ? "cursor-none" : ""}`}>
+      {playing && <ScreenAudio effectiveId={effectiveId} />}
       <div className="absolute inset-0">
-        <StreamPlayer stream={stream} visible={Boolean(stream) && !showingScreen} onFullscreen={() => {}} bare />
+        <StreamPlayer stream={stream} visible={Boolean(stream) && !showingScreen && playing} onFullscreen={() => {}} bare />
       </div>
-      {share && (
+      {share && playing && (
         <div className="absolute inset-0 z-10">
           <WatchArea share={share} />
         </div>
       )}
 
+      {!playing && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-6 bg-black text-center">
+          <p className="text-5xl font-semibold">Connected</p>
+          <p className="max-w-3xl text-3xl text-label-2">Video is playing on your other device. Choose TV only or Both there to watch here.</p>
+        </div>
+      )}
+
       {state.room.settings.reactions && effectiveId && stream?.source.type !== "twitch" && <FloatingReactions />}
 
-      {!effectiveId && (
+      {!effectiveId && playing && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 text-center">
           <span className="flex size-28 items-center justify-center rounded-full bg-panel text-6xl text-label-2">
             <FilmIcon />

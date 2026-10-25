@@ -4,7 +4,7 @@ import { createRoomRequestSchema, joinRoomRequestSchema, roomIdSchema, tvCodeSch
 import { z } from "zod";
 import { config } from "./config.ts";
 import { createLivekitToken } from "./livekit.ts";
-import { checkEntry, checkRoomAccess, createRoom, getRoom, isMember, pruneReactionHistory, pruneStalePending, publishInputs, requestEntry } from "./rooms.ts";
+import { activeRoomOf, checkEntry, checkRoomAccess, forgetUser, createRoom, getRoom, isMember, pruneReactionHistory, pruneStalePending, publishInputs, requestEntry } from "./rooms.ts";
 import { allowAttempt, approvePairing, createPairing, mintCredentials, pollPairing } from "./tv.ts";
 import { sweepEmptyRooms } from "./rooms.ts";
 import { attachWebSocket } from "./ws.ts";
@@ -17,6 +17,14 @@ function authenticate(request: FastifyRequest) {
   const user = verifySessionToken(header.slice(7), config.AUTH_SECRET);
   return user && !user.room ? user : null;
 }
+
+app.post("/account/delete", async (request, reply) => {
+  const user = authenticate(request);
+  if (!user) return reply.code(401).send({ error: "Unauthorized" });
+  if (activeRoomOf(user.sub)) return reply.code(409).send({ error: "in_room" });
+  forgetUser(user.sub);
+  return { ok: true };
+});
 
 app.get("/health", async () => ({ ok: true }));
 

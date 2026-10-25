@@ -464,7 +464,7 @@ export function StreamPlayer({
     activeAdapter?.play();
   }
 
-  const showBar = (!(isTwitch && !syncable) || ui.qualityCount > 0 || appleAirPlay) && !hideBar;
+  const showBar = !hideBar;
 
   const twitchNote =
     stream && isTwitch

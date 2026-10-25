@@ -129,6 +129,8 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
       await loadScript("https://player.twitch.tv/js/embed/v1.js");
       if (this.destroyed || !window.Twitch) return;
       const Twitch = window.Twitch;
+      // Twitch refuses to autoplay a player that is not fully on screen (e.g. after scrolling down to the library).
+      this.mount.scrollIntoView({ block: "nearest", inline: "nearest" });
       this.player = new Twitch.Player(this.mount.id, {
         width: "100%",
         height: "100%",
@@ -163,6 +165,7 @@ export class TwitchAdapter extends Emitter implements PlayerAdapter {
         this.emit("error");
       });
       this.player.addEventListener(Twitch.Player.ONLINE, () => {
+        if (this.pendingPlay && !this.playedOnce) this.player?.play();
         this.error = null;
         this.emit("state");
       });

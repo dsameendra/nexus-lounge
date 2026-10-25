@@ -79,6 +79,8 @@ function handle(roomId: string, user: SessionPayload, message: Exclude<ClientMes
     }
     case "presence.watch":
       return rooms.setWatching(roomId, user.sub, message.streamId);
+    case "tv.output":
+      return rooms.setTvOutput(roomId, user.sub, message.mode);
   }
 }
 

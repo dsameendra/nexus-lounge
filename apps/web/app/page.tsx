@@ -4,6 +4,8 @@ import { CreateRoomButton } from "@/components/CreateRoomButton";
 import { Logo } from "@/components/Logo";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { JoinRoomForm } from "@/components/JoinRoomForm";
+import { LegalLinks } from "@/components/LegalLinks";
+import Link from "next/link";
 
 export default async function HomePage() {
   const session = await auth();
@@ -37,15 +39,20 @@ export default async function HomePage() {
           <JoinRoomForm />
         </div>
         <InstallPrompt />
-        <form
-          className="mt-5 text-center"
-          action={async () => {
-            "use server";
-            await signOut({ redirectTo: "/login" });
-          }}
-        >
-          <button className="text-sm text-label-2 transition hover:text-white">Sign out</button>
-        </form>
+        <div className="mt-5 flex items-center justify-center gap-5 text-sm">
+          <Link href="/account" className="text-label-2 transition hover:text-white">
+            Account
+          </Link>
+          <form
+            action={async () => {
+              "use server";
+              await signOut({ redirectTo: "/login" });
+            }}
+          >
+            <button className="text-label-2 transition hover:text-white">Sign out</button>
+          </form>
+        </div>
+        <LegalLinks className="mt-6" />
       </div>
     </main>
   );

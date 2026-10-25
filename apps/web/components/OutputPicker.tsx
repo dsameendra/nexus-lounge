@@ -30,7 +30,7 @@ export function OutputPicker({ className = "" }: { className?: string }) {
           className="flex h-9 items-center gap-2 rounded-full bg-white/10 px-3.5 text-sm font-medium transition hover:bg-white/15 active:scale-95"
         >
           {soundOn ? <VolumeIcon /> : <VolumeOffIcon />}
-          {soundOn ? "Sound on this device" : "Sound is off here (TV plays it)"}
+          {soundOn ? "Sound plays here too" : "Sound only from the TV"}
         </button>
       )}
     </div>

@@ -19,6 +19,7 @@ import {
   type RoomState,
   type ServerMessage,
   type Stream,
+  type TvMode,
 } from "@nexus/shared";
 import type { SessionPayload } from "@nexus/shared/session-token";
 import { fetchPlaylist } from "./playlists.ts";
@@ -140,7 +141,7 @@ export function connect(roomId: string, user: SessionPayload, socket: WebSocket)
     existing.member.image = user.image;
   } else {
     room.connections.set(user.sub, {
-      member: { id: user.sub, name: user.name, image: user.image, guest: user.guest, deafened: false, watching: null, tvOf: user.tv ? (user.tvOf ?? null) : null },
+      member: { id: user.sub, name: user.name, image: user.image, guest: user.guest, deafened: false, watching: null, tvOf: user.tv ? (user.tvOf ?? null) : null, tvMode: user.tv ? "both" : null },
       sockets: new Set([socket]),
     });
   }
@@ -287,6 +288,34 @@ export function setWatching(roomId: string, userId: string, streamId: string | n
   connection.member.watching = streamId;
   broadcast(roomId);
   return ok;
+}
+
+export function setTvOutput(roomId: string, ownerId: string, mode: TvMode): Result {
+  const room = rooms.get(roomId);
+  if (!room) return fail("Room not found");
+  let changed = false;
+  for (const { member } of room.connections.values()) {
+    if (member.tvOf === ownerId && member.tvMode !== mode) {
+      member.tvMode = mode;
+      changed = true;
+    }
+  }
+  if (changed) broadcast(roomId);
+  return ok;
+}
+
+export function activeRoomOf(userId: string) {
+  for (const room of rooms.values()) if (room.connections.has(userId)) return room.info.id;
+  return null;
+}
+
+export function forgetUser(userId: string) {
+  for (const room of rooms.values()) {
+    room.known.delete(userId);
+    room.admitted.delete(userId);
+    room.pending.delete(userId);
+    room.restrictions.delete(userId);
+  }
 }
 
 export function micBlocked(roomId: string, userId: string) {

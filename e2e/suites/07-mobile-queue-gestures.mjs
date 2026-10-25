@@ -325,6 +325,17 @@ console.log("Twitch is never covered (all sizes)");
     });
     check(hits.length === 0, `${label}: nothing sits on top of the Twitch player ${hits.join(" ")}`);
   }
+  await tp.setViewportSize({ width: 1280, height: 800 }); await sleep(800);
+  const slider = tp.locator("input[aria-label='Volume']").first();
+  check(await visible(slider, 5000), "Twitch has a volume slider below the video");
+  const below = await tp.evaluate(() => {
+    const frame = document.querySelector("iframe[src*='twitch.tv']").getBoundingClientRect();
+    const bar = document.querySelector("input[aria-label='Volume']").getBoundingClientRect();
+    return bar.top >= frame.bottom - 1;
+  });
+  check(below, "the slider sits outside the Twitch embed (never covers it)");
+  await slider.fill("0.4"); await sleep(400);
+  check((await tp.evaluate(() => JSON.parse(localStorage.getItem("nexus-player-volume") ?? "{}"))).volume === 0.4, "moving it changes the volume and is remembered");
   await context.close();
 }
 

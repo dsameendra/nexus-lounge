@@ -14,7 +14,7 @@ import { shareName, useEffectiveSource } from "./useEffectiveSource";
 import { PHONE_LANDSCAPE, hasElementFullscreen, useMediaQuery } from "./useMediaQuery";
 import { useVideoFit } from "./useVideoFit";
 import { useStageFullscreen } from "./useStageFullscreen";
-import { useTvOutput } from "./useTvOutput";
+import { useTvOutput, useTvOutputSync } from "./useTvOutput";
 import { WatchArea } from "./WatchArea";
 
 const SAFE = "[--safe-l:env(safe-area-inset-left)] [--safe-r:env(safe-area-inset-right)]";
@@ -22,6 +22,7 @@ const SAFE = "[--safe-l:env(safe-area-inset-left)] [--safe-r:env(safe-area-inset
 export function Stage({ onAdd }: { onAdd: () => void }) {
   const { state, self, select, send, isController, canAdd, clock, canControlStream } = useRoom();
   const output = useTvOutput();
+  useTvOutputSync();
   const tvOnly = output.mode === "tv";
   const { effectiveId, stream, share, shares, featuredId, isFollowing } = useEffectiveSource();
   const boxRef = useRef<HTMLDivElement>(null);

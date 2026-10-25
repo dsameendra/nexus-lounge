@@ -108,6 +108,9 @@ export type QueueItem = z.infer<typeof queueItemSchema>;
 
 export const LIMITS = { queue: 100, playlists: 5, playlistItems: 100 } as const;
 
+export const tvModeSchema = z.enum(["here", "tv", "both"]);
+export type TvMode = z.infer<typeof tvModeSchema>;
+
 export const memberSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -116,6 +119,7 @@ export const memberSchema = z.object({
   deafened: z.boolean(),
   watching: z.string().nullable(),
   tvOf: z.string().nullable(),
+  tvMode: tvModeSchema.nullable(),
 });
 export type Member = z.infer<typeof memberSchema>;
 
