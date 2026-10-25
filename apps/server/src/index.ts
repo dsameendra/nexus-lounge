@@ -4,7 +4,7 @@ import { createRoomRequestSchema, joinRoomRequestSchema, roomIdSchema, tvCodeSch
 import { z } from "zod";
 import { config } from "./config.ts";
 import { createLivekitToken } from "./livekit.ts";
-import { activeRoomOf, checkEntry, checkRoomAccess, forgetUser, createRoom, getRoom, isMember, pruneReactionHistory, pruneStalePending, publishInputs, requestEntry } from "./rooms.ts";
+import { activeRoomOf, roomCount, checkEntry, checkRoomAccess, forgetUser, createRoom, getRoom, isMember, pruneReactionHistory, pruneStalePending, publishInputs, requestEntry } from "./rooms.ts";
 import { allowAttempt, approvePairing, createPairing, mintCredentials, pollPairing } from "./tv.ts";
 import { sweepEmptyRooms } from "./rooms.ts";
 import { attachWebSocket } from "./ws.ts";
@@ -32,8 +32,10 @@ app.post("/rooms", async (request, reply) => {
   const user = authenticate(request);
   if (!user) return reply.code(401).send({ error: "Unauthorized" });
   if (user.guest) return reply.code(403).send({ error: "Sign in with Discord to create a room" });
+  if (!allowAttempt(`create:${user.sub}`, 40)) return reply.code(429).send({ error: "You're creating rooms too quickly. Wait a moment." });
   const body = createRoomRequestSchema.safeParse(request.body ?? {});
   if (!body.success) return reply.code(400).send({ error: "Invalid request" });
+  if (roomCount() >= 2000) return reply.code(503).send({ error: "The server is busy. Try again later." });
   return reply.code(201).send(createRoom(user.sub, body.data.password, body.data.name));
 });
 
@@ -53,6 +55,9 @@ app.post<{ Params: { id: string } }>("/rooms/:id/livekit-token", async (request,
   if (!room) return reply.code(404).send({ error: "Room not found" });
   const body = joinRoomRequestSchema.safeParse(request.body ?? {});
   if (!body.success) return reply.code(400).send({ error: "Invalid request" });
+  if (body.data.password && (!allowAttempt(`pw:${user.sub}:${room.id}`, 8) || !allowAttempt(`pwip:${request.ip}:${room.id}`, 30))) {
+    return reply.code(429).send({ error: "Too many attempts. Wait a moment." });
+  }
   const access = checkRoomAccess(room.id, user.sub, body.data.password);
   if (access === "password_required" || access === "wrong_password") return reply.code(403).send({ error: access });
   const entry = requestEntry(room.id, user);
@@ -100,6 +105,9 @@ app.post<{ Params: { id: string } }>("/rooms/:id/tv/session", async (request, re
   if (!room) return reply.code(404).send({ error: "Room not found" });
   const body = joinRoomRequestSchema.safeParse(request.body ?? {});
   if (!body.success) return reply.code(400).send({ error: "Invalid request" });
+  if (body.data.password && (!allowAttempt(`pw:${user.sub}:${room.id}`, 8) || !allowAttempt(`pwip:${request.ip}:${room.id}`, 30))) {
+    return reply.code(429).send({ error: "Too many attempts. Wait a moment." });
+  }
   const access = checkRoomAccess(room.id, user.sub, body.data.password);
   if (access === "password_required" || access === "wrong_password") return reply.code(403).send({ error: access });
   const entry = checkEntry(room.id, user);

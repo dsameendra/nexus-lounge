@@ -92,6 +92,10 @@ export function createRoom(hostId: string, password?: string, name = ""): RoomIn
   return info;
 }
 
+export function roomCount() {
+  return rooms.size;
+}
+
 export function getRoom(id: string) {
   return rooms.get(id)?.info;
 }

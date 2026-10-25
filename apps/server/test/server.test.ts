@@ -691,3 +691,18 @@ test("tv sessions obey the room lock and the guest policy", async () => {
   assert.equal(host.state!.pending.length, 0, "and asking for a TV session does not create a join request");
   [host, member].forEach((client) => client.socket.close());
 });
+
+test("password guessing is rate limited, account deletion is refused while in a room", async () => {
+  const room = await createRoom("host-rl", "correct horse");
+  let last = 0;
+  for (let i = 0; i < 12; i++) last = (await ticketFor(room.id, "guesser-rl", false, `wrong-${i}`)).status;
+  assert.equal(last, 429);
+
+  const open = await createRoom("host-del");
+  const client = await join(open.id, "host-del");
+  const refused = await fetch(`${base}/account/delete`, { method: "POST", headers: { authorization: bearer("host-del").authorization } });
+  assert.equal(refused.status, 409);
+  const other = await fetch(`${base}/account/delete`, { method: "POST", headers: { authorization: bearer("someone-else").authorization } });
+  assert.equal(other.status, 200);
+  client.socket.close();
+});
