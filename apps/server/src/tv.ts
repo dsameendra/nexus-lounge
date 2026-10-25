@@ -26,6 +26,7 @@ function prune() {
 
 export function allowAttempt(key: string, limit = 12, windowMs = 60_000) {
   const now = Date.now();
+  if (attempts.size > 5000) prune();
   const entry = attempts.get(key);
   if (!entry || entry.resetAt < now) {
     attempts.set(key, { count: 1, resetAt: now + windowMs });

@@ -2,14 +2,15 @@ import Fastify, { type FastifyRequest } from "fastify";
 import { signSessionToken, verifySessionToken } from "@nexus/shared/session-token";
 import { createRoomRequestSchema, joinRoomRequestSchema, roomIdSchema, tvCodeSchema } from "@nexus/shared";
 import { z } from "zod";
-import { config } from "./config.ts";
+import { verifyAdminRequest } from "@nexus/shared/admin-token";
+import { adminEnabled, adminIds, config } from "./config.ts";
 import { createLivekitToken } from "./livekit.ts";
-import { activeRoomOf, roomCount, checkEntry, checkRoomAccess, forgetUser, createRoom, getRoom, isMember, pruneReactionHistory, pruneStalePending, publishInputs, requestEntry } from "./rooms.ts";
+import { activeRoomOf, adminOverview, roomCount, checkEntry, checkRoomAccess, forgetUser, createRoom, getRoom, isMember, pruneReactionHistory, pruneStalePending, publishInputs, requestEntry } from "./rooms.ts";
 import { allowAttempt, approvePairing, createPairing, mintCredentials, pollPairing } from "./tv.ts";
 import { sweepEmptyRooms } from "./rooms.ts";
 import { attachWebSocket } from "./ws.ts";
 
-const app = Fastify({ logger: true, trustProxy: true });
+const app = Fastify({ logger: true, trustProxy: (_address: string, hop: number) => hop < config.TRUST_PROXY_HOPS });
 
 function authenticate(request: FastifyRequest) {
   const header = request.headers.authorization;
@@ -25,6 +26,30 @@ app.post("/account/delete", async (request, reply) => {
   forgetUser(user.sub);
   return { ok: true };
 });
+
+const seenAdminTokens = new Map<string, number>();
+const maskIp = (ip: string) => ip.replace(/(\d+\.\d+\.\d+)\.\d+$/, "$1.x").replace(/(:[0-9a-f]*){4}$/i, ":x");
+
+// Registered only when ADMIN_SECRET and ADMIN_DISCORD_IDS are set. Every failure is the stock 404.
+if (adminEnabled) {
+  app.get("/admin/overview", { logLevel: "warn" }, async (request, reply) => {
+    const header = request.headers.authorization;
+    const claims = header?.startsWith("Bearer ") ? verifyAdminRequest(header.slice(7), config.ADMIN_SECRET!) : null;
+    const now = Date.now();
+    for (const [jti, expires] of seenAdminTokens) if (expires < now) seenAdminTokens.delete(jti);
+    if (!claims || !adminIds.has(claims.sub) || seenAdminTokens.has(claims.jti)) {
+      app.log.warn({ admin: "denied", ip: maskIp(request.ip) }, "admin request denied");
+      return reply.callNotFound();
+    }
+    seenAdminTokens.set(claims.jti, now + 130_000);
+    app.log.warn({ admin: "ok", ip: maskIp(request.ip) }, "admin overview served");
+    return reply
+      .header("cache-control", "private, no-store")
+      .header("x-robots-tag", "noindex, nofollow")
+      .header("vary", "authorization")
+      .send(adminOverview());
+  });
+}
 
 app.get("/health", async () => ({ ok: true }));
 

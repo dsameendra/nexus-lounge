@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./session-token": "./src/session-token.ts"
+    "./session-token": "./src/session-token.ts",
+    "./admin-token": "./src/admin-token.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",

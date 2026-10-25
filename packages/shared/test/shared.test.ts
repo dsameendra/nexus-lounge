@@ -212,3 +212,16 @@ test("playlist links: only real playlists, on YouTube", async () => {
   assert.equal(isQueueable({ type: "youtube", id: "dQw4w9WgXcQ", isLive: false }), true);
   assert.equal(isQueueable({ type: "twitch", id: "someone", isLive: true }), false);
 });
+
+test("TOTP matches the RFC 6238 vector and rejects reuse windows", async () => {
+  const { totpCode, checkTotp, parseAdminIds, signAdminSession, verifyAdminSession } = await import("../src/admin-token.ts");
+  const secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+  assert.equal(totpCode(secret, Math.floor(59 / 30)), "287082");
+  assert.equal(checkTotp(secret, "287082", 59_000), 1);
+  assert.equal(checkTotp(secret, "287082", 59_000 + 120_000), null);
+  assert.equal(checkTotp(secret, "12345", 59_000), null);
+  assert.deepEqual([...parseAdminIds(" 123456789012345678, ,abc,guest-1")], ["123456789012345678"]);
+  const session = signAdminSession("123456789012345678", "a-long-admin-secret-a-long-admin-secret");
+  assert.equal(verifyAdminSession(session, "a-long-admin-secret-a-long-admin-secret")?.aud, "admin-session");
+  assert.equal(verifyAdminSession(session, "another-long-admin-secret-another-one"), null);
+});

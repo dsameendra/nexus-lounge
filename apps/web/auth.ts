@@ -3,8 +3,9 @@ import Credentials from "next-auth/providers/credentials";
 import Discord from "next-auth/providers/discord";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { displayNameSchema } from "@nexus/shared";
 
-const guestSchema = z.object({ name: z.string().trim().min(2).max(24) });
+const guestSchema = z.object({ name: displayNameSchema });
 
 export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   providers: [

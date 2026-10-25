@@ -8,8 +8,25 @@ try {
 const config: NextConfig = {
   transpilePackages: ["@nexus/shared"],
   async headers() {
+    const adminHeaders = [
+      { key: "Cache-Control", value: "private, no-store" },
+      { key: "Vary", value: "Cookie" },
+      { key: "X-Robots-Tag", value: "noindex, nofollow" },
+      { key: "Referrer-Policy", value: "no-referrer" },
+      ...(process.env.NODE_ENV === "production"
+        ? [
+            {
+              key: "Content-Security-Policy",
+              value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+            },
+          ]
+        : []),
+    ];
     return [
       { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache" }] },
+      { source: "/admin/:path*", headers: adminHeaders },
+      { source: "/admin", headers: adminHeaders },
+      { source: "/api/admin/:path*", headers: adminHeaders },
       {
         source: "/:path*",
         headers: [

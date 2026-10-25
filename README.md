@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/icon.png" width="112" height="112" alt="Nexus Lounge icon" />
+<img src="docs/icon-rounded.png" width="112" height="112" alt="Nexus Lounge icon" />
 
 # Nexus Lounge
 
@@ -140,6 +140,9 @@ docs/            Railway notes and screenshots
 | `NEXT_PUBLIC_SERVER_WS_URL` | web | WebSocket URL of the server (`wss://<server>/ws`); the HTTP URL is derived from it |
 | `SERVER_WS_URL` | web | Optional runtime override of the above. Next bakes `NEXT_PUBLIC_*` values in at build time, this one is read when the app runs |
 | `PORT` | server | Server port (default 4000) |
+| `ADMIN_SECRET` | web, server | Optional. 32+ random characters, different from `AUTH_SECRET`; signs admin requests and the admin session cookie |
+| `ADMIN_DISCORD_IDS` | web, server | Optional. Comma-separated Discord user IDs allowed to open `/admin` |
+| `ADMIN_TOTP_SECRET` | web | Optional. Base32 key for the authenticator app used to unlock `/admin` |
 
 ## How it works
 

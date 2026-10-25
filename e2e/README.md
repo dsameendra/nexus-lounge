@@ -27,3 +27,7 @@ node run.mjs queue layouts   # suites whose file name contains one of these word
 Against production, pass the deployed secret through `AUTH_SECRET_OVERRIDE` without echoing it, and set the three cookie variables for the web domain.
 
 The suites use real YouTube and Twitch embeds, so they need internet access. Screenshots land in `e2e/.out/` (ignored by git).
+
+## Admin suite
+
+`12-admin.mjs` needs a stack started with the admin variables, and skips itself otherwise: set `ADMIN_SECRET` (32+ chars), `ADMIN_DISCORD_IDS=123456789012345678` and `ADMIN_TOTP_SECRET=<base32>` on web and server, then run with `ADMIN_TOTP_SECRET_TEST=<same base32>`.

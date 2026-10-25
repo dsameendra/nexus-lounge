@@ -92,6 +92,36 @@ export function createRoom(hostId: string, password?: string, name = ""): RoomIn
   return info;
 }
 
+const clean = (value: string) => value.replace(/[\p{C}\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/gu, "").slice(0, 48);
+
+// Built field by field on purpose: never spread room or member objects here.
+export function adminOverview() {
+  const MAX_ROOMS = 200;
+  const MAX_MEMBERS = 100;
+  const all = [...rooms.values()];
+  const names = (room: StoredRoom, id: string) => {
+    const member = room.connections.get(id)?.member;
+    return member ? clean(member.name) : "(not connected)";
+  };
+  const list = all.slice(0, MAX_ROOMS).map((room) => {
+    const featured = room.streams.find((stream) => stream.id === room.featuredId);
+    const members = [...room.connections.values()].filter(({ member }) => !member.tvOf);
+    return {
+      id: room.info.id,
+      name: clean(room.info.name),
+      host: names(room, room.info.hostId),
+      createdAt: room.info.createdAt,
+      hasPassword: room.info.hasPassword,
+      memberCount: members.length,
+      tvCount: room.connections.size - members.length,
+      members: members.slice(0, MAX_MEMBERS).map(({ member }) => ({ name: clean(member.name), guest: member.guest, deafened: member.deafened })),
+      playing: featured ? { title: clean(featured.title), source: featured.source.type } : null,
+    };
+  });
+  const people = all.reduce((total, room) => total + [...room.connections.values()].filter(({ member }) => !member.tvOf).length, 0);
+  return { generatedAt: Date.now(), totals: { rooms: all.length, people }, truncated: all.length > MAX_ROOMS, rooms: list };
+}
+
 export function roomCount() {
   return rooms.size;
 }

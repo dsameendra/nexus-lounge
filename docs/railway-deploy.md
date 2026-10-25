@@ -53,3 +53,15 @@ Dashboard: service > Deployments > pick an earlier successful deployment > Rollb
 ## User-only steps
 
 None known to remain: the Railway GitHub app already had access to the private repo and both connections succeeded. To confirm end to end, push a small change under `apps/web/` and watch the `web` deployment appear with the commit as its source. If it does not, check the repo is enabled for the Railway GitHub app at https://github.com/settings/installations.
+
+## Admin overview (optional)
+
+`/admin` shows live rooms and people to the operator. It stays off unless all of these are set; the server then does not register the route at all.
+
+| Variable | Services | Value |
+| --- | --- | --- |
+| `ADMIN_SECRET` | web and server (same value) | 32+ random characters (`openssl rand -base64 48`), different from `AUTH_SECRET` |
+| `ADMIN_DISCORD_IDS` | web and server (same value) | Your Discord user ID (Discord: Settings, Advanced, Developer Mode, then right-click your name, Copy User ID). Comma-separate several |
+| `ADMIN_TOTP_SECRET` | web only | Base32 key (`openssl rand 20 \| base32`) |
+
+Enrol the TOTP key in an authenticator app (manual entry, time-based, SHA-1, 6 digits, 30 seconds). Mark the secrets as sealed variables in Railway. To rotate `ADMIN_SECRET`, change it on both services in the same deploy; to revoke an admin, remove their ID from both lists.

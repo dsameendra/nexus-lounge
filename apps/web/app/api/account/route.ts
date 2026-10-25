@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { displayNameSchema } from "@nexus/shared";
 import { auth, signOut, unstable_update } from "@/auth";
 import { isPresetAvatar } from "@/lib/avatars";
 import { getSessionToken, serverFetch } from "@/lib/server-api";
 
 const profileSchema = z.object({
-  name: z.string().trim().min(2).max(24),
+  name: displayNameSchema,
   avatar: z.string().nullable().refine((value) => value === null || isPresetAvatar(value)),
 });
 

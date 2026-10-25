@@ -28,6 +28,9 @@ export default function PrivacyPage() {
         <ul>
           <li>Your sign-in lives in an encrypted session cookie in your browser. It isn&apos;t stored in a database.</li>
           <li>Rooms are kept in the server&apos;s memory only: members, chat messages, the stream list and queue, and moderation state. They are removed when the room ends and when the service restarts.</li>
+          <li>
+            The operator can see, live, which rooms exist and who is in them (display name, whether signed in with Discord, room name and whether it has a password). The operator cannot see chat messages, passwords or voice. This view is not stored. The server's logs record only that an admin looked, with a shortened IP address, and hosting logs are kept by Railway for a limited time.
+          </li>
           <li>Voice and screen shares are relayed live through LiveKit and are not recorded.</li>
           <li>Preferences such as volume, captions, fit or fill and your TV output choice are saved in your browser&apos;s local storage and never sent to us.</li>
         </ul>

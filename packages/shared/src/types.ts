@@ -38,6 +38,14 @@ export function parseRoomCode(input: string): string | null {
   return /^[a-z0-9]{8}$/.test(candidate) ? candidate : null;
 }
 
+// Rejects control, zero-width and bidi-override characters that can spoof or break names in logs and UI.
+export const displayNameSchema = z
+  .string()
+  .trim()
+  .min(2)
+  .max(24)
+  .refine((value) => !/[\p{C}\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/u.test(value), "Names can't contain control or invisible characters.");
+
 export const roomNameSchema = z.string().trim().max(40);
 
 export const roomInfoSchema = z.object({
