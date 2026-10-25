@@ -9,6 +9,9 @@ export function LegalLinks({ className = "" }: { className?: string }) {
       <Link href="/privacy" className="transition hover:text-white">
         Privacy Policy
       </Link>
+      <a href="https://github.com/dsameendra/nexus-lounge" target="_blank" rel="noreferrer" className="transition hover:text-white">
+        Source code
+      </a>
     </nav>
   );
 }

@@ -169,3 +169,9 @@ Browser end-to-end suites (Chrome plus WebKit for the iPhone-style checks) live 
 Two services built from the Dockerfiles in `apps/server` and `apps/web`, auto-deployed from `main`. LiveKit must be [LiveKit Cloud](https://cloud.livekit.io), since Railway doesn't support UDP. Step-by-step instructions and config templates are in [docs/railway-deploy.md](docs/railway-deploy.md).
 
 Every server deploy or restart ends all rooms, because they live in memory. Keep the server at a single instance.
+
+## License
+
+Copyright (C) 2026 dsameendra
+
+Nexus Lounge is free software under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-or-later). You can use, modify and host it, but if you run a modified version as a service, you must make your version's source available to its users under the same license. Derivative works must stay open source.
