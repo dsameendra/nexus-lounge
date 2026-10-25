@@ -12,7 +12,7 @@ import { PlayerControls, type SyncStatus } from "./PlayerControls";
 import { useRoom } from "./RoomProvider";
 import { loadVolume, VOLUME_KEY } from "./StreamPlayer";
 import { useAppleAirPlaySupport, openTvSheet } from "./useAirPlay";
-import { useLocalFileActions } from "./useLocalFileActions";
+import { useDeviceStream } from "./useDeviceStream";
 import { COMPACT_SCREEN, PHONE_LANDSCAPE, hasElementFullscreen, useMediaQuery } from "./useMediaQuery";
 import { useTvOutput } from "./useTvOutput";
 import { useVideoFit } from "./useVideoFit";
@@ -175,7 +175,7 @@ export function LocalPlayer({
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [ui, setUi] = useState({ time: 0, playing: false, status: "syncing" as SyncStatus, blocked: false, ended: false, error: null as string | null });
 
-  const { entry, owner, remembered, busy, problem, attach, choose, resume, release } = useLocalFileActions(stream);
+  const { kind, entry, owner, remembered, busy, problem, attach, choose, resume, release, ownLabel } = useDeviceStream(stream);
   const shown = Boolean(stream && visible);
   const silenced = muted || !localSound;
   // Deafening is for voice chat; the film keeps playing. Volume and mute here are the only controls for its sound.
@@ -346,7 +346,7 @@ export function LocalPlayer({
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
-        if (bare || (entry && !needsFile)) return;
+        if (bare || kind !== "local" || (entry && !needsFile)) return;
         void fileFromDrop(event).then(attach);
       }}
     >
@@ -396,19 +396,25 @@ export function LocalPlayer({
             <FilmIcon />
           </span>
           <div>
-            <p className="font-semibold">{remembered ? `Resume “${remembered}”` : "Open the file to keep sharing"}</p>
+            <p className="font-semibold">
+              {kind === "torrent" ? "Reconnect Stremio to keep sharing" : kind === "link" ? "Paste the link again to keep sharing" : remembered ? `Resume “${remembered}”` : "Open the file to keep sharing"}
+            </p>
             <p className="mx-auto mt-1 max-w-sm text-sm text-label-2">
-              Your browser doesn&apos;t keep this file after a refresh, so everyone watching the live feed is waiting for you.
+              {kind === "local"
+                ? "Your browser doesn't keep this file after a refresh, so everyone watching the live feed is waiting for you."
+                : kind === "torrent"
+                  ? "This tab isn't playing the torrent through your Stremio any more, so everyone watching the live feed is waiting for you."
+                  : "Links aren't kept after you close the tab, so everyone watching the live feed is waiting for you."}
             </p>
           </div>
           <button
             disabled={busy}
-            onClick={() => void (remembered ? resume() : choose())}
+            onClick={() => void (kind === "local" && remembered ? resume() : choose())}
             className="h-10 rounded-full bg-accent px-5 text-sm font-semibold transition hover:brightness-110 active:scale-95 disabled:opacity-50"
           >
-            {remembered ? "Resume" : "Choose the file"}
+            {kind === "torrent" ? "Use my Stremio" : kind === "link" ? "Paste the link" : remembered ? "Resume" : "Choose the file"}
           </button>
-          {remembered && (
+          {kind === "local" && remembered && (
             <button onClick={() => void choose()} className="text-sm text-accent hover:underline">
               Choose a different copy
             </button>
@@ -427,13 +433,13 @@ export function LocalPlayer({
           {owner && files.feedError && <span className="flex h-8 items-center rounded-full bg-warn/25 px-3.5 text-xs font-medium text-warn backdrop-blur">{files.feedError}</span>}
           {!bare && !entry && (
             <>
-              {remembered && (
+              {kind === "local" && remembered && (
                 <button disabled={busy} onClick={() => void resume()} className={chip}>
                   Resume “{remembered}”
                 </button>
               )}
               <button disabled={busy} onClick={() => void choose()} className={chip}>
-                {busy ? "Checking the file…" : "I have this file"}
+                {busy ? (kind === "local" ? "Checking the file…" : "Connecting…") : ownLabel}
               </button>
             </>
           )}

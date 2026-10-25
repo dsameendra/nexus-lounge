@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LOCAL_ID, localFileSchema } from "./local-file.ts";
+import { TORRENT_ID } from "./stremio.ts";
 
 export const SCREEN_PREFIX = "screen:";
 
@@ -71,11 +72,20 @@ export const joinRoomRequestSchema = z.object({ password: z.string().max(64).opt
 
 export const mediaSourceSchema = z
   .object({
-    type: z.enum(["youtube", "twitch", "local"]),
+    type: z.enum(["youtube", "twitch", "local", "torrent", "link"]),
     id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
     isLive: z.boolean(),
   })
-  .refine((source) => source.type !== "local" || (LOCAL_ID.test(source.id) && !source.isLive), "Invalid local file");
+  .refine((source) => {
+    if (source.type === "local" || source.type === "link") return LOCAL_ID.test(source.id) && !source.isLive;
+    if (source.type === "torrent") return TORRENT_ID.test(source.id) && !source.isLive;
+    return true;
+  }, "Invalid stream");
+
+// Streams whose picture comes from a person's own device: a file, a torrent through their Stremio, or a link only they hold.
+export function isDeviceSource(source: { type: string }) {
+  return source.type === "local" || source.type === "torrent" || source.type === "link";
+}
 export type MediaSource = z.infer<typeof mediaSourceSchema>;
 
 export const playbackSchema = z.object({
@@ -93,6 +103,7 @@ export const streamSchema = z.object({
   addedAt: z.number(),
   playback: playbackSchema,
   file: localFileSchema.optional(),
+  trackers: z.array(z.string().max(200)).max(8).optional(),
 });
 export type Stream = z.infer<typeof streamSchema>;
 
@@ -172,7 +183,7 @@ export const joinResponseSchema = livekitTokenResponseSchema.extend({ wsUrl: z.s
 export type JoinResponse = z.infer<typeof joinResponseSchema>;
 
 export function streamKey(source: MediaSource) {
-  if (source.type === "local") return `local:${source.id}`;
+  if (source.type === "local" || source.type === "torrent" || source.type === "link") return `${source.type}:${source.id}`;
   return source.type === "youtube" ? `youtube:${source.id}` : `twitch:${source.isLive ? "live" : "vod"}:${source.id}`;
 }
 

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { cleanFileName, parseMediaUrl, parsePlaylistId, streamKey } from "@nexus/shared";
 import { fileFromDrop, formatBytes, formatLength, pickFile, probeFile, readFingerprint, type PickedFile } from "@/lib/local-files";
 import { CheckIcon, FilmIcon, LinkIcon, PlaylistIcon } from "./Icons";
+import { AddStremioPanel } from "./AddStremioPanel";
 import { useLocalFiles } from "./LocalFilesProvider";
 import { useRoom } from "./RoomProvider";
 import { Segmented } from "./Segmented";
@@ -110,8 +111,10 @@ function FilePanel({ onClose }: { onClose: () => void }) {
 
 export function AddStreamSheet({ onClose }: { onClose: () => void }) {
   const { send, isController, select, self, state } = useRoom();
-  const [tab, setTab] = useState<"link" | "file">("link");
+  const [tab, setTab] = useState<"link" | "file" | "stremio">("link");
   const canFile = !self.guest && (state.room.settings.sharing === "everyone" || isController);
+  const canStremio = !self.guest && isController;
+  const tabs = canFile || canStremio;
   const [value, setValue] = useState("");
   const result = useMemo(() => (value.trim() ? parseMediaUrl(value) : null), [value]);
   const source = result?.ok ? result.source : null;
@@ -140,20 +143,22 @@ export function AddStreamSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <Sheet title="Add a stream" onClose={onClose}>
-      {canFile && (
+      {tabs && (
         <Segmented
           className="mb-4"
           value={tab}
           onChange={setTab}
           options={[
             { value: "link", label: "Link", icon: <LinkIcon /> },
-            { value: "file", label: "Video file", icon: <FilmIcon /> },
+            ...(canFile ? [{ value: "file" as const, label: "Video file", icon: <FilmIcon /> }] : []),
+            ...(canStremio ? [{ value: "stremio" as const, label: "Stremio / link", icon: <PlaylistIcon /> }] : []),
           ]}
         />
       )}
       {tab === "file" && canFile && <FilePanel onClose={onClose} />}
+      {tab === "stremio" && canStremio && <AddStremioPanel onClose={onClose} />}
       <form
-        hidden={tab === "file" && canFile}
+        hidden={tab !== "link" && tabs}
         onSubmit={(event) => {
           event.preventDefault();
           if (listId && !source) addPlaylist();
