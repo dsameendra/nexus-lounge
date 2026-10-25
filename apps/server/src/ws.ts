@@ -135,6 +135,10 @@ export function attachWebSocket(server: Server) {
         return;
       }
       const roomId = session.roomId;
+      if (!rooms.isMember(roomId, session.user.sub)) {
+        socket.terminate();
+        return;
+      }
       void Promise.resolve(handle(roomId, session.user, message)).then((result) => {
         if (!result.ok && socket.readyState === socket.OPEN) send(socket, { type: "error", message: result.message });
       });

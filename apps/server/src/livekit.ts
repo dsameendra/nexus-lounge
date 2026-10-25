@@ -48,6 +48,27 @@ export async function createViewerToken(roomId: string, identity: string, name: 
   return token.toJwt();
 }
 
+export async function closeVoiceRoom(roomId: string) {
+  try {
+    await rooms.deleteRoom(roomId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Evicts voice participants who were removed from a room, and deletes voice rooms that no longer exist.
+export async function reconcileVoice(hasRoom: (roomId: string) => boolean, removed: { roomId: string; identity: string }[]) {
+  try {
+    for (const voice of await rooms.listRooms()) {
+      if (!hasRoom(voice.name)) await rooms.deleteRoom(voice.name);
+    }
+    for (const { roomId, identity } of removed) {
+      if (hasRoom(roomId)) await rooms.removeParticipant(roomId, identity).catch(() => {});
+    }
+  } catch {}
+}
+
 export async function removeFromVoice(roomId: string, identity: string) {
   try {
     await rooms.removeParticipant(roomId, identity);

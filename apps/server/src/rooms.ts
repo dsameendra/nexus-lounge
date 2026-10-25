@@ -22,6 +22,7 @@ import {
   type TvMode,
 } from "@nexus/shared";
 import type { SessionPayload } from "@nexus/shared/session-token";
+import { memberRef } from "@nexus/shared/admin-token";
 import { fetchPlaylist } from "./playlists.ts";
 import { fallbackTitle, fetchTitle } from "./titles.ts";
 
@@ -92,13 +93,19 @@ export function createRoom(hostId: string, password?: string, name = ""): RoomIn
   return info;
 }
 
+function safeEqual(a: string, b: string) {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
 const clean = (value: string) => value.replace(/[\p{C}\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/gu, "").slice(0, 48);
 
 // Built field by field on purpose: never spread room or member objects here.
-export function adminOverview() {
+export function adminOverview(secret: string) {
   const MAX_ROOMS = 200;
   const MAX_MEMBERS = 100;
-  const all = [...rooms.values()];
+  const all = [...rooms.values()].sort((a, b) => b.connections.size - a.connections.size || b.info.createdAt - a.info.createdAt);
   const names = (room: StoredRoom, id: string) => {
     const member = room.connections.get(id)?.member;
     return member ? clean(member.name) : "(not connected)";
@@ -114,7 +121,13 @@ export function adminOverview() {
       hasPassword: room.info.hasPassword,
       memberCount: members.length,
       tvCount: room.connections.size - members.length,
-      members: members.slice(0, MAX_MEMBERS).map(({ member }) => ({ name: clean(member.name), guest: member.guest, deafened: member.deafened })),
+      members: members.slice(0, MAX_MEMBERS).map(({ member }) => ({
+        ref: memberRef(secret, room.info.id, member.id),
+        name: clean(member.name),
+        guest: member.guest,
+        deafened: member.deafened,
+        host: member.id === room.info.hostId,
+      })),
       playing: featured ? { title: clean(featured.title), source: featured.source.type } : null,
     };
   });
@@ -438,29 +451,73 @@ export function respondToJoin(roomId: string, user: SessionPayload, targetId: st
   return ok;
 }
 
-export function kickUser(roomId: string, user: SessionPayload, targetId: string): Result {
-  const room = rooms.get(roomId);
-  if (!room) return fail("Room not found");
-  if (room.info.hostId !== user.sub) return fail("Only the room owner can remove people");
-  if (targetId === user.sub) return fail("You can't remove yourself");
+function dropSockets(connection: Connection, message: ServerMessage, code: number, reason: string) {
+  for (const socket of connection.sockets) {
+    try {
+      socket.send(JSON.stringify(message));
+      socket.close(code, reason);
+    } catch {}
+    setTimeout(() => socket.terminate(), 1500).unref();
+  }
+}
 
+// Removes a person (and any TV they paired) from a room and blocks them from coming back.
+function evict(room: StoredRoom, roomId: string, targetId: string, reason: string) {
   room.blocked.set(targetId, "removed");
   room.admitted.delete(targetId);
   room.pending.delete(targetId);
   room.restrictions.delete(targetId);
   room.info = { ...room.info, controllerIds: room.info.controllerIds.filter((id) => id !== targetId) };
-
-  const connection = room.connections.get(targetId);
-  if (connection) {
-    room.connections.delete(targetId);
-    for (const socket of connection.sockets) {
-      socket.send(JSON.stringify({ type: "kicked" } satisfies ServerMessage));
-      socket.close(4001, "Removed by the room owner");
-    }
+  const targets = [targetId, ...[...room.connections.values()].filter(({ member }) => member.tvOf === targetId).map(({ member }) => member.id)];
+  for (const id of targets) {
+    const connection = room.connections.get(id);
+    if (!connection) continue;
+    room.connections.delete(id);
+    dropSockets(connection, { type: "kicked" }, 4001, reason);
   }
   if (room.connections.size === 0) room.emptySince = Date.now();
   broadcast(roomId);
+  return targets;
+}
+
+export function kickUser(roomId: string, user: SessionPayload, targetId: string): Result {
+  const room = rooms.get(roomId);
+  if (!room) return fail("Room not found");
+  if (room.info.hostId !== user.sub) return fail("Only the room owner can remove people");
+  if (targetId === user.sub) return fail("You can't remove yourself");
+  evict(room, roomId, targetId, "Removed by the room owner");
   return ok;
+}
+
+export function adminRemoveMember(roomId: string, ref: string, secret: string): { status: "ok"; voiceIds: string[] } | { status: "gone" | "host" } {
+  const room = rooms.get(roomId);
+  const target = room && [...room.connections.values()].find(({ member }) => safeEqual(memberRef(secret, roomId, member.id), ref));
+  if (!room || !target) return { status: "gone" };
+  if (target.member.id === room.info.hostId) return { status: "host" };
+  return { status: "ok", voiceIds: evict(room, roomId, target.member.id, "Removed by the operator") };
+}
+
+export function adminCloseRoom(roomId: string): { status: "ok"; voiceIds: string[] } | { status: "gone" } {
+  const room = rooms.get(roomId);
+  if (!room) return { status: "gone" };
+  rooms.delete(roomId);
+  const voiceIds = [...room.connections.keys()];
+  for (const connection of room.connections.values()) {
+    dropSockets(connection, { type: "error", message: "This room was closed by the operator", fatal: true }, 4002, "Room closed");
+  }
+  room.connections.clear();
+  reactionHistory.delete(roomId);
+  return { status: "ok", voiceIds };
+}
+
+export function blockedRemovals() {
+  const result: { roomId: string; identity: string }[] = [];
+  for (const [roomId, room] of rooms) for (const [identity, why] of room.blocked) if (why === "removed") result.push({ roomId, identity });
+  return result;
+}
+
+export function hasRoom(roomId: string) {
+  return rooms.has(roomId);
 }
 
 export function pruneStalePending() {

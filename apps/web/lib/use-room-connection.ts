@@ -103,7 +103,7 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
           setLastError({ message: message.message, at: Date.now() });
           if (message.fatal) {
             closed = true;
-            setStatus(message.message.includes("removed") ? "kicked" : "failed");
+            setStatus(/removed|closed/.test(message.message) ? "kicked" : "failed");
             socket.close();
           }
         }

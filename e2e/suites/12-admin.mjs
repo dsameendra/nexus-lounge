@@ -49,6 +49,41 @@ const text = await p.locator("main").innerText();
 check(text.includes("Room Host") && !/token|hash|salt/i.test(text), "people appear by name and nothing sensitive is on the page");
 await host.context.close();
 
+console.log("Actions: close a room, remove a person");
+const hostB = await open("444444444444444444", "Action Host");
+await hostB.page.goto(BASE); await hostB.page.fill("input[placeholder='Room name (optional)']", "Action Room"); await hostB.page.click("text=Create room"); await hostB.page.waitForURL(/\/room\//);
+const actionRoom = hostB.page.url().split("/room/")[1];
+await hostB.page.getByRole("button", { name: "Join room" }).click();
+const guestB = await open("333333333333333333", "Troublemaker");
+await guestB.page.goto(`${BASE}/room/${actionRoom}`); await guestB.page.getByRole("button", { name: "Join room" }).click();
+await p.getByText("Troublemaker").first().waitFor({ timeout: 20000 }).catch(() => {});
+const attempts = [
+  ["no CSRF header", { "content-type": "application/json", origin: BASE, "sec-fetch-site": "same-origin" }],
+  ["wrong CSRF header", { "content-type": "application/json", origin: BASE, "sec-fetch-site": "same-origin", "x-admin-csrf": "nope" }],
+  ["foreign origin", { "content-type": "application/json", origin: "https://evil.example", "sec-fetch-site": "same-origin", "x-admin-csrf": "nope" }],
+  ["cross-site", { "content-type": "application/json", origin: BASE, "sec-fetch-site": "cross-site", "x-admin-csrf": "nope" }],
+  ["no Sec-Fetch-Site", { "content-type": "application/json", origin: BASE, "x-admin-csrf": "nope" }],
+  ["not JSON", { "content-type": "text/plain", origin: BASE, "sec-fetch-site": "same-origin", "x-admin-csrf": "nope" }],
+];
+for (const [label, headers] of attempts) {
+  const r = await a.context.request.post(`${BASE}/api/admin/close`, { headers, data: JSON.stringify({ room: actionRoom }) });
+  check(r.status() === 404, `closing is refused: ${label}`);
+}
+const anonPost = await (await open(null)).context.request.post(`${BASE}/api/admin/close`, { headers: { "content-type": "application/json", origin: BASE, "sec-fetch-site": "same-origin" }, data: JSON.stringify({ room: actionRoom }) });
+check(anonPost.status() === 404, "closing is refused without an admin session");
+await p.getByRole("button", { name: "Remove Troublemaker" }).click();
+check(await p.getByRole("dialog").getByText("can't rejoin it").isVisible(), "removing asks for confirmation first");
+await p.getByRole("dialog").getByRole("button", { name: "Remove", exact: true }).click();
+check(await p.getByText("Person removed.").waitFor({ timeout: 10000 }).then(() => true, () => false), "the person is removed");
+check(await guestB.page.getByRole("button", { name: "Leave" }).waitFor({ state: "detached", timeout: 15000 }).then(() => true, () => false), "their session ends right away");
+check(await p.getByRole("button", { name: "Remove Action Host" }).count() === 0, "the host has no Remove button");
+await p.locator("li").filter({ hasText: "Action Room" }).getByRole("button", { name: "Close room" }).first().click();
+await p.getByRole("dialog").getByRole("button", { name: "Close room" }).click();
+check(await p.getByText("Room closed.").waitFor({ timeout: 10000 }).then(() => true, () => false), "the room is closed");
+check(await hostB.page.getByRole("button", { name: "Leave" }).waitFor({ state: "detached", timeout: 15000 }).then(() => true, () => false), "everyone inside is disconnected");
+check(await p.getByText("Action Room").first().waitFor({ state: "detached", timeout: 8000 }).then(() => true, () => false), "it disappears from the list");
+await hostB.context.close(); await guestB.context.close();
+
 console.log("Locking and replay");
 await p.getByRole("button", { name: "Lock" }).click();
 await p.waitForURL((url) => url.pathname === "/", { timeout: 8000 });

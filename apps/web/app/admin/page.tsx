@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { AdminClient } from "@/components/AdminClient";
-import { adminIdentity, adminSession } from "@/lib/admin";
+import { adminIdentity, adminSession, pageCsrf } from "@/lib/admin";
 import { logoutAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export default async function AdminPage() {
           <button className="h-10 rounded-full bg-white/10 px-4 text-sm font-medium transition hover:bg-white/15 active:scale-95">Lock</button>
         </form>
       </div>
-      <AdminClient />
+      <AdminClient csrf={await pageCsrf()} />
     </main>
   );
 }

@@ -13,7 +13,7 @@ export function parseAdminIds(raw: string | undefined) {
 
 const headerSchema = z.object({ alg: z.literal("HS256"), typ: z.literal("JWT") }).strict();
 
-function verify<T extends z.ZodType>(token: string, secret: string, schema: T, now = Date.now() / 1000): z.infer<T> | null {
+function verify<T extends z.ZodType>(token: string, secret: string, schema: T, allowedKeys?: string[], now = Date.now() / 1000): z.infer<T> | null {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   const [header, payload, signature] = parts as [string, string, string];
@@ -22,7 +22,9 @@ function verify<T extends z.ZodType>(token: string, secret: string, schema: T, n
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null;
   try {
     headerSchema.parse(JSON.parse(Buffer.from(header, "base64url").toString()));
-    const claims = schema.parse(JSON.parse(Buffer.from(payload, "base64url").toString()));
+    const raw = JSON.parse(Buffer.from(payload, "base64url").toString()) as Record<string, unknown>;
+    if (allowedKeys && !Object.keys(raw).every((key) => allowedKeys.includes(key))) return null;
+    const claims = schema.parse(raw);
     const { iat, exp } = claims as { iat: number; exp: number };
     if (exp <= now - 5 || iat > now + 5) return null;
     return claims;
@@ -38,26 +40,46 @@ function make(claims: Record<string, unknown>, secret: string, ttlSeconds: numbe
 }
 
 // Short-lived request token the web app sends to the realtime server.
+export const ROOM_ID = /^[a-z0-9]{8}$/;
+export const MEMBER_REF = /^[A-Za-z0-9_-]{22}$/;
+
+const actSchema = z.discriminatedUnion("act", [
+  z.object({ act: z.literal("view") }),
+  z.object({ act: z.literal("close"), room: z.string().regex(ROOM_ID) }),
+  z.object({ act: z.literal("remove"), room: z.string().regex(ROOM_ID), ref: z.string().regex(MEMBER_REF) }),
+]);
+export type AdminAct = z.infer<typeof actSchema>;
+
+const baseSchema = z.object({
+  iss: z.literal("nexus-web"),
+  aud: z.literal("admin"),
+  sub: z.string().regex(DISCORD_ID),
+  jti: z.uuid(),
+  iat: z.number(),
+  exp: z.number(),
+});
+
 const requestSchema = z
-  .object({
-    iss: z.literal("nexus-web"),
-    aud: z.literal("admin"),
-    sub: z.string().regex(DISCORD_ID),
-    jti: z.uuid(),
-    iat: z.number(),
-    exp: z.number(),
-  })
-  .strict()
+  .intersection(baseSchema, actSchema)
   .refine((claims) => claims.exp - claims.iat <= 120);
 
 export type AdminRequestClaims = z.infer<typeof requestSchema>;
 
-export function signAdminRequest(sub: string, secret: string) {
-  return make({ iss: "nexus-web", aud: "admin", sub, jti: randomUUID() }, secret, 60);
+export function signAdminRequest(sub: string, secret: string, act: AdminAct = { act: "view" }) {
+  return make({ iss: "nexus-web", aud: "admin", sub, jti: randomUUID(), ...act }, secret, 60);
+}
+
+// Opaque per-room handle for a member, so the admin UI never sees Discord IDs.
+export function memberRef(secret: string, roomId: string, memberId: string) {
+  return createHmac("sha256", secret).update(`ref:${roomId}:${memberId}`).digest("base64url").slice(0, 22);
+}
+
+export function csrfToken(secret: string, sessionCookie: string) {
+  return createHmac("sha256", secret).update(`csrf:${sessionCookie}`).digest("base64url");
 }
 
 export function verifyAdminRequest(token: string, secret: string) {
-  return verify(token, secret, requestSchema);
+  return verify(token, secret, requestSchema, ["iss", "aud", "sub", "jti", "iat", "exp", "act", "room", "ref"]);
 }
 
 // Browser cookie granting access to /admin after the TOTP check.

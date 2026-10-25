@@ -41,6 +41,10 @@ function newCode() {
   return Array.from(bytes, (byte) => CODE_ALPHABET[byte % CODE_ALPHABET.length]).join("");
 }
 
+export function dropPairings(roomId: string) {
+  for (const [code, pairing] of pairings) if (pairing.roomId === roomId) pairings.delete(code);
+}
+
 export function createPairing(roomId: string) {
   prune();
   if (pairings.size >= MAX_PENDING) return null;

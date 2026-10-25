@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
-import { ADMIN_SECRET_MIN, ADMIN_SESSION_SECONDS, DISCORD_ID, checkTotp, parseAdminIds, signAdminRequest, signAdminSession, verifyAdminSession } from "@nexus/shared/admin-token";
+import { ADMIN_SECRET_MIN, ADMIN_SESSION_SECONDS, DISCORD_ID, checkTotp, csrfToken, parseAdminIds, signAdminRequest, signAdminSession, verifyAdminSession, type AdminAct } from "@nexus/shared/admin-token";
+import { timingSafeEqual } from "node:crypto";
 import { auth } from "@/auth";
 import { serverHttpUrl } from "@/lib/server-api";
 
@@ -68,4 +69,43 @@ export const adminCookieOptions = {
 export async function fetchOverview(sub: string) {
   const token = signAdminRequest(sub, config().secret);
   return fetch(`${serverHttpUrl()}/admin/overview`, { headers: { authorization: `Bearer ${token}` }, cache: "no-store" }).catch(() => null);
+}
+
+const REAUTH_SECONDS = 5 * 60;
+
+// Like adminSession, but also returns the cookie's age data and the CSRF token tied to it.
+export async function adminActionContext() {
+  const sub = await adminIdentity();
+  if (!sub) return null;
+  const cookie = (await cookies()).get(ADMIN_COOKIE)?.value;
+  const claims = cookie ? verifyAdminSession(cookie, config().secret) : null;
+  if (!cookie || claims?.sub !== sub) return null;
+  return { sub, fresh: Date.now() / 1000 - claims.iat <= REAUTH_SECONDS, csrf: csrfToken(config().secret, cookie) };
+}
+
+export async function pageCsrf() {
+  return (await adminActionContext())?.csrf ?? "";
+}
+
+export function sameSecret(a: string, b: string) {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+export function trustedOrigin(request: Request) {
+  const site = request.headers.get("sec-fetch-site");
+  const origin = request.headers.get("origin");
+  const canonical = process.env.AUTH_URL ? new URL(process.env.AUTH_URL).origin : null;
+  return site === "same-origin" && Boolean(origin) && origin === canonical;
+}
+
+export async function postAction(sub: string, path: string, act: AdminAct, body?: object) {
+  const token = signAdminRequest(sub, config().secret, act);
+  return fetch(`${serverHttpUrl()}${path}`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, ...(body ? { "content-type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  }).catch(() => null);
 }
