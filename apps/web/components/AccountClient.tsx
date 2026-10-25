@@ -9,7 +9,7 @@ import { Avatar } from "./Avatar";
 import { CheckIcon } from "./Icons";
 import { LegalLinks } from "./LegalLinks";
 
-export function AccountClient({ name: initialName, image: initialImage, guest }: { name: string; image: string | null; guest: boolean }) {
+export function AccountClient({ name: initialName, image: initialImage, guest, id }: { name: string; image: string | null; guest: boolean; id: string }) {
   const router = useRouter();
   const [name, setName] = useState(initialName);
   const [avatar, setAvatar] = useState<string | null>(initialImage && initialImage.startsWith("/avatars/") ? initialImage : null);
@@ -71,6 +71,11 @@ export function AccountClient({ name: initialName, image: initialImage, guest }:
       </Link>
       <h1 className="mt-4 text-3xl font-bold tracking-tight">Account</h1>
       <p className="mt-1 text-sm text-label-2">{guest ? "You're signed in as a guest." : "You're signed in with Discord."}</p>
+      {!guest && (
+        <p className="mt-1 text-xs text-label-3">
+          Your ID <span className="font-mono select-all text-label-2">{id}</span>
+        </p>
+      )}
 
       <form onSubmit={save} className="mt-6 space-y-5 rounded-[var(--radius-sheet)] bg-panel p-5">
         <div className="flex items-center gap-4">
