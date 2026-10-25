@@ -66,6 +66,14 @@ None known to remain: the Railway GitHub app already had access to the private r
 
 Enrol the TOTP key in an authenticator app (manual entry, time-based, SHA-1, 6 digits, 30 seconds). Mark the secrets as sealed variables in Railway. To rotate `ADMIN_SECRET`, change it on both services in the same deploy; to revoke an admin, remove their ID from both lists.
 
+## Custom domain behind Cloudflare
+
+Production runs on `nexuslounge.party` (web, `www` redirects to it) and `api.nexuslounge.party` (server, WebSocket). All three records are CNAMEs to Railway, **proxied** (orange cloud) in Cloudflare, with SSL/TLS mode **Full**. Keep the `_railway-verify` TXT records: they are what proves ownership once the CNAMEs are proxied. When Railway's own certificates are valid for all three hostnames, switch Cloudflare to **Full (strict)**.
+
+Web variables: `AUTH_URL=https://nexuslounge.party`, `NEXT_PUBLIC_SERVER_WS_URL=wss://api.nexuslounge.party/ws` (baked at build) and `SERVER_WS_URL` with the same value. The Discord application needs the redirect `https://nexuslounge.party/api/auth/callback/discord` and the Terms and Privacy URLs under the same domain.
+
+The server reads the visitor's address from `CF-Connecting-IP` only when the request arrives from one of Cloudflare's published ranges (`apps/server/src/client-ip.ts`). Refresh that list from https://www.cloudflare.com/ips/ now and then.
+
 ## Client IP behind Railway
 
 Railway puts two proxies in front of the server and overwrites any client-supplied `X-Forwarded-For`, so the server trusts exactly two hops (`TRUST_PROXY_HOPS`, default 2). Probe it after changes: send a spoofed `X-Forwarded-For` and confirm the logged `remoteAddress` is your real IP.

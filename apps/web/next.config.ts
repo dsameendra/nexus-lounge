@@ -7,6 +7,9 @@ try {
 
 const config: NextConfig = {
   transpilePackages: ["@nexus/shared"],
+  async redirects() {
+    return [{ source: "/:path*", has: [{ type: "host", value: "www.nexuslounge.party" }], destination: "https://nexuslounge.party/:path*", permanent: true }];
+  },
   async headers() {
     const adminHeaders = [
       { key: "Cache-Control", value: "private, no-store" },
