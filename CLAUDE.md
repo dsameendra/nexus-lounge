@@ -45,6 +45,7 @@ Virtual watch-party PWA: rooms with LiveKit voice/chat/screen share, synced YouT
 
 ## Secrets and deploy
 - Never commit `.env`, `.env.railway` or `.tmp-*` (all ignored). `.env.example` is the only env file in git.
+- `main` is protected (applies to admins too): changes go through a branch and a pull request, the `check` CI job must pass, no force-pushes or deletion. Squash-merge with `gh pr merge --squash --delete-branch`.
 - Railway services `server` and `web` are connected to GitHub and deploy on every push to `main`. Config templates and steps: `docs/railway-deploy.md`, `docs/railway/`.
 
 ## Tests
