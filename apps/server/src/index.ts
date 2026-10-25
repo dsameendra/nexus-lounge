@@ -8,6 +8,7 @@ import { closeVoiceRoom, createLivekitToken, reconcileVoice, removeFromVoice } f
 import { activeRoomOf, adminCloseRoom, adminOverview, adminRemoveMember, blockedRemovals, hasRoom, roomCount, checkEntry, checkRoomAccess, forgetUser, createRoom, getRoom, isMember, pruneReactionHistory, pruneStalePending, publishInputs, requestEntry } from "./rooms.ts";
 import { allowAttempt, approvePairing, dropPairings, createPairing, mintCredentials, pollPairing } from "./tv.ts";
 import { sweepEmptyRooms } from "./rooms.ts";
+import { clientIp } from "./client-ip.ts";
 import { attachWebSocket } from "./ws.ts";
 
 const app = Fastify({ logger: true, trustProxy: (_address: string, hop: number) => hop < config.TRUST_PROXY_HOPS });
@@ -39,7 +40,7 @@ if (adminEnabled) {
     const now = Date.now();
     for (const [jti, expires] of seenAdminTokens) if (expires < now) seenAdminTokens.delete(jti);
     if (!claims || !adminIds.has(claims.sub) || seenAdminTokens.has(claims.jti) || !expected(claims)) {
-      app.log.warn({ admin: "denied", ip: maskIp(request.ip) }, "admin request denied");
+      app.log.warn({ admin: "denied", ip: maskIp(clientIp(request)) }, "admin request denied");
       return null;
     }
     seenAdminTokens.set(claims.jti, now + 130_000);
@@ -49,7 +50,7 @@ if (adminEnabled) {
   app.get("/admin/overview", { logLevel: "warn" }, async (request, reply) => {
     const claims = denyOrClaims(request, (act) => act.act === "view");
     if (!claims) return reply.callNotFound();
-    app.log.warn({ admin: "ok", ip: maskIp(request.ip) }, "admin overview served");
+    app.log.warn({ admin: "ok", ip: maskIp(clientIp(request)) }, "admin overview served");
     return reply
       .header("cache-control", "private, no-store")
       .header("x-robots-tag", "noindex, nofollow")
@@ -65,7 +66,7 @@ if (adminEnabled) {
     if (!claims) return reply.callNotFound();
     if (!allowAttempt(`admin-act:${claims.sub}`, 20) || !allowAttempt("admin-act:all", 60)) return actionReply(reply).code(429).send({ error: "slow_down" });
     const result = adminCloseRoom(roomId);
-    app.log.warn({ admin: "action", action: "close", roomId, outcome: result.status, ip: maskIp(request.ip) }, "admin closed a room");
+    app.log.warn({ admin: "action", action: "close", roomId, outcome: result.status, ip: maskIp(clientIp(request)) }, "admin closed a room");
     if (result.status === "gone") return actionReply(reply).code(409).send({ error: "gone" });
     dropPairings(roomId);
     const voice = await closeVoiceRoom(roomId);
@@ -80,7 +81,7 @@ if (adminEnabled) {
     if (!claims || !ref) return reply.callNotFound();
     if (!allowAttempt(`admin-act:${claims.sub}`, 20) || !allowAttempt("admin-act:all", 60)) return actionReply(reply).code(429).send({ error: "slow_down" });
     const result = adminRemoveMember(roomId, ref, config.ADMIN_SECRET!);
-    app.log.warn({ admin: "action", action: "remove", roomId, outcome: result.status, ip: maskIp(request.ip) }, "admin removed a person");
+    app.log.warn({ admin: "action", action: "remove", roomId, outcome: result.status, ip: maskIp(clientIp(request)) }, "admin removed a person");
     if (result.status !== "ok") return actionReply(reply).code(409).send({ error: result.status });
     const voice = (await Promise.all(result.voiceIds.map((id) => removeFromVoice(roomId, id)))).length;
     return actionReply(reply).send({ ok: true, voice });
@@ -118,7 +119,7 @@ app.post<{ Params: { id: string } }>("/rooms/:id/livekit-token", async (request,
   if (!room) return reply.code(404).send({ error: "Room not found" });
   const body = joinRoomRequestSchema.safeParse(request.body ?? {});
   if (!body.success) return reply.code(400).send({ error: "Invalid request" });
-  if (body.data.password && (!allowAttempt(`pw:${user.sub}:${room.id}`, 8) || !allowAttempt(`pwip:${request.ip}:${room.id}`, 30))) {
+  if (body.data.password && (!allowAttempt(`pw:${user.sub}:${room.id}`, 8) || !allowAttempt(`pwip:${clientIp(request)}:${room.id}`, 30))) {
     return reply.code(429).send({ error: "Too many attempts. Wait a moment." });
   }
   const access = checkRoomAccess(room.id, user.sub, body.data.password);
@@ -133,7 +134,7 @@ app.post<{ Params: { id: string } }>("/rooms/:id/livekit-token", async (request,
 });
 
 app.post("/tv/pairings", async (request, reply) => {
-  if (!allowAttempt(`pair:${request.ip}`)) return reply.code(429).send({ error: "Too many attempts" });
+  if (!allowAttempt(`pair:${clientIp(request)}`)) return reply.code(429).send({ error: "Too many attempts" });
   const body = z.object({ roomId: roomIdSchema }).safeParse(request.body);
   if (!body.success || !getRoom(body.data.roomId)) return reply.code(404).send({ error: "Room not found" });
   const pairing = createPairing(body.data.roomId);
@@ -142,7 +143,7 @@ app.post("/tv/pairings", async (request, reply) => {
 });
 
 app.get<{ Params: { code: string } }>("/tv/pairings/:code", async (request, reply) => {
-  if (!allowAttempt(`poll:${request.ip}`, 120)) return reply.code(429).send({ error: "Too many attempts" });
+  if (!allowAttempt(`poll:${clientIp(request)}`, 120)) return reply.code(429).send({ error: "Too many attempts" });
   const secret = request.headers["x-pairing-secret"];
   const result = tvCodeSchema.safeParse(request.params.code).success && typeof secret === "string" ? pollPairing(request.params.code, secret) : "invalid";
   if (result === "invalid") return reply.code(404).send({ error: "Code expired" });
@@ -170,7 +171,7 @@ app.post<{ Params: { id: string } }>("/rooms/:id/tv/session", async (request, re
   if (!room) return reply.code(404).send({ error: "Room not found" });
   const body = joinRoomRequestSchema.safeParse(request.body ?? {});
   if (!body.success) return reply.code(400).send({ error: "Invalid request" });
-  if (body.data.password && (!allowAttempt(`pw:${user.sub}:${room.id}`, 8) || !allowAttempt(`pwip:${request.ip}:${room.id}`, 30))) {
+  if (body.data.password && (!allowAttempt(`pw:${user.sub}:${room.id}`, 8) || !allowAttempt(`pwip:${clientIp(request)}:${room.id}`, 30))) {
     return reply.code(429).send({ error: "Too many attempts. Wait a moment." });
   }
   const access = checkRoomAccess(room.id, user.sub, body.data.password);
