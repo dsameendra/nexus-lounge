@@ -4,8 +4,8 @@ Project `nexus-lounge`, environment `production`, two services built from the re
 
 | Service | Dockerfile | Health check | Public URL |
 |---|---|---|---|
-| `server` (Fastify + ws) | `apps/server/Dockerfile` | `GET /health` | https://server-production-e92a.up.railway.app |
-| `web` (Next.js) | `apps/web/Dockerfile` | `GET /login` | https://web-production-795645.up.railway.app |
+| `server` (Fastify + ws) | `apps/server/Dockerfile` | `GET /health` | https://api.nexuslounge.party (also https://server-production-e92a.up.railway.app) |
+| `web` (Next.js) | `apps/web/Dockerfile` | `GET /login` | https://nexuslounge.party (also https://web-production-795645.up.railway.app) |
 
 Each service selects its Dockerfile through the service variable `RAILWAY_DOCKERFILE_PATH`.
 
