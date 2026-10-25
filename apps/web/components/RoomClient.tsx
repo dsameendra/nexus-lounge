@@ -230,7 +230,7 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
           <PushToTalkProvider deafened={deafened}>
           <VoiceAudio deafened={deafened} />
           <SoundCues deafened={deafened} />
-          <LocalFilesProvider deafened={deafened}>
+          <LocalFilesProvider>
             <RoomView
               deafened={deafened}
               onDeafenedChange={setDeafened}

@@ -14,7 +14,6 @@ export const FEED_AUDIO = (streamId: string) => `file:a:${streamId}`;
 const IDLE_BEFORE_STOP_MS = 10_000;
 
 interface LocalFilesValue {
-  deafened: boolean;
   canHost: boolean;
   version: number;
   entry: (streamId: string) => LocalEntry | undefined;
@@ -68,7 +67,7 @@ function ready(entry: LocalEntry) {
   });
 }
 
-export function LocalFilesProvider({ deafened, children }: { deafened: boolean; children: React.ReactNode }) {
+export function LocalFilesProvider({ children }: { children: React.ReactNode }) {
   const lk = useRoomContext();
   const { state, self, send, status, clock } = useRoom();
   const entries = useRef(registry);
@@ -322,7 +321,6 @@ export function LocalFilesProvider({ deafened, children }: { deafened: boolean; 
 
   const value = useMemo<LocalFilesValue>(
     () => ({
-      deafened,
       canHost,
       version,
       entry: (streamId) => entries.current.get(streamId),
@@ -336,7 +334,7 @@ export function LocalFilesProvider({ deafened, children }: { deafened: boolean; 
       feedError,
       listen,
     }),
-    [deafened, canHost, version, attach, adopt, detach, rememberedNames, resume, requestFeed, sharing, feedError, listen],
+    [canHost, version, attach, adopt, detach, rememberedNames, resume, requestFeed, sharing, feedError, listen],
   );
 
   return <Context.Provider value={value}>{children}</Context.Provider>;

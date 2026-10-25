@@ -112,7 +112,7 @@ const energy = (page) => page.evaluate(async () => {
   for (const pc of window.__pcs) for (const s of (await pc.getStats()).values()) if (s.type === "inbound-rtp" && s.kind === "audio") best = Math.max(best, s.totalAudioEnergy ?? 0);
   return best;
 });
-await bob.page.getByRole("button", { name: "Undeafen" }).first().click();
+console.log("   (the friend is still deafened, as everyone is when they join)");
 await sleep(1500);
 const before = await energy(bob.page);
 await sleep(2000);
@@ -126,7 +126,7 @@ if (!(flowing > before)) {
   })));
   console.log("   owner audio ctx:", JSON.stringify(await p.evaluate(() => ({ pcs: window.__pcs.length }))));
 }
-check(flowing > before, "the friend hears the film");
+check(flowing > before, "a deafened friend still hears the film (deafen is for voice chat only)");
 await p.locator('button[aria-label="Mute"]').last().click();
 check(await p.locator('button[aria-label="Unmute"]').count() > 0, "the owner can mute their own speakers");
 const e1 = await energy(bob.page);
@@ -258,7 +258,6 @@ if (existsSync(mp4)) {
     await sp.getByRole("button", { name: "Play for everyone" }).click();
     const viewer = await join_("discord-local-viewer2", "Viewer Two", room2);
     check(await until(async () => { const v = await feedVideo(viewer.page); return v && v.w > 0; }, 40000), "a Chrome viewer receives the picture from the canvas route");
-    await viewer.page.getByRole("button", { name: "Undeafen" }).first().click();
     await sleep(1500);
     const a = await energy(viewer.page);
     await sleep(2500);

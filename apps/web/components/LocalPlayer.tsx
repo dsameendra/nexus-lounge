@@ -180,9 +180,9 @@ export function LocalPlayer({
   const owner = stream?.addedBy.id === self.id;
   const shown = Boolean(stream && visible);
   const remembered = stream ? files.remembered(stream.id) : null;
-  const serverDeafened = state.restrictions[self.id]?.deafened ?? false;
   const silenced = muted || !localSound;
-  const gain = files.deafened || serverDeafened || silenced || isSilent(volume) ? 0 : sliderToGain(volume);
+  // Deafening is for voice chat; the film keeps playing. Volume and mute here are the only controls for its sound.
+  const gain = silenced || isSilent(volume) ? 0 : sliderToGain(volume);
   const fillable = fullscreen || phoneLand;
   const filling = fillable && fit === "fill";
   const overlayControls = fullscreen || compactScreen;

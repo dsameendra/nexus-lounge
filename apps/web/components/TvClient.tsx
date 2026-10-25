@@ -130,7 +130,7 @@ export function TvClient({ roomId, signedIn }: { roomId: string; signedIn: boole
       fallback={(status) => <Screen>{status === "failed" ? "Couldn't connect to the room." : "Connecting…"}</Screen>}
     >
       <LiveKitRoom token={credentials.livekitToken} serverUrl={credentials.livekitUrl} connect audio={false} video={false} className="h-dvh">
-        <LocalFilesProvider deafened={false}>
+        <LocalFilesProvider>
           <TvRoom />
         </LocalFilesProvider>
       </LiveKitRoom>
