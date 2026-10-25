@@ -806,3 +806,17 @@ test("local files: autoplay skips them", async () => {
   host.send({ type: "queue.advance", fromStreamId: ytId });
   await host.until(() => host.state!.featuredId === "youtube:9bZkp7q19f0");
 });
+
+test("local files: when one ends, autoplay moves on to the next playable stream", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  host.send({ type: "stream.add", source: localSource(1), file: localFile });
+  host.send({ type: "stream.add", source: localSource(2), file: localFile });
+  host.send({ type: "stream.add", source: yt });
+  await host.until(() => host.state!.streams.length === 3);
+  host.send({ type: "stream.feature", streamId: localId(1) });
+  await host.until(() => host.state!.featuredId === localId(1));
+  host.send({ type: "queue.advance", fromStreamId: localId(1) });
+  await host.until(() => host.state!.featuredId === ytId);
+  assert.equal(host.state!.streams.find((stream) => stream.id === ytId)!.playback.playing, true);
+});

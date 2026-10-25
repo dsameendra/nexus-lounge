@@ -212,22 +212,32 @@ export function LocalPlayer({
   useEffect(() => {
     if (!stream || !shown) return;
     const read = () => {
+      let next: typeof ui;
       if (entry) {
-        const time = Math.floor(entry.video.currentTime * 2) / 2;
-        setUi((prev) => {
-          const next = { time, playing: !entry.video.paused, status: entry.status, blocked: entry.blocked || !entry.audioRunning, ended: entry.ended, error: entry.error };
-          return Object.keys(next).every((key) => prev[key as keyof typeof prev] === next[key as keyof typeof next]) ? prev : next;
-        });
-        return;
+        next = { time: Math.floor(entry.video.currentTime * 2) / 2, playing: !entry.video.paused, status: entry.status, blocked: entry.blocked || !entry.audioRunning, ended: entry.ended, error: entry.error };
+      } else {
+        const length = stream.file?.duration ?? 0;
+        const expected = expectedPosition(stream.playback, clock.now());
+        const ended = length > 0 && expected !== null && expected >= length - 0.5;
+        next = { time: Math.floor(Math.min(expected ?? 0, length || Infinity) * 2) / 2, playing: stream.playback.playing && !ended, status: "synced", blocked: false, ended, error: null };
       }
-      const expected = expectedPosition(stream.playback, clock.now());
-      const time = Math.floor(Math.min(expected ?? 0, stream.file?.duration ?? Infinity) * 2) / 2;
-      setUi((prev) => (prev.time === time && prev.playing === stream.playback.playing && prev.status === "synced" && !prev.blocked && !prev.error ? prev : { time, playing: stream.playback.playing, status: "synced", blocked: false, ended: false, error: null }));
+      setUi((prev) => (Object.keys(next).every((key) => prev[key as keyof typeof prev] === next[key as keyof typeof next]) ? prev : next));
     };
     read();
     const id = setInterval(read, 500);
     return () => clearInterval(id);
   }, [stream, entry, shown, clock]);
+
+  const advancedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ui.ended) {
+      advancedFor.current = null;
+      return;
+    }
+    if (!stream || bare || !isController || stream.id !== state.featuredId || !state.room.settings.autoplayNext || advancedFor.current === stream.id) return;
+    advancedFor.current = stream.id;
+    send({ type: "queue.advance", fromStreamId: stream.id });
+  }, [ui.ended, stream, bare, isController, state.featuredId, state.room.settings.autoplayNext, send]);
 
   const revealControls = useCallback(() => {
     setControlsShown(true);
@@ -359,7 +369,7 @@ export function LocalPlayer({
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
-        if (!bare && !needsFile && entry) return;
+        if (bare || (entry && !needsFile)) return;
         void fileFromDrop(event).then(choose);
       }}
     >

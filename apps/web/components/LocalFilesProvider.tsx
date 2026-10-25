@@ -179,6 +179,19 @@ export function LocalFilesProvider({ deafened, children }: { deafened: boolean; 
     return () => clearInterval(id);
   }, []);
 
+  // Some browsers (Safari) keep audio suspended until a tap; the first tap or key press anywhere wakes every open file.
+  useEffect(() => {
+    const wake = () => {
+      for (const entry of registry.values()) if (!entry.audioRunning) void entry.resumeAudio();
+    };
+    window.addEventListener("pointerdown", wake);
+    window.addEventListener("keydown", wake);
+    return () => {
+      window.removeEventListener("pointerdown", wake);
+      window.removeEventListener("keydown", wake);
+    };
+  }, []);
+
   const listen = useCallback((streamId: string, gain: number) => {
     entries.current.get(streamId)?.setSpeakerGain(gain);
   }, []);
@@ -242,6 +255,7 @@ export function LocalFilesProvider({ deafened, children }: { deafened: boolean; 
       starting.current = true;
       try {
         await entry.resumeAudio();
+        if (!entry.audioRunning) setFeedError("Click anywhere on the page to start the sound of the live feed.");
         const video = entry.captureVideo();
         const audioTrack = entry.feedAudioTrack();
         try {
@@ -268,7 +282,7 @@ export function LocalFilesProvider({ deafened, children }: { deafened: boolean; 
         }
         feed.current = { streamId: entry.streamId, stopVideo: video.stop, videoTrack: video.track, audioTrack };
         idleSince.current = 0;
-        setFeedError(null);
+        if (entry.audioRunning) setFeedError(null);
         setSharing(entry.streamId);
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
@@ -285,6 +299,7 @@ export function LocalFilesProvider({ deafened, children }: { deafened: boolean; 
       if (current) {
         const alive = entries.current.has(current.streamId) && state.streams.some((item) => item.id === current.streamId);
         if (!alive) return void stopFeed();
+        if (entries.current.get(current.streamId)?.audioRunning) setFeedError((message) => (message?.startsWith("Click anywhere") ? null : message));
         if (demand(current.streamId)) idleSince.current = 0;
         else if (idleSince.current === 0) idleSince.current = Date.now();
         else if (Date.now() - idleSince.current > IDLE_BEFORE_STOP_MS) void stopFeed();

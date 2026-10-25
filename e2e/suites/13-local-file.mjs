@@ -26,7 +26,10 @@ const make = (name, pattern, hz) => {
 };
 const fileA = make("film-a.webm", "testsrc2", 440);
 const fileB = make("film-b.webm", "smptebars", 330);
-if (!fileA || !fileB) {
+const shortPath = join(fixtures, "film-s.webm");
+if (!existsSync(shortPath)) spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=25", "-f", "lavfi", "-i", "sine=frequency=260:sample_rate=48000", "-t", "6", "-c:v", "libvpx", "-b:v", "200k", "-c:a", "libopus", "-shortest", shortPath]);
+const fileS = existsSync(shortPath) ? readFileSync(shortPath).toString("base64") : null;
+if (!fileA || !fileB || !fileS) {
   console.log("  (skipped: ffmpeg is needed to make the test videos)");
   process.exit(0);
 }
@@ -42,14 +45,14 @@ try {
 }
 
 // A fake file picker backed by the page's private file system, so remembered files can be tested too.
-const picker = ([a, b]) => {
+const picker = ([a, b, short]) => {
   window.__which = "a";
   window.__pcs = [];
   const Native = window.RTCPeerConnection;
   window.RTCPeerConnection = function (...args) { const pc = new Native(...args); window.__pcs.push(pc); return pc; };
   window.RTCPeerConnection.prototype = Native.prototype;
   window.showOpenFilePicker = async () => {
-    const data = Uint8Array.from(atob(window.__which === "a" ? a : b), (c) => c.charCodeAt(0));
+    const data = Uint8Array.from(atob({ a, b, s: short }[window.__which]), (c) => c.charCodeAt(0));
     const root = await navigator.storage.getDirectory();
     const handle = await root.getFileHandle(`film-${window.__which}.webm`, { create: true });
     const writable = await handle.createWritable();
@@ -63,7 +66,7 @@ const browser = await launch({ args: ["--autoplay-policy=no-user-gesture-require
 const join_ = async (sub, name, room) => {
   const entry = await newPage(browser, { width: 1280, height: 800 });
   await entry.context.addCookies([await mintSession(sub, name)]);
-  await entry.page.addInitScript(picker, [fileA, fileB]);
+  await entry.page.addInitScript(picker, [fileA, fileB, fileS]);
   if (room) {
     await entry.page.goto(`${BASE}/room/${room}`);
     await entry.page.getByRole("button", { name: "Join room" }).click();
@@ -181,6 +184,38 @@ await p.reload();
 await p.getByRole("button", { name: "Join room" }).click();
 check(await until(async () => { const v = await localVideo(p); return v && v.w > 0; }, 30000), "the remembered file reopens by itself");
 check(await until(async () => (await published()) === 2, 30000), "and the live feed comes back for the friends who need it");
+
+console.log("Ending, leaving and removing");
+const o2 = await join_("discord-local-owner2", "Owner Two");
+const q = o2.page;
+await q.goto(BASE);
+await q.click("text=Create room");
+await q.waitForURL(/\/room\//);
+const room3 = q.url().split("/room/")[1];
+await q.getByRole("button", { name: "Join room" }).click();
+await q.evaluate(() => { window.__which = "s"; });
+await q.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
+await q.getByRole("tab", { name: "Video file" }).click();
+await q.getByRole("button", { name: /Choose a video file/ }).click();
+await q.getByText("Ready").waitFor({ timeout: 20000 });
+await q.getByRole("button", { name: "Play for everyone" }).click();
+const v2 = await join_("discord-local-viewer3", "Viewer Three", room3);
+check(await until(async () => { const v = await feedVideo(v2.page); return v && v.w > 0; }, 30000), "a viewer receives a short film");
+check(await until(async () => (await v2.page.getByText("This video has ended").count()) > 0, 30000), "a viewer on the live feed sees when the film ends");
+check(await until(async () => (await q.getByText("This video has ended").count()) > 0, 10000), "and so does the owner");
+await q.close();
+check(await until(async () => (await v2.page.getByText(/isn't in the room right now/).count()) > 0, 30000), "viewers are told when the owner leaves");
+const q2 = await join_("discord-local-owner2", "Owner Two", room3);
+await q2.page.evaluate(() => { window.__which = "s"; });
+check(await until(async () => (await q2.page.getByText("Open the file to keep sharing").count()) > 0, 20000), "a returning owner without the file is asked to open it again");
+await q2.page.getByRole("button", { name: "Choose the file" }).click();
+check(await until(async () => { const v = await feedVideo(v2.page); return v && v.w > 0 && (await v2.page.getByText(/isn't in the room right now/).count()) === 0; }, 40000), "the picture returns when the owner comes back");
+const publishedIn = async () => (await svc.listParticipants(room3)).find((x) => x.identity === "discord-local-owner2")?.tracks.filter((t) => t.name?.startsWith("file:")).length ?? 0;
+check((await publishedIn()) === 2, "the owner is sharing again after rejoining");
+await q2.page.getByRole("button", { name: "More actions" }).first().click();
+await q2.page.getByRole("menuitem", { name: "Remove" }).click();
+check(await until(async () => (await publishedIn()) === 0, 20000), "removing the stream stops the feed");
+check(await until(async () => { const v = await feedVideo(v2.page); return !v || v.w === 0; }, 15000), "and the viewer's picture goes away");
 
 console.log("An iPhone-sized WebKit viewer");
 const wk = await webkit.launch();
