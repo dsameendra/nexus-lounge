@@ -33,6 +33,9 @@ export default function PrivacyPage() {
           </li>
           <li>Voice and screen shares are relayed live through LiveKit and are not recorded.</li>
           <li>
+            Torrents and video links work through your own Stremio app. A magnet, its torrent hash, file name, size and length are shared with the room, so friends who have Stremio can play the same torrent themselves; trackers that point at private or local addresses are dropped. A video link you paste is never sent to us or the room: only a random id, the name, size and length are. It stays in this browser tab (session storage) so a refresh keeps working, and is gone when you close the tab. Your Stremio address and the Chrome permission to reach it stay in your browser. When friends watch through a live feed, your browser sends them the picture and sound through LiveKit, relayed like a screen share and not recorded.
+          </li>
+          <li>
             Video files you add from your own device are never uploaded or stored. The room sees the file&apos;s name, size and length and a short fingerprint (a hash of a few small slices) used to check that two people have the same file. If friends without the file are watching, your browser sends them a live picture and sound through LiveKit, relayed the same way as a screen share and not recorded. On Chrome and Edge the browser can remember which file you picked (a reference kept in your browser, never sent to us) so it can reopen after a refresh; you can clear these on your account page.
           </li>
           <li>Preferences such as volume, captions, fit or fill and your TV output choice are saved in your browser&apos;s local storage and never sent to us.</li>

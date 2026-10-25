@@ -17,7 +17,7 @@ export const fileNameSchema = z
 
 export const localFileSchema = z.object({
   name: fileNameSchema,
-  size: z.number().int().min(1).max(MAX_FILE_BYTES),
+  size: z.number().int().min(0).max(MAX_FILE_BYTES),
   duration: z.number().min(0).max(MAX_FILE_SECONDS),
 });
 export type LocalFile = z.infer<typeof localFileSchema>;

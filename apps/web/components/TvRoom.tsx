@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { AudioTrack, isTrackReference, useTracks } from "@livekit/components-react";
 import { Track } from "livekit-client";
-import { screenId } from "@nexus/shared";
+import { isDeviceSource, screenId } from "@nexus/shared";
 import { ProviderBadge } from "./Badges";
 import { FloatingReactions } from "./Reactions";
 import { FilmIcon } from "./Icons";
@@ -71,7 +71,7 @@ export function TvRoom() {
       {playing && <ScreenAudio effectiveId={effectiveId} />}
       <div className="absolute inset-0">
         <StreamPlayer stream={stream} visible={Boolean(stream) && !showingScreen && playing} onFullscreen={() => {}} bare />
-        <LocalPlayer stream={stream?.source.type === "local" ? stream : null} visible={Boolean(stream) && !showingScreen && playing} onFullscreen={() => {}} bare />
+        <LocalPlayer stream={stream && isDeviceSource(stream.source) ? stream : null} visible={Boolean(stream) && !showingScreen && playing} onFullscreen={() => {}} bare />
       </div>
       {share && playing && (
         <div className="absolute inset-0 z-10">

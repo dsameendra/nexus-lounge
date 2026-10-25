@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FloatingReactions, ReactionBar, ReactionPicker, ReactionStrip } from "./Reactions";
 import { ScreenBar } from "./ScreenBar";
-import { expectedPosition, isScreenId, screenIdentity } from "@nexus/shared";
+import { expectedPosition, isDeviceSource, isScreenId, screenIdentity } from "@nexus/shared";
 import { Pill, ProviderBadge } from "./Badges";
 import { BroadcastIcon, FilmIcon, PauseIcon, PlayIcon, PlusIcon, SyncIcon, TvIcon } from "./Icons";
 import { OutputPicker } from "./OutputPicker";
@@ -83,7 +83,7 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
           controlsSlot={slot}
         />
         <LocalPlayer
-          stream={stream?.source.type === "local" ? stream : null}
+          stream={stream && isDeviceSource(stream.source) ? stream : null}
           visible={Boolean(stream) && !showingScreen && !tvOnly}
           onFullscreen={toggleStage}
           fullscreen={fullscreen}

@@ -1,7 +1,7 @@
 import type { Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import { verifySessionToken, type SessionPayload } from "@nexus/shared/session-token";
-import { clientMessageSchema, type ClientMessage, type ServerMessage } from "@nexus/shared";
+import { clientMessageSchema, isDeviceSource, type ClientMessage, type ServerMessage } from "@nexus/shared";
 import { config } from "./config.ts";
 import { removeFromVoice } from "./livekit.ts";
 import { stopScreenShare, syncAllPermissions, syncPermissions } from "./permissions.ts";
@@ -16,8 +16,8 @@ function send(socket: WebSocket, message: ServerMessage) {
 function handle(roomId: string, user: SessionPayload, message: Exclude<ClientMessage, { type: "join" | "ping" | "playlist.open" }>) {
   switch (message.type) {
     case "stream.add": {
-      const result = rooms.addStream(roomId, user, message.source, message.file);
-      if (result.ok && message.source.type === "local") void syncPermissions(roomId, user);
+      const result = rooms.addStream(roomId, user, message.source, message.file, message.trackers);
+      if (result.ok && isDeviceSource(message.source)) void syncPermissions(roomId, user);
       return result;
     }
     case "stream.remove": {

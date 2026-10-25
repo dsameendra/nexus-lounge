@@ -760,7 +760,7 @@ test("local files: who can add, caps, queue and ownership rules", async () => {
   for (const n of [3, 4, 5, 6]) host.send({ type: "stream.add", source: localSource(n), file: localFile });
   await host.until(() => host.state!.streams.length === 6);
   host.send({ type: "stream.add", source: localSource(7), file: localFile });
-  await host.until(() => host.errors.some((message) => message.includes("up to 5 local files")));
+  await host.until(() => host.errors.some((message) => message.includes("up to 5 streams from your device")));
   assert.equal(host.state!.streams.length, 6);
 });
 
@@ -819,4 +819,78 @@ test("local files: when one ends, autoplay moves on to the next playable stream"
   host.send({ type: "queue.advance", fromStreamId: localId(1) });
   await host.until(() => host.state!.featuredId === ytId);
   assert.equal(host.state!.streams.find((stream) => stream.id === ytId)!.playback.playing, true);
+});
+
+const SINTEL = "08ada5a7a6183aae1e09d831df6748d566095a10";
+const torrentSource = (index: number) => ({ type: "torrent", id: `${SINTEL}-${index}`, isLive: false });
+const linkSource = (n: number) => ({ type: "link", id: n.toString(16).padStart(32, "0"), isLive: false });
+
+test("torrent and link streams: only the host and controllers add them", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const alice = await join(id, "alice");
+  const file = { name: "Sintel", size: 129241752, duration: 888 };
+
+  alice.send({ type: "stream.add", source: torrentSource(5), file });
+  await alice.until(() => alice.errors.some((message) => message.includes("Only the host and controllers can add Stremio")));
+  alice.send({ type: "stream.add", source: linkSource(1), file });
+  await alice.until(() => alice.errors.length >= 2);
+  assert.equal(host.state!.streams.length, 0, "members can't add them");
+
+  host.send({ type: "role.setController", userId: "alice", enabled: true });
+  await alice.until(() => alice.state!.room.controllerIds.includes("alice"));
+  alice.send({ type: "stream.add", source: torrentSource(5), file, trackers: ["udp://tracker.opentrackr.org:1337/announce", "udp://127.0.0.1:1", "http://10.0.0.5/announce"] });
+  await host.until(() => host.state!.streams.length === 1);
+  const stream = host.state!.streams[0]!;
+  assert.equal(stream.id, `torrent:${SINTEL}-5`);
+  assert.equal(stream.title, "Sintel");
+  assert.deepEqual(stream.trackers, ["udp://tracker.opentrackr.org:1337/announce"], "private trackers never reach the room");
+  assert.deepEqual(stream.file, file);
+
+  host.send({ type: "queue.addStream", streamId: stream.id, position: "end" });
+  await host.until(() => host.errors.some((message) => message.includes("can't be queued")));
+  assert.equal(host.state!.queue.length, 0);
+});
+
+test("torrent and link streams: sizes, duplicates and the shared cap", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const bob = await join(id, "bob");
+
+  host.send({ type: "stream.add", source: torrentSource(1), file: { name: "No size", size: 0, duration: 10 } });
+  await host.until(() => host.errors.includes("Missing file size"));
+  host.send({ type: "stream.add", source: linkSource(1), file: { name: "Link with unknown size", size: 0, duration: 120 } });
+  await host.until(() => host.state!.streams.length === 1);
+  assert.equal(host.state!.streams[0]!.file!.size, 0, "a link may not know its size");
+
+  host.send({ type: "stream.add", source: linkSource(1), file: { name: "Again", size: 5, duration: 1 } });
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.equal(host.state!.streams.length, 1, "the same stream is not added twice");
+
+  host.send({ type: "stream.add", source: { type: "torrent", id: `${SINTEL}-9`, isLive: false }, file: { name: "T", size: 1, duration: 1 }, trackers: ["udp://tracker.opentrackr.org:1337/announce"] });
+  host.send({ type: "stream.add", source: localSource(1), file: localFile });
+  for (const n of [2, 3]) host.send({ type: "stream.add", source: linkSource(n), file: { name: `L${n}`, size: 0, duration: 60 } });
+  await host.until(() => host.state!.streams.length === 5);
+  host.send({ type: "stream.add", source: linkSource(9), file: { name: "One too many", size: 0, duration: 60 } });
+  await host.until(() => host.errors.some((message) => message.includes("up to 5 streams from your device")));
+  assert.equal(host.state!.streams.length, 5, "files, torrents and links share the cap");
+
+  bob.send({ type: "presence.feed", streamId: `torrent:${SINTEL}-9` });
+  await host.until(() => host.state!.members.find((member) => member.id === "bob")!.feed === `torrent:${SINTEL}-9`);
+  bob.send({ type: "stream.establish", streamId: linkSource(1) && `link:${linkSource(1).id}`, position: 50 });
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.equal(host.state!.streams.find((stream) => stream.id === `link:${linkSource(1).id}`)!.playback.position, null, "only the owner sets the first position");
+});
+
+test("torrent and link streams: autoplay skips them and moves to the next playable stream", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const link = `link:${linkSource(7).id}`;
+  host.send({ type: "stream.add", source: linkSource(7), file: { name: "A link", size: 0, duration: 60 } });
+  host.send({ type: "stream.add", source: yt });
+  await host.until(() => host.state!.streams.length === 2);
+  host.send({ type: "stream.feature", streamId: link });
+  await host.until(() => host.state!.featuredId === link);
+  host.send({ type: "queue.advance", fromStreamId: link });
+  await host.until(() => host.state!.featuredId === ytId);
 });

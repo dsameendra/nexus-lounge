@@ -4,6 +4,7 @@ import {
   LIMITS,
   MAX_LOCAL_STREAMS_PER_USER,
   defaultRoomSettings,
+  isDeviceSource,
   isScreenId,
   isQueueable,
   type PlaylistItem,
@@ -229,17 +230,19 @@ function canControl(room: StoredRoom, user: SessionPayload, stream: Stream) {
   return !user.guest && (isController(room, user.sub) || stream.addedBy.id === user.sub);
 }
 
-export function addStream(roomId: string, user: SessionPayload, source: MediaSource, file?: LocalFile): Result {
+export function addStream(roomId: string, user: SessionPayload, source: MediaSource, file?: LocalFile, trackers?: string[]): Result {
   const room = rooms.get(roomId);
   if (!room) return fail("Room not found");
   if (user.guest) return fail("Sign in with Discord to add streams");
-  const local = source.type === "local";
-  if (local !== Boolean(file)) return fail(local ? "Missing file details" : "Unexpected file details");
-  if (local && !canShareScreen(roomId, user)) return fail("Only the host and controllers can add local files in this room");
+  const device = isDeviceSource(source);
+  if (device !== Boolean(file)) return fail(device ? "Missing file details" : "Unexpected file details");
+  if (source.type === "local" && !canShareScreen(roomId, user)) return fail("Only the host and controllers can add local files in this room");
+  if ((source.type === "torrent" || source.type === "link") && !isController(room, user.sub)) return fail("Only the host and controllers can add Stremio and link streams");
+  if (file && source.type !== "link" && file.size < 1) return fail("Missing file size");
   const id = streamKey(source);
   if (room.streams.some((stream) => stream.id === id)) return ok;
-  if (local && room.streams.filter((stream) => stream.source.type === "local" && stream.addedBy.id === user.sub).length >= MAX_LOCAL_STREAMS_PER_USER) {
-    return fail(`You can add up to ${MAX_LOCAL_STREAMS_PER_USER} local files at a time. Remove one first.`);
+  if (device && room.streams.filter((stream) => isDeviceSource(stream.source) && stream.addedBy.id === user.sub).length >= MAX_LOCAL_STREAMS_PER_USER) {
+    return fail(`You can add up to ${MAX_LOCAL_STREAMS_PER_USER} streams from your device at a time. Remove one first.`);
   }
   if (room.streams.length >= MAX_STREAMS) return fail("This room has too many streams. Remove one first.");
 
@@ -251,10 +254,11 @@ export function addStream(roomId: string, user: SessionPayload, source: MediaSou
     addedAt: Date.now(),
     playback: { position: null, playing: false, updatedAt: Date.now() },
     ...(file ? { file } : {}),
+    ...(source.type === "torrent" && trackers?.length ? { trackers } : {}),
   };
   room.streams.push(stream);
   broadcast(roomId);
-  if (local) return ok;
+  if (device) return ok;
 
   void fetchTitle(source).then((title) => {
     if (!title || !room.streams.includes(stream)) return;
@@ -281,7 +285,7 @@ export function removeStream(roomId: string, user: SessionPayload, streamId: str
 
 export function localOwnerOf(roomId: string, streamId: string) {
   const stream = rooms.get(roomId)?.streams.find((candidate) => candidate.id === streamId);
-  return stream?.source.type === "local" ? stream.addedBy.id : null;
+  return stream && isDeviceSource(stream.source) ? stream.addedBy.id : null;
 }
 
 export function controlStream(
@@ -311,7 +315,7 @@ export function establishStream(roomId: string, userId: string, streamId: string
   const room = rooms.get(roomId);
   const stream = room?.streams.find((candidate) => candidate.id === streamId);
   if (!room || !stream) return fail("Stream not found");
-  if (stream.source.type === "local" && stream.addedBy.id !== userId) return ok;
+  if (isDeviceSource(stream.source) && stream.addedBy.id !== userId) return ok;
   if (stream.playback.position !== null || (stream.source.type === "twitch" && stream.source.isLive)) return ok;
   stream.playback.position = position;
   stream.playback.updatedAt = Date.now();
@@ -360,7 +364,7 @@ export function setFeed(roomId: string, userId: string, streamId: string | null)
   if (!room || !connection) return fail("Room not found");
   if (streamId !== null) {
     const stream = room.streams.find((candidate) => candidate.id === streamId);
-    if (!stream || stream.source.type !== "local" || stream.addedBy.id === userId) return ok;
+    if (!stream || !isDeviceSource(stream.source) || stream.addedBy.id === userId) return ok;
   }
   if (connection.member.feed === streamId) return ok;
   connection.member.feed = streamId;
@@ -622,7 +626,7 @@ export function advanceQueue(roomId: string, user: SessionPayload, fromStreamId:
   }
 
   const index = room.streams.findIndex((stream) => stream.id === fromStreamId);
-  const next = index === -1 ? undefined : room.streams.slice(index + 1).find((stream) => stream.source.type !== "local");
+  const next = index === -1 ? undefined : room.streams.slice(index + 1).find((stream) => !isDeviceSource(stream.source));
   if (!next) return ok;
 
   room.featuredId = next.id;
@@ -683,7 +687,7 @@ export function canShareScreen(roomId: string, user: { sub: string; guest: boole
 
 export function publishInputs(roomId: string, user: { sub: string; guest: boolean }) {
   const canShare = canShareScreen(roomId, user);
-  const owns = rooms.get(roomId)?.streams.some((stream) => stream.source.type === "local" && stream.addedBy.id === user.sub) ?? false;
+  const owns = rooms.get(roomId)?.streams.some((stream) => isDeviceSource(stream.source) && stream.addedBy.id === user.sub) ?? false;
   return { guest: user.guest, micBlocked: micBlocked(roomId, user.sub), canShare, canFeed: canShare && owns };
 }
 
@@ -799,7 +803,7 @@ export function queueStream(roomId: string, user: SessionPayload, streamId: stri
   if (!canQueue(user)) return fail("Sign in with Discord to add to the queue");
   const stream = room.streams.find((candidate) => candidate.id === streamId);
   if (!stream) return fail("Stream not found");
-  if (stream.source.type === "local") return fail("Local files can't be queued");
+  if (isDeviceSource(stream.source)) return fail(stream.source.type === "local" ? "Local files can't be queued" : "Streams from a device can't be queued");
   if (!isQueueable(stream.source)) return fail("Live streams can't be queued");
   const entry: QueueItem = { id: newQueueId(), source: stream.source, title: stream.title, addedBy: { id: user.sub, name: user.name } };
   if (!pushQueue(room, [entry], position)) return fail(`The queue is full (${LIMITS.queue} videos max)`);

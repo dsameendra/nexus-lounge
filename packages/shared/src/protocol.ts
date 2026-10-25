@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { localFileSchema } from "./local-file.ts";
 import { PLAYLIST_ID } from "./parse-url.ts";
+import { sanitizeTrackers } from "./stremio.ts";
 import { YOUTUBE_VIDEO_ID, mediaSourceSchema, playlistItemSchema, reactionEmojiSchema, roomIdSchema, roomNameSchema, roomSettingsSchema, roomStateSchema, tvModeSchema } from "./types.ts";
 
 const streamId = z.string().min(1).max(100);
@@ -11,7 +12,7 @@ const position = z.enum(["end", "next"]);
 export const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("join"), roomId: roomIdSchema, ticket: z.string() }),
   z.object({ type: z.literal("ping"), clientTime: z.number() }),
-  z.object({ type: z.literal("stream.add"), source: mediaSourceSchema, file: localFileSchema.optional() }),
+  z.object({ type: z.literal("stream.add"), source: mediaSourceSchema, file: localFileSchema.optional(), trackers: z.array(z.string().max(200)).max(16).transform(sanitizeTrackers).optional() }),
   z.object({ type: z.literal("stream.remove"), streamId }),
   z.object({
     type: z.literal("stream.control"),

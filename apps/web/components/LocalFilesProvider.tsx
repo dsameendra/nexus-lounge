@@ -4,9 +4,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useRoomContext } from "@livekit/components-react";
 import { AudioPresets, RoomEvent, Track } from "livekit-client";
 import { streamKey, type Stream } from "@nexus/shared";
-import { LocalEntry, registry } from "@/lib/local-entry";
+import { LocalEntry, registry, type EntrySource } from "@/lib/local-entry";
 import { canHostFeed, openRemembered, readFingerprint, recallFile, rememberFile, type PickedFile } from "@/lib/local-files";
+import { blindTorrentSource, friendlyError, requireStremio, resolveLinkForStream, resolveTorrentForStream, type Resolved } from "@/lib/remote-media";
+import { checkStremio, getStremioBase, getStremioStatus, torrentStats, type TorrentStats } from "@/lib/stremio";
 import { useRoom } from "./RoomProvider";
+import { StreamLinkSheet } from "./StreamLinkSheet";
 
 export const FEED_VIDEO = (streamId: string) => `file:v:${streamId}`;
 export const FEED_AUDIO = (streamId: string) => `file:a:${streamId}`;
@@ -28,7 +31,30 @@ interface LocalFilesValue {
   listen: (streamId: string, gain: number) => void;
   note: (streamId: string) => { busy: boolean; problem: string | null };
   setNote: (streamId: string, patch: Partial<{ busy: boolean; problem: string | null }>) => void;
+  adoptSource: (streamId: string, resolved: Resolved, link?: string) => Promise<void>;
+  playTorrent: (stream: Stream) => Promise<void>;
+  playLink: (stream: Stream, url: string, step?: (message: string) => void) => Promise<Resolved>;
+  stats: (streamId: string) => TorrentStats | null;
+  openLinkSheet: (streamId: string) => void;
 }
+
+// A stream you chose to play yourself survives a refresh (this tab only): torrents by remembering the choice,
+// links by keeping the address, which can hold a personal token, in session storage and nowhere else.
+const FLAG = (streamId: string) => `nexus-device-${streamId}`;
+type Flag = { kind: "torrent" } | { kind: "link"; url: string };
+const readFlag = (streamId: string): Flag | null => {
+  try {
+    return JSON.parse(sessionStorage.getItem(FLAG(streamId)) ?? "null") as Flag | null;
+  } catch {
+    return null;
+  }
+};
+const writeFlag = (streamId: string, flag: Flag | null) => {
+  try {
+    if (flag) sessionStorage.setItem(FLAG(streamId), JSON.stringify(flag));
+    else sessionStorage.removeItem(FLAG(streamId));
+  } catch {}
+};
 
 const Context = createContext<LocalFilesValue | null>(null);
 
@@ -40,12 +66,12 @@ export function useLocalFiles() {
 
 export const NOT_THE_SAME_FILE = "That isn't the same file as the one in the room. Pick the exact same file (same size and content).";
 
-function ready(entry: LocalEntry) {
+function ready(entry: LocalEntry, timeoutMs: number) {
   return new Promise<void>((resolve, reject) => {
     const { video } = entry;
     if (video.readyState >= 1) return resolve();
     const fail = () => reject(new Error(entry.error ?? "This file couldn't be opened."));
-    const timer = setTimeout(fail, 10_000);
+    const timer = setTimeout(fail, timeoutMs);
     video.addEventListener(
       "loadedmetadata",
       () => {
@@ -89,10 +115,11 @@ export function LocalFilesProvider({ children }: { children: React.ReactNode }) 
   });
 
   const install = useCallback(
-    async (streamId: string, picked: PickedFile) => {
-      const created = new LocalEntry(streamId, picked.file);
+    async (streamId: string, source: EntrySource, picked?: PickedFile) => {
+      const created = new LocalEntry(streamId, source);
       try {
-        await ready(created);
+        await created.start();
+        await ready(created, source.kind === "url" ? 60_000 : 10_000);
       } catch (error) {
         created.destroy();
         throw error;
@@ -100,7 +127,7 @@ export function LocalFilesProvider({ children }: { children: React.ReactNode }) 
       entries.current.get(streamId)?.destroy();
       entries.current.set(streamId, created);
       setRememberedNames(({ [streamId]: _gone, ...rest }) => rest);
-      void rememberFile(streamId.slice("local:".length), picked.file, picked.handle);
+      if (picked) void rememberFile(streamId.slice("local:".length), picked.file, picked.handle);
       bump();
     },
     [bump],
@@ -110,21 +137,58 @@ export function LocalFilesProvider({ children }: { children: React.ReactNode }) 
     async (stream: Stream, picked: PickedFile) => {
       const id = await readFingerprint(picked.file);
       if (streamKey({ type: "local", id, isLive: false }) !== stream.id) throw new Error(NOT_THE_SAME_FILE);
-      await install(stream.id, picked);
+      await install(stream.id, { kind: "file", file: picked.file }, picked);
     },
     [install],
   );
 
-  const adopt = useCallback((streamId: string, picked: PickedFile) => install(streamId, picked), [install]);
+  const adopt = useCallback((streamId: string, picked: PickedFile) => install(streamId, { kind: "file", file: picked.file }, picked), [install]);
+
+  const adoptSource = useCallback(
+    async (streamId: string, resolved: Resolved, link?: string) => {
+      await install(streamId, resolved.source);
+      writeFlag(streamId, link ? { kind: "link", url: link } : { kind: "torrent" });
+    },
+    [install],
+  );
 
   const detach = useCallback(
     (streamId: string) => {
       entries.current.get(streamId)?.destroy();
       entries.current.delete(streamId);
+      writeFlag(streamId, null);
       bump();
     },
     [bump],
   );
+
+  // Play a torrent that is in the room through this person's own Stremio.
+  const playTorrent = useCallback(
+    async (stream: Stream) => {
+      const status = getStremioStatus() === "connected" ? "connected" : await checkStremio();
+      if (status === "insecure") {
+        await install(stream.id, blindTorrentSource(getStremioBase(), stream));
+        writeFlag(stream.id, { kind: "torrent" });
+        return;
+      }
+      const base = await requireStremio();
+      await adoptSource(stream.id, await resolveTorrentForStream(base, stream));
+    },
+    [install, adoptSource],
+  );
+
+  const playLink = useCallback(
+    async (stream: Stream, url: string, step?: (message: string) => void) => {
+      const status = getStremioStatus() === "connected" ? "connected" : await checkStremio();
+      const resolved = await resolveLinkForStream(stream, url, status === "connected" ? getStremioBase() : null, step);
+      await adoptSource(stream.id, resolved, url);
+      return resolved;
+    },
+    [adoptSource],
+  );
+
+  const [linkSheet, setLinkSheet] = useState<string | null>(null);
+  const [torrentStatsMap, setTorrentStats] = useState<Record<string, TorrentStats>>({});
 
   const resume = useCallback(
     async (stream: Stream) => {
@@ -160,6 +224,33 @@ export function LocalFilesProvider({ children }: { children: React.ReactNode }) 
       })();
     }
   }, [state.streams, attach]);
+
+  // Streams you were playing yourself before a refresh come back on their own.
+  useEffect(() => {
+    for (const stream of state.streams) {
+      if ((stream.source.type !== "torrent" && stream.source.type !== "link") || entries.current.has(stream.id) || tried.current.has(stream.id)) continue;
+      const flag = readFlag(stream.id);
+      if (!flag) continue;
+      tried.current.add(stream.id);
+      void (flag.kind === "torrent" ? playTorrent(stream) : playLink(stream, flag.url)).catch((error) =>
+        setNotes((previous) => ({ ...previous, [stream.id]: { busy: false, problem: friendlyError(error, "Couldn't reopen this stream.") } })),
+      );
+    }
+  }, [state.streams, playTorrent, playLink]);
+
+  // Download progress for torrents this person is playing through Stremio.
+  useEffect(() => {
+    const id = setInterval(() => {
+      for (const [streamId, entry] of entries.current) {
+        const torrent = entry.source.kind === "url" ? entry.source.torrent : undefined;
+        if (!torrent) continue;
+        void torrentStats(torrent.base, torrent.infoHash, torrent.fileIdx).then((value) => {
+          if (value) setTorrentStats((previous) => ({ ...previous, [streamId]: value }));
+        });
+      }
+    }, 3000);
+    return () => clearInterval(id);
+  }, []);
 
   // Keep every open file on the room clock, and drop files whose stream is gone.
   useEffect(() => {
@@ -337,10 +428,20 @@ export function LocalFilesProvider({ children }: { children: React.ReactNode }) 
       feedError,
       listen,
       note: (streamId) => notes[streamId] ?? { busy: false, problem: null },
+      adoptSource,
+      playTorrent,
+      playLink,
+      stats: (streamId) => torrentStatsMap[streamId] ?? null,
+      openLinkSheet: (streamId) => setLinkSheet(streamId),
       setNote: (streamId, patch) => setNotes((previous) => ({ ...previous, [streamId]: { busy: false, problem: null, ...previous[streamId], ...patch } })),
     }),
-    [canHost, version, attach, adopt, detach, rememberedNames, resume, requestFeed, sharing, feedError, listen, notes],
+    [canHost, version, attach, adopt, detach, rememberedNames, resume, requestFeed, sharing, feedError, listen, notes, adoptSource, playTorrent, playLink, torrentStatsMap],
   );
 
-  return <Context.Provider value={value}>{children}</Context.Provider>;
+  return (
+    <Context.Provider value={value}>
+      {children}
+      {linkSheet && <StreamLinkSheet stream={state.streams.find((item) => item.id === linkSheet) ?? null} onClose={() => setLinkSheet(null)} />}
+    </Context.Provider>
+  );
 }

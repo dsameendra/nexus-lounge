@@ -33,8 +33,9 @@ export async function readFingerprint(file: File) {
   return fingerprint(file.size, parts);
 }
 
-export function describeMediaError(video: HTMLVideoElement) {
+export function describeMediaError(video: HTMLVideoElement, remote = false) {
   const code = video.error?.code;
+  if (remote && (code === 2 || code === 4)) return "The stream couldn't be loaded. If it is a link, it may have expired, or the service may be limiting it.";
   if (code === 4) return "This browser can't play this file. MP4 (H.264/AAC) and WebM work everywhere.";
   if (code === 3) return "This file couldn't be decoded. It may be damaged, or use a format this browser can't play.";
   return "This file couldn't be opened.";

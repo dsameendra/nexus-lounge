@@ -1,11 +1,11 @@
 "use client";
 
-import { screenId, streamKey, type Stream } from "@nexus/shared";
+import { isDeviceSource, screenId, streamKey, type Stream } from "@nexus/shared";
 import { useLocalParticipant } from "@livekit/components-react";
 import { Avatar } from "./Avatar";
 import { Pill, ProviderBadge } from "./Badges";
 import { BroadcastIcon, ChevronDownIcon, ChevronUpIcon, PlaylistIcon, PlusIcon, QueueNextIcon, ScreenIcon, TrashIcon } from "./Icons";
-import { LocalFileFooter } from "./LocalFileFooter";
+import { DeviceFooter } from "./DeviceFooter";
 import { MenuButton, type MenuItem } from "./Menu";
 import { PlaylistCard } from "./PlaylistCard";
 import { QueueSection } from "./QueueSection";
@@ -132,7 +132,7 @@ export function StreamLibrary({ onAdd }: { onAdd: () => void }) {
                         : { label: "Show to everyone", icon: <BroadcastIcon />, onSelect: () => send({ type: "stream.feature", streamId: stream.id }) },
                     ]
                   : []),
-                ...(canAdd && !stream.source.isLive && stream.source.type !== "local"
+                ...(canAdd && !stream.source.isLive && !isDeviceSource(stream.source)
                   ? [
                       { label: "Add to queue", icon: <PlaylistIcon />, onSelect: () => send({ type: "queue.addStream", streamId: stream.id, position: "end" }) },
                       { label: "Play next", icon: <QueueNextIcon />, onSelect: () => send({ type: "queue.addStream", streamId: stream.id, position: "next" }) },
@@ -194,7 +194,7 @@ function StreamCard({
       }
       viewers={viewers}
       menu={menu}
-      footer={stream.source.type === "local" ? <LocalFileFooter stream={stream} /> : undefined}
+      footer={isDeviceSource(stream.source) ? <DeviceFooter stream={stream} /> : undefined}
     />
   );
 }

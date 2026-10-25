@@ -9,6 +9,7 @@ import { canRememberFiles, forgetFiles } from "@/lib/local-files";
 import { Avatar } from "./Avatar";
 import { CheckIcon } from "./Icons";
 import { LegalLinks } from "./LegalLinks";
+import { StremioConnection } from "./StremioConnection";
 
 export function AccountClient({ name: initialName, image: initialImage, guest, id }: { name: string; image: string | null; guest: boolean; id: string }) {
   const router = useRouter();
@@ -154,6 +155,14 @@ export function AccountClient({ name: initialName, image: initialImage, guest, i
       <form action={signOutAction} className="mt-4">
         <button className="h-11 w-full rounded-xl bg-panel font-semibold transition hover:bg-panel-2 active:scale-[0.99]">Sign out</button>
       </form>
+
+      <section className="mt-8 rounded-[var(--radius-sheet)] bg-panel p-5">
+        <h2 className="font-semibold">Stremio</h2>
+        <p className="mt-1.5 text-sm leading-relaxed text-label-2">
+          Torrents and some links play through the Stremio app on this computer. This checks that this browser can reach it. Chrome and Edge ask once for permission to connect to devices on your network.
+        </p>
+        <StremioConnection className="mt-4 bg-panel-2" />
+      </section>
 
       {canForget && (
         <section className="mt-8 rounded-[var(--radius-sheet)] bg-panel p-5">

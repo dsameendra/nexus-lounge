@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { SILENT_BELOW, atLiveEdge, computeCorrection, expectedPosition, isSilent, liveEdgeTarget, median, sliderToGain, type Stream } from "@nexus/shared";
+import { SILENT_BELOW, atLiveEdge, computeCorrection, expectedPosition, isDeviceSource, isSilent, liveEdgeTarget, median, sliderToGain, type Stream } from "@nexus/shared";
 import { YouTubeAdapter } from "@/lib/players/youtube";
 import { TwitchAdapter } from "@/lib/players/twitch";
 import type { PlayerAdapter } from "@/lib/players/types";
@@ -23,12 +23,12 @@ function sourceUrl(stream: Stream) {
   return isLive ? `https://www.twitch.tv/${id}` : `https://www.twitch.tv/videos/${id}`;
 }
 
-type Provider = Exclude<Stream["source"]["type"], "local">;
+type Provider = "youtube" | "twitch";
 type PlayableStream = Stream & { source: { type: Provider } };
 
 // Local files have their own player; the embedded YouTube/Twitch players only ever see their own sources.
 function playable(stream: Stream | null) {
-  return stream && stream.source.type !== "local" ? (stream as PlayableStream) : null;
+  return stream && !isDeviceSource(stream.source) ? (stream as PlayableStream) : null;
 }
 
 interface UiState {

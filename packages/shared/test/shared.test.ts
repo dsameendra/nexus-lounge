@@ -276,12 +276,12 @@ test("local files: schemas accept real files and reject abuse", async () => {
   assert.equal(isQueueable({ type: "local", id, isLive: false }), false);
 
   assert.equal(localFileSchema.safeParse({ name: "Film.mkv", size: 1, duration: 60 }).success, true);
+  assert.equal(localFileSchema.safeParse({ name: "Link", size: 0, duration: 60 }).success, true, "0 means the size is unknown (links only; the server insists on a size for files and torrents)");
   for (const bad of [
     { name: "", size: 1, duration: 1 },
     { name: "a\u202eb.mp4", size: 1, duration: 1 },
     { name: "a.mp4", size: 1, duration: 1 },
     { name: "x".repeat(121), size: 1, duration: 1 },
-    { name: "ok.mp4", size: 0, duration: 1 },
     { name: "ok.mp4", size: 1.5, duration: 1 },
     { name: "ok.mp4", size: 2 ** 41, duration: 1 },
     { name: "ok.mp4", size: 1, duration: -1 },
@@ -295,4 +295,110 @@ test("local files: schemas accept real files and reject abuse", async () => {
   assert.equal(clientMessageSchema.safeParse({ type: "stream.add", source: { type: "local", id, isLive: false }, file: { name: "Film.mkv", size: 10, duration: 5 } }).success, true);
   assert.equal(clientMessageSchema.safeParse({ type: "presence.feed", streamId: `local:${id}` }).success, true);
   assert.equal(clientMessageSchema.safeParse({ type: "presence.feed", streamId: null }).success, true);
+});
+
+const HASH = "08ada5a7a6183aae1e09d831df6748d566095a10";
+
+test("stremio input: magnets, bare hashes and Stremio stream addresses become torrents", async () => {
+  const { parseStremioInput } = await import("../src/index.ts");
+  const magnet = parseStremioInput(`magnet:?xt=urn:btih:${HASH.toUpperCase()}&dn=Sintel%20%282010%29&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2F192.168.1.5%3A80&so=5`);
+  assert.deepEqual(magnet, { kind: "torrent", infoHash: HASH, fileIdx: 5, trackers: ["udp://tracker.opentrackr.org:1337/announce"], name: "Sintel (2010)" });
+  assert.deepEqual(parseStremioInput(HASH), { kind: "torrent", infoHash: HASH, fileIdx: null, trackers: [], name: null });
+  assert.equal((parseStremioInput(`http://127.0.0.1:11470/${HASH}/3?tr=udp%3A%2F%2Fexplodie.org%3A6969`) as { fileIdx: number }).fileIdx, 3);
+  assert.equal(parseStremioInput(`http://192.168.1.159:11470/${HASH}/0`).kind, "torrent");
+  assert.equal(parseStremioInput(`https://example.com/${HASH}/0`).kind, "link", "only Stremio-looking servers count");
+  const base32 = parseStremioInput("magnet:?xt=urn:btih:BCUKLJNGDA5K4HQ5GGB56Z2I2VTAK2QQ");
+  assert.equal(base32.kind, "torrent");
+});
+
+test("stremio input: links keep their address, bad input says why", async () => {
+  const { parseStremioInput } = await import("../src/index.ts");
+  const url = "https://pengu.uk/direct/external/abc/movie.2024.mkv?psig=123:456";
+  assert.deepEqual(parseStremioInput(url), { kind: "link", url });
+  assert.equal(parseStremioInput("example.com/video.mp4").kind, "link");
+  for (const bad of ["", "   ", "stremio:///detail/movie/tt1", "ftp://x.com/a.mp4", "https://user:pass@x.com/a.mp4", "https://x.com/a.torrent", "magnet:?dn=nohash", "not a link at all", "x".repeat(4001)]) {
+    assert.equal(parseStremioInput(bad).kind, "error", bad);
+  }
+});
+
+test("trackers from other people can't point your Stremio at your own network", async () => {
+  const { sanitizeTrackers, isPrivateHost } = await import("../src/index.ts");
+  const list = sanitizeTrackers([
+    "udp://tracker.opentrackr.org:1337/announce",
+    "http://localhost:80/x",
+    "udp://127.0.0.1:6969",
+    "http://10.0.0.1/announce",
+    "https://192.168.1.1/",
+    "udp://[::1]:80",
+    "http://169.254.169.254/latest",
+    "http://user:pw@tracker.example.com/announce",
+    "ftp://tracker.example.com/x",
+    "udp://printer.local:80",
+    "udp://tracker.opentrackr.org:1337/announce",
+    "javascript:alert(1)",
+    "udp://nodots:80",
+  ]);
+  assert.deepEqual(list, ["udp://tracker.opentrackr.org:1337/announce"]);
+  assert.equal(sanitizeTrackers(Array.from({ length: 30 }, (_, i) => `udp://t${i}.example.com:80`)).length, 8, "capped");
+  assert.equal(isPrivateHost("172.20.1.1"), true);
+  assert.equal(isPrivateHost("172.32.1.1"), false);
+  assert.equal(isPrivateHost("8.8.8.8"), false);
+});
+
+test("torrent files: video files, biggest first", async () => {
+  const { videoFilesOf, torrentStreamId, TORRENT_ID } = await import("../src/index.ts");
+  const files = [{ name: "a.srt", length: 10 }, { name: "Sample.mkv", length: 100 }, { name: "Film.MP4", length: 5000 }, { name: "poster.jpg", length: 40 }];
+  assert.deepEqual(videoFilesOf(files).map((file) => file.index), [2, 1]);
+  assert.match(torrentStreamId(HASH, 12), TORRENT_ID);
+});
+
+test("link titles come from the file name, never the token", async () => {
+  const { titleFromUrl } = await import("../src/index.ts");
+  assert.equal(titleFromUrl("https://x.example/a/b/outside.2026.s01e05.1080p.web.h264-hotdogwater.mkv?psig=SECRET"), "outside 2026 s01e05 1080p web h264-hotdogwater");
+  assert.equal(titleFromUrl("https://x.example/"), "Video");
+  assert.ok(!titleFromUrl("https://x.example/dl.mp4?token=SECRET").includes("SECRET"));
+});
+
+test("link planning: direct when the browser can, Stremio when it can't, a reason otherwise", async () => {
+  const { planLink } = await import("../src/index.ts");
+  const base = { pageSecure: true, reachable: true, finalIsHttp: false, httpsRetryOk: false, stremio: false, directPlayable: null };
+  assert.deepEqual(planLink(base), { how: "direct", upgrade: false });
+  assert.deepEqual(planLink({ ...base, finalIsHttp: true, httpsRetryOk: true }), { how: "direct", upgrade: true });
+  assert.deepEqual(planLink({ ...base, pageSecure: false, finalIsHttp: true }), { how: "direct", upgrade: false }, "an http page may load http");
+  assert.deepEqual(planLink({ ...base, finalIsHttp: true, stremio: true }), { how: "stremio" });
+  assert.deepEqual(planLink({ ...base, finalIsHttp: true }), { how: "none", reason: "insecure" });
+  assert.deepEqual(planLink({ ...base, reachable: false, stremio: true }), { how: "stremio" });
+  assert.deepEqual(planLink({ ...base, reachable: false }), { how: "none", reason: "blocked" });
+  assert.deepEqual(planLink({ ...base, directPlayable: false, stremio: true }), { how: "stremio" });
+  assert.deepEqual(planLink({ ...base, directPlayable: false }), { how: "none", reason: "codecs" });
+});
+
+test("two copies are the same video when size and length agree", async () => {
+  const { sameMedia, looksLikePlaceholder } = await import("../src/index.ts");
+  assert.equal(sameMedia({ size: 2148440040, duration: 9947 }, { size: 2148440040, duration: 9947.2 }), true);
+  assert.equal(sameMedia({ size: 2148440040, duration: 9947 }, { size: 2148440041, duration: 9947 }), false);
+  assert.equal(sameMedia({ size: 2148440040, duration: 9947 }, { size: 2148440040, duration: 9900 }), false);
+  assert.equal(sameMedia({ size: 0, duration: 9947 }, { size: 123, duration: 9947.3 }), true, "unknown sizes fall back to length");
+  assert.equal(sameMedia({ size: 0, duration: 9947 }, { size: 123, duration: 9948 }), false);
+  assert.equal(looksLikePlaceholder({ size: 20125, duration: 5 }), true);
+  assert.equal(looksLikePlaceholder({ size: 2148440040, duration: 9947 }), false);
+});
+
+test("torrent and link streams: schemas, ids and queueing", async () => {
+  const { mediaSourceSchema, streamKey, isQueueable, isDeviceSource, clientMessageSchema } = await import("../src/index.ts");
+  const torrent = { type: "torrent", id: `${HASH}-5`, isLive: false };
+  const link = { type: "link", id: "0123456789abcdef0123456789abcdef", isLive: false };
+  assert.equal(mediaSourceSchema.safeParse(torrent).success, true);
+  assert.equal(mediaSourceSchema.safeParse({ ...torrent, id: HASH }).success, false, "needs a file index");
+  assert.equal(mediaSourceSchema.safeParse({ ...torrent, id: `${HASH.toUpperCase()}-5` }).success, false);
+  assert.equal(mediaSourceSchema.safeParse({ ...torrent, isLive: true }).success, false);
+  assert.equal(mediaSourceSchema.safeParse(link).success, true);
+  assert.equal(mediaSourceSchema.safeParse({ ...link, id: "short" }).success, false);
+  assert.equal(streamKey(torrent as never), `torrent:${HASH}-5`);
+  assert.equal(streamKey(link as never), `link:${link.id}`);
+  assert.equal(isQueueable(torrent as never) || isQueueable(link as never), false);
+  assert.equal(isDeviceSource({ type: "youtube" }), false);
+  assert.equal(isDeviceSource({ type: "torrent" }), true);
+  const message = clientMessageSchema.parse({ type: "stream.add", source: torrent, file: { name: "Sintel", size: 1, duration: 5 }, trackers: ["udp://tracker.opentrackr.org:1337/announce", "udp://127.0.0.1:1"] });
+  assert.deepEqual((message as { trackers: string[] }).trackers, ["udp://tracker.opentrackr.org:1337/announce"], "private trackers are dropped on the way in");
 });

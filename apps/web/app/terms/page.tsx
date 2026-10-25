@@ -16,6 +16,7 @@ export default function TermsPage() {
           <li>You can sign in with Discord or join as a guest. Guests can watch, talk and chat; creating a room needs Discord.</li>
           <li>You are responsible for what you say, share and play in a room, including screen shares, voice and chat.</li>
           <li>Don&apos;t use the app to harass others, share illegal content, share content you have no right to share, or disrupt the service or other people&apos;s rooms.</li>
+          <li>Torrents, Stremio streams and video links work through your own devices and accounts. Nexus Lounge doesn&apos;t host, search, index or download any of it, and never sees your links. You are responsible for having the right to watch and share what you play, and for following the terms of the services and networks you use.</li>
           <li>If you share a video file from your device, you are responsible for having the right to share it with the people in the room. Nexus Lounge doesn&apos;t host, store or index it: your browser either plays the same file alongside your friends or sends them a live picture, like a screen share.</li>
           <li>Room hosts can remove people and control what plays. Hosts and the operator may remove anyone who breaks these terms.</li>
         </ul>

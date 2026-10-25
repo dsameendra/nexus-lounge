@@ -1,9 +1,16 @@
 import { computeCorrection, expectedPosition, median, type Playback } from "@nexus/shared";
+import type Hls from "hls.js";
+import { isApple } from "./codecs";
 import { describeMediaError } from "./local-files";
 
 const RATES = [0.95, 1.05];
 
 export type SyncStatus = "synced" | "syncing" | "waiting";
+
+// Where an open video comes from: a file on this computer, or an address (a torrent served by Stremio, or a link).
+export type EntrySource =
+  | { kind: "file"; file: File }
+  | { kind: "url"; url: string; hls: boolean; torrent?: { base: string; infoHash: string; fileIdx: number } };
 
 // One local file in this browser: its <video>, its audio graph and the loop that keeps it on the room clock.
 // The element stays at full volume and unmuted: a Web Audio source follows the element's volume, so everything
@@ -29,22 +36,52 @@ export class LocalEntry {
   private establishAt = 0;
 
   readonly streamId: string;
-  readonly file: File;
+  readonly source: EntrySource;
+  readonly file: File | null;
+  hls: Hls | null = null;
+  private hlsRetries = 0;
 
-  constructor(streamId: string, file: File) {
+  constructor(streamId: string, source: EntrySource) {
     this.streamId = streamId;
-    this.file = file;
-    this.url = URL.createObjectURL(file);
+    this.source = source;
+    this.file = source.kind === "file" ? source.file : null;
+    this.url = source.kind === "file" ? URL.createObjectURL(source.file) : source.url;
     const { video } = this;
+    // The audio graph and the live feed both read the picture, which browsers only allow for same-origin or CORS media.
+    if (source.kind === "url") video.crossOrigin = "anonymous";
     video.playsInline = true;
     video.preload = "auto";
     video.disablePictureInPicture = false;
     video.style.cssText = "width:100%;height:100%;display:block;background:#000;object-fit:contain";
     video.addEventListener("error", () => {
-      this.error = describeMediaError(video);
+      if (!this.hls) this.error = describeMediaError(video, source.kind === "url");
     });
-    video.src = this.url;
     this.initAudio();
+  }
+
+  // Playlists go through hls.js where the browser has no native HLS (Safari has it).
+  async start() {
+    const { video, source } = this;
+    // Safari plays HLS natively and best; everywhere else hls.js is the proven path.
+    if (source.kind === "url" && source.hls && !(isApple() && video.canPlayType("application/vnd.apple.mpegurl"))) {
+      const { default: HlsClass } = await import("hls.js");
+      if (!HlsClass.isSupported()) {
+        this.error = "This browser can't play this kind of stream.";
+        return;
+      }
+      const hls = new HlsClass({ maxBufferLength: 60, maxMaxBufferLength: 120, backBufferLength: 30 });
+      this.hls = hls;
+      hls.on(HlsClass.Events.ERROR, (_event, data) => {
+        if (!data.fatal) return;
+        if (data.type === HlsClass.ErrorTypes.NETWORK_ERROR && this.hlsRetries++ < 3) hls.startLoad();
+        else if (data.type === HlsClass.ErrorTypes.MEDIA_ERROR && this.hlsRetries++ < 3) hls.recoverMediaError();
+        else this.error = "The stream stopped. If it is a link, it may have expired.";
+      });
+      hls.attachMedia(video);
+      hls.loadSource(source.url);
+      return;
+    }
+    video.src = this.url;
   }
 
   private initAudio() {
@@ -235,10 +272,12 @@ export class LocalEntry {
   destroy() {
     const { video } = this;
     video.pause();
+    this.hls?.destroy();
+    this.hls = null;
     video.removeAttribute("src");
     video.load();
     video.remove();
-    URL.revokeObjectURL(this.url);
+    if (this.source.kind === "file") URL.revokeObjectURL(this.url);
     void this.ctx?.close().catch(() => {});
   }
 }
