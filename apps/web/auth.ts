@@ -4,6 +4,7 @@ import Discord from "next-auth/providers/discord";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { displayNameSchema } from "@nexus/shared";
+import { stableSubject } from "@nexus/shared/identity";
 
 const guestSchema = z.object({ name: displayNameSchema });
 
@@ -27,7 +28,8 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   pages: { signIn: "/login" },
   trustHost: true,
   callbacks: {
-    jwt({ token, trigger, session }) {
+    jwt({ token, trigger, session, account }) {
+      token.sub = stableSubject(token.sub, account);
       if (trigger === "update" && session && typeof session === "object" && "profile" in session) {
         token.profile = session.profile;
       }

@@ -225,3 +225,11 @@ test("TOTP matches the RFC 6238 vector and rejects reuse windows", async () => {
   assert.equal(verifyAdminSession(session, "a-long-admin-secret-a-long-admin-secret")?.aud, "admin-session");
   assert.equal(verifyAdminSession(session, "another-long-admin-secret-another-one"), null);
 });
+
+test("Discord users keep their Discord ID as subject; others are untouched", async () => {
+  const { stableSubject } = await import("../src/identity.ts");
+  assert.equal(stableSubject("uuid-1", { provider: "discord", providerAccountId: "370614114122334208" }), "370614114122334208");
+  assert.equal(stableSubject("uuid-1", { provider: "discord", providerAccountId: "not-a-snowflake" }), "uuid-1");
+  assert.equal(stableSubject("guest-1", { provider: "guest", providerAccountId: "370614114122334208" }), "guest-1");
+  assert.equal(stableSubject("370614114122334208", null), "370614114122334208");
+});
