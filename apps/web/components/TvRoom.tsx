@@ -8,6 +8,7 @@ import { ProviderBadge } from "./Badges";
 import { FloatingReactions } from "./Reactions";
 import { FilmIcon } from "./Icons";
 import { useRoom } from "./RoomProvider";
+import { LocalPlayer } from "./LocalPlayer";
 import { StreamPlayer } from "./StreamPlayer";
 import { useEffectiveSource } from "./useEffectiveSource";
 import { WatchArea } from "./WatchArea";
@@ -70,6 +71,7 @@ export function TvRoom() {
       {playing && <ScreenAudio effectiveId={effectiveId} />}
       <div className="absolute inset-0">
         <StreamPlayer stream={stream} visible={Boolean(stream) && !showingScreen && playing} onFullscreen={() => {}} bare />
+        <LocalPlayer stream={stream?.source.type === "local" ? stream : null} visible={Boolean(stream) && !showingScreen && playing} onFullscreen={() => {}} bare />
       </div>
       {share && playing && (
         <div className="absolute inset-0 z-10">

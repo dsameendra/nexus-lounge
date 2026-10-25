@@ -31,3 +31,7 @@ The suites use real YouTube and Twitch embeds, so they need internet access. Scr
 ## Admin suite
 
 `12-admin.mjs` needs a stack started with the admin variables, and skips itself otherwise: set `ADMIN_SECRET` (32+ chars), `ADMIN_DISCORD_IDS=123456789012345678` and `ADMIN_TOTP_SECRET=<base32>` on web and server, then run with `ADMIN_TOTP_SECRET_TEST=<same base32>`.
+
+## Local video files
+
+`13-local-file.mjs` needs LiveKit on :7880 (`pnpm livekit`) and `ffmpeg` (it makes two small test videos in `e2e/.tmp-fixtures/`, which is ignored by git); it skips itself otherwise. It covers the live feed, playing your own copy, refusing a wrong file, on-demand publishing, the TV, remembered files, an iPhone-sized WebKit viewer and a Safari-engine owner.

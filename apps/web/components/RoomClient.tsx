@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import { LiveKitRoom } from "@livekit/components-react";
 import type { RoomOptions } from "livekit-client";
 import { joinResponseSchema, type JoinResponse } from "@nexus/shared";
+import { LocalFilesProvider } from "./LocalFilesProvider";
 import { RoomProvider, type Self } from "./RoomProvider";
 import { RoomView } from "./RoomView";
 import { SoundCues } from "./SoundCues";
 import { VoiceAudio } from "./VoiceAudio";
+import { destroyAllEntries } from "@/lib/local-entry";
 import { unlockAudio } from "@/lib/sounds";
 import { PushToTalkProvider } from "./PushToTalk";
 import { VoiceSettingsProvider } from "./VoiceSettings";
@@ -47,6 +49,8 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
   const [voiceKey, setVoiceKey] = useState(0);
   const [passwordDraft, setPasswordDraft] = useState("");
   const passwordRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => () => destroyAllEntries(), []);
 
   const requestToken = useCallback(
     async (password?: string, signal?: AbortSignal) => {
@@ -226,16 +230,18 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
           <PushToTalkProvider deafened={deafened}>
           <VoiceAudio deafened={deafened} />
           <SoundCues deafened={deafened} />
-          <RoomView
-            deafened={deafened}
-            onDeafenedChange={setDeafened}
-            onLeave={() => router.push("/")}
-            voiceLost={voiceLost}
-            onReconnectVoice={() => {
-              setVoiceLost(false);
-              setVoiceKey((key) => key + 1);
-            }}
-          />
+          <LocalFilesProvider deafened={deafened}>
+            <RoomView
+              deafened={deafened}
+              onDeafenedChange={setDeafened}
+              onLeave={() => router.push("/")}
+              voiceLost={voiceLost}
+              onReconnectVoice={() => {
+                setVoiceLost(false);
+                setVoiceKey((key) => key + 1);
+              }}
+            />
+          </LocalFilesProvider>
           </PushToTalkProvider>
         </VoiceSettingsProvider>
       </LiveKitRoom>

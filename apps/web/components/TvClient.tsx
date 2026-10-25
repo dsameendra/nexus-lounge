@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LiveKitRoom } from "@livekit/components-react";
 import { tvCredentialsSchema, tvPairingSchema, tvPollSchema, type TvCredentials } from "@nexus/shared";
+import { LocalFilesProvider } from "./LocalFilesProvider";
 import { RoomProvider } from "./RoomProvider";
 import { TvRoom } from "./TvRoom";
 import { useWakeLock } from "./useWakeLock";
@@ -129,7 +130,9 @@ export function TvClient({ roomId, signedIn }: { roomId: string; signedIn: boole
       fallback={(status) => <Screen>{status === "failed" ? "Couldn't connect to the room." : "Connecting…"}</Screen>}
     >
       <LiveKitRoom token={credentials.livekitToken} serverUrl={credentials.livekitUrl} connect audio={false} video={false} className="h-dvh">
-        <TvRoom />
+        <LocalFilesProvider deafened={false}>
+          <TvRoom />
+        </LocalFilesProvider>
       </LiveKitRoom>
     </RoomProvider>
   );
