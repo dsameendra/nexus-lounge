@@ -5,6 +5,7 @@ import { useLocalParticipant } from "@livekit/components-react";
 import { Avatar } from "./Avatar";
 import { Pill, ProviderBadge } from "./Badges";
 import { BroadcastIcon, ChevronDownIcon, ChevronUpIcon, PlaylistIcon, PlusIcon, QueueNextIcon, ScreenIcon, TrashIcon } from "./Icons";
+import { LocalFileFooter } from "./LocalFileFooter";
 import { MenuButton, type MenuItem } from "./Menu";
 import { PlaylistCard } from "./PlaylistCard";
 import { QueueSection } from "./QueueSection";
@@ -193,6 +194,7 @@ function StreamCard({
       }
       viewers={viewers}
       menu={menu}
+      footer={stream.source.type === "local" ? <LocalFileFooter stream={stream} /> : undefined}
     />
   );
 }
@@ -207,6 +209,7 @@ function Card({
   badges,
   viewers,
   menu = [],
+  footer,
 }: {
   active: boolean;
   clickable: boolean;
@@ -217,16 +220,18 @@ function Card({
   badges: React.ReactNode;
   viewers: ReturnType<typeof useRoom>["state"]["members"];
   menu?: MenuItem[];
+  footer?: React.ReactNode;
 }) {
   return (
     <div
-      className={`relative flex gap-3 rounded-2xl bg-panel p-2.5 transition ${
+      className={`relative rounded-2xl bg-panel p-2.5 transition ${
         active ? "ring-2 ring-accent" : clickable ? "hover:bg-panel-2" : ""
       } ${clickable ? "active:scale-[0.99]" : ""}`}
     >
       {clickable && (
         <button type="button" onClick={onClick} aria-pressed={active} aria-label={`Watch ${title}`} className="absolute inset-0 rounded-2xl" />
       )}
+      <div className="flex gap-3">
       <div className="pointer-events-none aspect-video w-28 shrink-0 overflow-hidden rounded-xl bg-panel-2 sm:w-32">{art}</div>
       <div className="pointer-events-none flex min-w-0 flex-1 flex-col justify-between py-0.5">
         <div className={`min-w-0 ${menu.length > 0 ? "pr-8" : ""}`}>
@@ -247,6 +252,8 @@ function Card({
           )}
         </div>
       </div>
+      </div>
+      {footer}
       {menu.length > 0 && (
         <div className="absolute top-1.5 right-1.5 z-10">
           <MenuButton items={menu} />

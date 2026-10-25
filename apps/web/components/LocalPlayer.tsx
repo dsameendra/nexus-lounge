@@ -5,13 +5,14 @@ import { createPortal } from "react-dom";
 import { useRoomContext } from "@livekit/components-react";
 import { RoomEvent, type RemoteTrack } from "livekit-client";
 import { SILENT_BELOW, expectedPosition, isSilent, isTypingTarget, sliderToGain, type Stream } from "@nexus/shared";
-import { fileFromDrop, pickFile, type PickedFile } from "@/lib/local-files";
+import { fileFromDrop } from "@/lib/local-files";
 import { FilmIcon, PlayIcon } from "./Icons";
-import { FEED_AUDIO, FEED_VIDEO, NOT_THE_SAME_FILE, useLocalFiles } from "./LocalFilesProvider";
+import { FEED_AUDIO, FEED_VIDEO, useLocalFiles } from "./LocalFilesProvider";
 import { PlayerControls, type SyncStatus } from "./PlayerControls";
 import { useRoom } from "./RoomProvider";
 import { loadVolume, VOLUME_KEY } from "./StreamPlayer";
 import { useAppleAirPlaySupport, openTvSheet } from "./useAirPlay";
+import { useLocalFileActions } from "./useLocalFileActions";
 import { COMPACT_SCREEN, PHONE_LANDSCAPE, hasElementFullscreen, useMediaQuery } from "./useMediaQuery";
 import { useTvOutput } from "./useTvOutput";
 import { useVideoFit } from "./useVideoFit";
@@ -142,7 +143,7 @@ function FileFeed({ stream, gain, fit, bare }: { stream: Stream; gain: number; f
   );
 }
 
-const chip = "flex h-8 items-center rounded-full bg-black/60 px-3.5 text-xs font-medium text-white backdrop-blur transition hover:bg-black/75 active:scale-95";
+const chip = "flex h-8 items-center rounded-full bg-black/60 px-3.5 text-xs font-medium text-white backdrop-blur transition hover:bg-black/75 active:scale-95 disabled:opacity-60";
 
 export function LocalPlayer({
   stream,
@@ -172,17 +173,13 @@ export function LocalPlayer({
   const [muted, setMuted] = useState(initialVolume.muted);
   const [controlsShown, setControlsShown] = useState(true);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
   const [ui, setUi] = useState({ time: 0, playing: false, status: "syncing" as SyncStatus, blocked: false, ended: false, error: null as string | null });
 
-  const entry = stream ? files.entry(stream.id) : undefined;
-  const owner = stream?.addedBy.id === self.id;
+  const { entry, owner, remembered, busy, problem, attach, choose, resume, release } = useLocalFileActions(stream);
   const shown = Boolean(stream && visible);
-  const remembered = stream ? files.remembered(stream.id) : null;
-  const serverDeafened = state.restrictions[self.id]?.deafened ?? false;
   const silenced = muted || !localSound;
-  const gain = files.deafened || serverDeafened || silenced || isSilent(volume) ? 0 : sliderToGain(volume);
+  // Deafening is for voice chat; the film keeps playing. Volume and mute here are the only controls for its sound.
+  const gain = silenced || isSilent(volume) ? 0 : sliderToGain(volume);
   const fillable = fullscreen || phoneLand;
   const filling = fillable && fit === "fill";
   const overlayControls = fullscreen || compactScreen;
@@ -212,22 +209,32 @@ export function LocalPlayer({
   useEffect(() => {
     if (!stream || !shown) return;
     const read = () => {
+      let next: typeof ui;
       if (entry) {
-        const time = Math.floor(entry.video.currentTime * 2) / 2;
-        setUi((prev) => {
-          const next = { time, playing: !entry.video.paused, status: entry.status, blocked: entry.blocked || !entry.audioRunning, ended: entry.ended, error: entry.error };
-          return Object.keys(next).every((key) => prev[key as keyof typeof prev] === next[key as keyof typeof next]) ? prev : next;
-        });
-        return;
+        next = { time: Math.floor(entry.video.currentTime * 2) / 2, playing: !entry.video.paused, status: entry.status, blocked: entry.blocked || !entry.audioRunning, ended: entry.ended, error: entry.error };
+      } else {
+        const length = stream.file?.duration ?? 0;
+        const expected = expectedPosition(stream.playback, clock.now());
+        const ended = length > 0 && expected !== null && expected >= length - 0.5;
+        next = { time: Math.floor(Math.min(expected ?? 0, length || Infinity) * 2) / 2, playing: stream.playback.playing && !ended, status: "synced", blocked: false, ended, error: null };
       }
-      const expected = expectedPosition(stream.playback, clock.now());
-      const time = Math.floor(Math.min(expected ?? 0, stream.file?.duration ?? Infinity) * 2) / 2;
-      setUi((prev) => (prev.time === time && prev.playing === stream.playback.playing && prev.status === "synced" && !prev.blocked && !prev.error ? prev : { time, playing: stream.playback.playing, status: "synced", blocked: false, ended: false, error: null }));
+      setUi((prev) => (Object.keys(next).every((key) => prev[key as keyof typeof prev] === next[key as keyof typeof next]) ? prev : next));
     };
     read();
     const id = setInterval(read, 500);
     return () => clearInterval(id);
   }, [stream, entry, shown, clock]);
+
+  const advancedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ui.ended) {
+      advancedFor.current = null;
+      return;
+    }
+    if (!stream || bare || !isController || stream.id !== state.featuredId || !state.room.settings.autoplayNext || advancedFor.current === stream.id) return;
+    advancedFor.current = stream.id;
+    send({ type: "queue.advance", fromStreamId: stream.id });
+  }, [ui.ended, stream, bare, isController, state.featuredId, state.room.settings.autoplayNext, send]);
 
   const revealControls = useCallback(() => {
     setControlsShown(true);
@@ -238,26 +245,6 @@ export function LocalPlayer({
     revealControls();
     return () => clearTimeout(hideTimer.current);
   }, [stream?.id, revealControls]);
-
-  async function choose(picked: PickedFile | null) {
-    if (!stream || !picked) return;
-    setBusy(true);
-    setProblem(null);
-    try {
-      await files.attach(stream, picked);
-    } catch (error) {
-      setProblem(error instanceof Error ? error.message : NOT_THE_SAME_FILE);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function resume() {
-    if (!stream) return;
-    setBusy(true);
-    setProblem(await files.resume(stream));
-    setBusy(false);
-  }
 
   const canControl = Boolean(stream && canControlStream(stream));
   const duration = stream?.file?.duration ?? 0;
@@ -359,8 +346,8 @@ export function LocalPlayer({
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
-        if (!bare && !needsFile && entry) return;
-        void fileFromDrop(event).then(choose);
+        if (bare || (entry && !needsFile)) return;
+        void fileFromDrop(event).then(attach);
       }}
     >
       <div ref={hostRef} className="absolute inset-0" />
@@ -416,13 +403,13 @@ export function LocalPlayer({
           </div>
           <button
             disabled={busy}
-            onClick={() => (remembered ? void resume() : void pickFile().then(choose))}
+            onClick={() => void (remembered ? resume() : choose())}
             className="h-10 rounded-full bg-accent px-5 text-sm font-semibold transition hover:brightness-110 active:scale-95 disabled:opacity-50"
           >
             {remembered ? "Resume" : "Choose the file"}
           </button>
           {remembered && (
-            <button onClick={() => void pickFile().then(choose)} className="text-sm text-accent hover:underline">
+            <button onClick={() => void choose()} className="text-sm text-accent hover:underline">
               Choose a different copy
             </button>
           )}
@@ -445,17 +432,17 @@ export function LocalPlayer({
                   Resume “{remembered}”
                 </button>
               )}
-              <button disabled={busy} onClick={() => void pickFile().then(choose)} className={chip}>
+              <button disabled={busy} onClick={() => void choose()} className={chip}>
                 {busy ? "Checking the file…" : "I have this file"}
               </button>
             </>
           )}
           {!bare && entry && !owner && (
-            <button onClick={() => files.detach(stream.id)} className={chip}>
+            <button onClick={release} className={chip}>
               Playing your copy · use live feed
             </button>
           )}
-          {problem && <span className="flex min-h-8 max-w-sm items-center rounded-2xl bg-black/75 px-3.5 py-1.5 text-xs text-danger">{problem}</span>}
+          {problem && !entry && <span role="alert" className="flex min-h-8 max-w-sm items-center rounded-2xl bg-black/75 px-3.5 py-1.5 text-xs text-danger">{problem}</span>}
         </div>
       )}
 
