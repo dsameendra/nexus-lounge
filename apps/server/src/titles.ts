@@ -1,6 +1,7 @@
 import type { MediaSource } from "@nexus/shared";
 
 export function fallbackTitle(source: MediaSource) {
+  if (source.type === "local") return "Local video";
   if (source.type === "youtube") return "YouTube video";
   return source.isLive ? source.id : `Twitch broadcast ${source.id}`;
 }

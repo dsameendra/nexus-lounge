@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { AccessToken, RoomServiceClient, TrackSource } from "livekit-server-sdk";
 import type { ParticipantMetadata } from "@nexus/shared";
 import type { SessionPayload } from "@nexus/shared/session-token";
@@ -9,13 +10,27 @@ export interface PublishInputs {
   guest: boolean;
   micBlocked: boolean;
   canShare: boolean;
+  canFeed: boolean;
 }
 
-function grantFor({ guest, micBlocked, canShare }: PublishInputs) {
+// Local-file feeds travel as UNKNOWN-source tracks so they never count as a mic or a screen share.
+export function grantFor({ guest, micBlocked, canShare, canFeed }: PublishInputs) {
   const sources: TrackSource[] = [];
   if (!micBlocked) sources.push(TrackSource.MICROPHONE);
   if (canShare && !guest) sources.push(TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO);
+  if (canFeed && !guest) sources.push(TrackSource.UNKNOWN);
   return sources.length > 0 ? { canPublish: true, canPublishSources: sources } : { canPublish: false, canPublishSources: [] as TrackSource[] };
+}
+
+// livekit-server-sdk cannot encode the UNKNOWN source in a token, so add it to the signed claims ourselves.
+export function allowFeedSource(jwt: string, secret: string) {
+  const [header, body] = jwt.split(".");
+  const claims = JSON.parse(Buffer.from(body!, "base64url").toString()) as { video?: { canPublish?: boolean; canPublishSources?: string[] } };
+  if (!claims.video) return jwt;
+  claims.video.canPublish = true;
+  claims.video.canPublishSources = [...(claims.video.canPublishSources ?? []), "unknown"];
+  const payload = `${header}.${Buffer.from(JSON.stringify(claims)).toString("base64url")}`;
+  return `${payload}.${createHmac("sha256", secret).update(payload).digest("base64url")}`;
 }
 
 export async function applyPermissions(roomId: string, identity: string, inputs: PublishInputs) {
@@ -32,8 +47,11 @@ export async function createLivekitToken(roomId: string, user: SessionPayload, i
     metadata: JSON.stringify(metadata),
     ttl: "6h",
   });
-  token.addGrant({ room: roomId, roomJoin: true, canSubscribe: true, canPublishData: true, ...grantFor(inputs) });
-  return token.toJwt();
+  const grant = grantFor(inputs);
+  const sources = grant.canPublishSources.filter((source) => source !== TrackSource.UNKNOWN);
+  token.addGrant({ room: roomId, roomJoin: true, canSubscribe: true, canPublishData: true, canPublish: sources.length > 0, canPublishSources: sources });
+  const jwt = await token.toJwt();
+  return grant.canPublishSources.length > sources.length ? allowFeedSource(jwt, config.LIVEKIT_API_SECRET) : jwt;
 }
 
 export async function createViewerToken(roomId: string, identity: string, name: string) {

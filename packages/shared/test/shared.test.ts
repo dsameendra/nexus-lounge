@@ -233,3 +233,66 @@ test("Discord users keep their Discord ID as subject; others are untouched", asy
   assert.equal(stableSubject("guest-1", { provider: "guest", providerAccountId: "370614114122334208" }), "guest-1");
   assert.equal(stableSubject("370614114122334208", null), "370614114122334208");
 });
+
+test("local files: fingerprint ranges cover the start, middle and end of big files", async () => {
+  const { fingerprintRanges, FINGERPRINT_SLICE } = await import("../src/index.ts");
+  assert.deepEqual(fingerprintRanges(10), [[0, 10]]);
+  assert.deepEqual(fingerprintRanges(FINGERPRINT_SLICE * 3), [[0, FINGERPRINT_SLICE * 3]]);
+  const size = 10 * FINGERPRINT_SLICE + 7;
+  const ranges = fingerprintRanges(size);
+  assert.equal(ranges.length, 3);
+  assert.deepEqual(ranges[0], [0, FINGERPRINT_SLICE]);
+  assert.deepEqual(ranges[2], [size - FINGERPRINT_SLICE, size]);
+  for (const [start, end] of ranges) assert.equal(end - start, FINGERPRINT_SLICE);
+  assert.ok(ranges[1]![0] > ranges[0]![1] && ranges[1]![1] < ranges[2]![0]);
+});
+
+test("local files: the fingerprint is stable and sensitive to size and content", async () => {
+  const { fingerprint, LOCAL_ID } = await import("../src/index.ts");
+  const bytes = (length: number, fill: number) => new Uint8Array(length).fill(fill);
+  const a = await fingerprint(5, [bytes(5, 1)]);
+  assert.match(a, LOCAL_ID);
+  assert.equal(a, await fingerprint(5, [bytes(5, 1)]));
+  assert.notEqual(a, await fingerprint(5, [bytes(5, 2)]));
+  assert.notEqual(await fingerprint(5, [bytes(5, 1)]), await fingerprint(6, [bytes(6, 1)]));
+  const slice = 1024 * 1024;
+  const size = slice * 5;
+  const parts = [bytes(slice, 1), bytes(slice, 2), bytes(slice, 3)];
+  const big = await fingerprint(size, parts);
+  assert.notEqual(big, await fingerprint(size, [parts[0]!, bytes(slice, 9), parts[2]!]), "a different middle is a different file");
+  await assert.rejects(fingerprint(size, [parts[0]!, parts[1]!]), "missing slices");
+  await assert.rejects(fingerprint(size, [parts[0]!, bytes(10, 2), parts[2]!]), "short read");
+});
+
+test("local files: schemas accept real files and reject abuse", async () => {
+  const { mediaSourceSchema, localFileSchema, cleanFileName, streamKey, isQueueable, clientMessageSchema } = await import("../src/index.ts");
+  const id = "0123456789abcdef0123456789abcdef";
+  assert.equal(mediaSourceSchema.safeParse({ type: "local", id, isLive: false }).success, true);
+  assert.equal(mediaSourceSchema.safeParse({ type: "local", id, isLive: true }).success, false, "never live");
+  assert.equal(mediaSourceSchema.safeParse({ type: "local", id: id.toUpperCase(), isLive: false }).success, false);
+  assert.equal(mediaSourceSchema.safeParse({ type: "local", id: "short", isLive: false }).success, false);
+  assert.equal(mediaSourceSchema.safeParse({ type: "youtube", id: "dQw4w9WgXcQ", isLive: false }).success, true);
+  assert.equal(streamKey({ type: "local", id, isLive: false }), `local:${id}`);
+  assert.equal(isQueueable({ type: "local", id, isLive: false }), false);
+
+  assert.equal(localFileSchema.safeParse({ name: "Film.mkv", size: 1, duration: 60 }).success, true);
+  for (const bad of [
+    { name: "", size: 1, duration: 1 },
+    { name: "a\u202eb.mp4", size: 1, duration: 1 },
+    { name: "a.mp4", size: 1, duration: 1 },
+    { name: "x".repeat(121), size: 1, duration: 1 },
+    { name: "ok.mp4", size: 0, duration: 1 },
+    { name: "ok.mp4", size: 1.5, duration: 1 },
+    { name: "ok.mp4", size: 2 ** 41, duration: 1 },
+    { name: "ok.mp4", size: 1, duration: -1 },
+    { name: "ok.mp4", size: 1, duration: 86400 * 3 },
+  ]) {
+    assert.equal(localFileSchema.safeParse(bad).success, false, JSON.stringify(bad));
+  }
+  assert.equal(cleanFileName("  a\u202e\u200bb \n c.mp4 "), "ab c.mp4");
+  assert.equal(cleanFileName("\u200b"), "Video");
+
+  assert.equal(clientMessageSchema.safeParse({ type: "stream.add", source: { type: "local", id, isLive: false }, file: { name: "Film.mkv", size: 10, duration: 5 } }).success, true);
+  assert.equal(clientMessageSchema.safeParse({ type: "presence.feed", streamId: `local:${id}` }).success, true);
+  assert.equal(clientMessageSchema.safeParse({ type: "presence.feed", streamId: null }).success, true);
+});

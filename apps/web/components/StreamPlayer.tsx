@@ -23,7 +23,13 @@ function sourceUrl(stream: Stream) {
   return isLive ? `https://www.twitch.tv/${id}` : `https://www.twitch.tv/videos/${id}`;
 }
 
-type Provider = "youtube" | "twitch";
+type Provider = Exclude<Stream["source"]["type"], "local">;
+type PlayableStream = Stream & { source: { type: Provider } };
+
+// Local files have their own player; the embedded YouTube/Twitch players only ever see their own sources.
+function playable(stream: Stream | null) {
+  return stream && stream.source.type !== "local" ? (stream as PlayableStream) : null;
+}
 
 interface UiState {
   status: SyncStatus;
@@ -71,7 +77,7 @@ function applyVolume(adapter: PlayerAdapter | undefined, volume: number, muted: 
 const INITIAL_UI: UiState = { status: "syncing", blocked: false, loading: true, playing: false, time: 0, duration: 0, live: false, atEdge: false, error: null, qualityCount: 0, qualityValue: "auto", captionKey: "", muteBlocked: false, ended: false, endedFor: null, stalled: false, debug: "" };
 
 export function StreamPlayer({
-  stream,
+  stream: incoming,
   visible,
   onFullscreen,
   bare = false,
@@ -85,6 +91,7 @@ export function StreamPlayer({
   fullscreen?: boolean;
   controlsSlot?: HTMLElement | null;
 }) {
+  const stream = playable(incoming);
   const canFullscreen = true;
   const appleAirPlay = useAppleAirPlaySupport();
   const { clock, send, canControlStream, state: roomState, isController } = useRoom();

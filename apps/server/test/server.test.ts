@@ -706,3 +706,103 @@ test("password guessing is rate limited, account deletion is refused while in a 
   assert.equal(other.status, 200);
   client.socket.close();
 });
+
+const localSource = (n: number) => ({ type: "local", id: n.toString(16).padStart(32, "0"), isLive: false });
+const localId = (n: number) => `local:${localSource(n).id}`;
+const localFile = { name: "Film night.mkv", size: 123456, duration: 5400 };
+
+test("local files: who can add, caps, queue and ownership rules", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const alice = await join(id, "alice");
+  const guest = await join(id, "guest-1", true, host);
+
+  guest.send({ type: "stream.add", source: localSource(1), file: localFile });
+  await guest.until(() => guest.errors.length > 0);
+  assert.equal(host.state!.streams.length, 0, "guests cannot add");
+
+  alice.send({ type: "stream.add", source: localSource(1) });
+  await alice.until(() => alice.errors.includes("Missing file details"));
+  alice.send({ type: "stream.add", source: yt, file: localFile });
+  await alice.until(() => alice.errors.includes("Unexpected file details"));
+  assert.equal(host.state!.streams.length, 0);
+
+  alice.send({ type: "stream.add", source: localSource(1), file: localFile });
+  await host.until(() => host.state!.streams.length === 1);
+  const stream = host.state!.streams[0]!;
+  assert.equal(stream.id, localId(1));
+  assert.equal(stream.title, localFile.name, "title comes from the file name, never a lookup");
+  assert.deepEqual(stream.file, localFile);
+  assert.equal(stream.addedBy.id, "alice");
+
+  alice.send({ type: "stream.add", source: localSource(1), file: { ...localFile, name: "Other.mkv" } });
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.equal(host.state!.streams.length, 1, "the same file is not added twice");
+  assert.equal(host.state!.streams[0]!.title, localFile.name, "the first owner keeps it");
+
+  host.send({ type: "queue.addStream", streamId: localId(1), position: "end" });
+  await host.until(() => host.errors.includes("Local files can't be queued"));
+  assert.equal(host.state!.queue.length, 0);
+
+  host.send({ type: "stream.establish", streamId: localId(1), position: 40 });
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.equal(host.state!.streams[0]!.playback.position, null, "only the owner can establish a local stream");
+  alice.send({ type: "stream.establish", streamId: localId(1), position: 0 });
+  await host.until(() => host.state!.streams[0]!.playback.position === 0);
+
+  host.send({ type: "settings.update", sharing: "controllers" });
+  await alice.until(() => alice.state!.room.settings.sharing === "controllers");
+  alice.send({ type: "stream.add", source: localSource(2), file: localFile });
+  await alice.until(() => alice.errors.some((message) => message.includes("can add local files")));
+  host.send({ type: "stream.add", source: localSource(2), file: localFile });
+  await host.until(() => host.state!.streams.length === 2);
+
+  for (const n of [3, 4, 5, 6]) host.send({ type: "stream.add", source: localSource(n), file: localFile });
+  await host.until(() => host.state!.streams.length === 6);
+  host.send({ type: "stream.add", source: localSource(7), file: localFile });
+  await host.until(() => host.errors.some((message) => message.includes("up to 5 local files")));
+  assert.equal(host.state!.streams.length, 6);
+});
+
+test("local files: feed demand is tracked per viewer and cleared with the stream", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const alice = await join(id, "alice");
+  const bob = await join(id, "bob");
+
+  alice.send({ type: "stream.add", source: localSource(1), file: localFile });
+  await host.until(() => host.state!.streams.length === 1);
+  const feedOf = (client: Client, sub: string) => client.state!.members.find((member) => member.id === sub)!.feed;
+
+  bob.send({ type: "presence.feed", streamId: localId(1) });
+  await host.until(() => feedOf(host, "bob") === localId(1));
+  alice.send({ type: "presence.feed", streamId: localId(1) });
+  bob.send({ type: "presence.feed", streamId: "youtube:dQw4w9WgXcQ" });
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.equal(feedOf(host, "alice"), null, "the owner never counts as a feed viewer");
+  assert.equal(feedOf(host, "bob"), localId(1), "unknown or non-local streams are ignored");
+
+  bob.send({ type: "presence.feed", streamId: null });
+  await host.until(() => feedOf(host, "bob") === null);
+  bob.send({ type: "presence.feed", streamId: localId(1) });
+  await host.until(() => feedOf(host, "bob") === localId(1));
+  bob.send({ type: "stream.remove", streamId: localId(1) });
+  await bob.until(() => bob.errors.length > 0);
+  alice.send({ type: "stream.remove", streamId: localId(1) });
+  await host.until(() => host.state!.streams.length === 0);
+  assert.equal(feedOf(host, "bob"), null, "removing the stream ends the demand");
+});
+
+test("local files: autoplay skips them", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  const other = { type: "youtube", id: "9bZkp7q19f0", isLive: false };
+  host.send({ type: "stream.add", source: yt });
+  host.send({ type: "stream.add", source: localSource(1), file: localFile });
+  host.send({ type: "stream.add", source: other });
+  await host.until(() => host.state!.streams.length === 3);
+  host.send({ type: "stream.feature", streamId: ytId });
+  await host.until(() => host.state!.featuredId === ytId);
+  host.send({ type: "queue.advance", fromStreamId: ytId });
+  await host.until(() => host.state!.featuredId === "youtube:9bZkp7q19f0");
+});

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LOCAL_ID, localFileSchema } from "./local-file.ts";
 
 export const SCREEN_PREFIX = "screen:";
 
@@ -68,11 +69,13 @@ export const roomPasswordSchema = z.string().min(1).max(64);
 export const createRoomRequestSchema = z.object({ password: roomPasswordSchema.optional(), name: roomNameSchema.optional() });
 export const joinRoomRequestSchema = z.object({ password: z.string().max(64).optional() });
 
-export const mediaSourceSchema = z.object({
-  type: z.enum(["youtube", "twitch"]),
-  id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
-  isLive: z.boolean(),
-});
+export const mediaSourceSchema = z
+  .object({
+    type: z.enum(["youtube", "twitch", "local"]),
+    id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+    isLive: z.boolean(),
+  })
+  .refine((source) => source.type !== "local" || (LOCAL_ID.test(source.id) && !source.isLive), "Invalid local file");
 export type MediaSource = z.infer<typeof mediaSourceSchema>;
 
 export const playbackSchema = z.object({
@@ -89,6 +92,7 @@ export const streamSchema = z.object({
   addedBy: z.object({ id: z.string(), name: z.string() }),
   addedAt: z.number(),
   playback: playbackSchema,
+  file: localFileSchema.optional(),
 });
 export type Stream = z.infer<typeof streamSchema>;
 
@@ -128,6 +132,7 @@ export const memberSchema = z.object({
   watching: z.string().nullable(),
   tvOf: z.string().nullable(),
   tvMode: tvModeSchema.nullable(),
+  feed: z.string().nullable().default(null),
 });
 export type Member = z.infer<typeof memberSchema>;
 
@@ -167,6 +172,7 @@ export const joinResponseSchema = livekitTokenResponseSchema.extend({ wsUrl: z.s
 export type JoinResponse = z.infer<typeof joinResponseSchema>;
 
 export function streamKey(source: MediaSource) {
+  if (source.type === "local") return `local:${source.id}`;
   return source.type === "youtube" ? `youtube:${source.id}` : `twitch:${source.isLive ? "live" : "vod"}:${source.id}`;
 }
 

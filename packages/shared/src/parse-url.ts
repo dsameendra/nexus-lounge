@@ -78,5 +78,5 @@ export function parsePlaylistId(input: string): string | null {
 }
 
 export function isQueueable(source: MediaSource) {
-  return !source.isLive;
+  return !source.isLive && source.type !== "local";
 }
