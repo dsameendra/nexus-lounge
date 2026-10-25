@@ -131,7 +131,7 @@ export function StreamLibrary({ onAdd }: { onAdd: () => void }) {
                         : { label: "Show to everyone", icon: <BroadcastIcon />, onSelect: () => send({ type: "stream.feature", streamId: stream.id }) },
                     ]
                   : []),
-                ...(canAdd && !stream.source.isLive
+                ...(canAdd && !stream.source.isLive && stream.source.type !== "local"
                   ? [
                       { label: "Add to queue", icon: <PlaylistIcon />, onSelect: () => send({ type: "queue.addStream", streamId: stream.id, position: "end" }) },
                       { label: "Play next", icon: <QueueNextIcon />, onSelect: () => send({ type: "queue.addStream", streamId: stream.id, position: "next" }) },

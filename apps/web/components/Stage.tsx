@@ -9,6 +9,7 @@ import { Pill, ProviderBadge } from "./Badges";
 import { BroadcastIcon, FilmIcon, PauseIcon, PlayIcon, PlusIcon, SyncIcon, TvIcon } from "./Icons";
 import { OutputPicker } from "./OutputPicker";
 import { useRoom } from "./RoomProvider";
+import { LocalPlayer } from "./LocalPlayer";
 import { StreamPlayer } from "./StreamPlayer";
 import { shareName, useEffectiveSource } from "./useEffectiveSource";
 import { PHONE_LANDSCAPE, hasElementFullscreen, useMediaQuery } from "./useMediaQuery";
@@ -76,6 +77,13 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
       >
         <StreamPlayer
           stream={stream}
+          visible={Boolean(stream) && !showingScreen && !tvOnly}
+          onFullscreen={toggleStage}
+          fullscreen={fullscreen}
+          controlsSlot={slot}
+        />
+        <LocalPlayer
+          stream={stream?.source.type === "local" ? stream : null}
           visible={Boolean(stream) && !showingScreen && !tvOnly}
           onFullscreen={toggleStage}
           fullscreen={fullscreen}

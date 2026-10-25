@@ -32,6 +32,9 @@ export default function PrivacyPage() {
             The operator can see, live, which rooms exist and who is in them (display name, whether signed in with Discord, room name and whether it has a password). The operator cannot see chat messages, passwords or voice. The operator can also close a room or remove a person from it. This view is not stored. The server's logs record only that an admin looked, with a shortened IP address, and hosting logs are kept by Railway for a limited time.
           </li>
           <li>Voice and screen shares are relayed live through LiveKit and are not recorded.</li>
+          <li>
+            Video files you add from your own device are never uploaded or stored. The room sees the file&apos;s name, size and length and a short fingerprint (a hash of a few small slices) used to check that two people have the same file. If friends without the file are watching, your browser sends them a live picture and sound through LiveKit, relayed the same way as a screen share and not recorded. On Chrome and Edge the browser can remember which file you picked (a reference kept in your browser, never sent to us) so it can reopen after a refresh; you can clear these on your account page.
+          </li>
           <li>Preferences such as volume, captions, fit or fill and your TV output choice are saved in your browser&apos;s local storage and never sent to us.</li>
         </ul>
       </section>

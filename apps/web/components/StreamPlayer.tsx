@@ -51,9 +51,9 @@ interface UiState {
   debug: string;
 }
 
-const VOLUME_KEY = "nexus-player-volume";
+export const VOLUME_KEY = "nexus-player-volume";
 
-function loadVolume() {
+export function loadVolume() {
   try {
     const raw = JSON.parse(localStorage.getItem(VOLUME_KEY) ?? "{}") as { volume?: number; muted?: boolean };
     const volume = Number(raw.volume ?? 1);

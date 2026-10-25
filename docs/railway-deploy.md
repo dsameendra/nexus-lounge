@@ -77,3 +77,7 @@ The server reads the visitor's address from `CF-Connecting-IP` only when the req
 ## Client IP behind Railway
 
 Railway puts two proxies in front of the server and overwrites any client-supplied `X-Forwarded-For`, so the server trusts exactly two hops (`TRUST_PROXY_HOPS`, default 2). Probe it after changes: send a spoofed `X-Forwarded-For` and confirm the logged `remoteAddress` is your real IP.
+
+## Video files and LiveKit bandwidth
+
+When someone shares a video file and friends watch the live feed, LiveKit receives one stream (up to about 4 Mbps) and sends a copy to every viewer, the same load as a screen share. The owner publishes only while at least one person is watching the feed, so rooms where everyone has the file cost nothing. Check your LiveKit plan's bandwidth limits before inviting big rooms to watch a film this way. Nothing else needs configuring: no new variables or services.

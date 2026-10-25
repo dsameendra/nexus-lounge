@@ -54,6 +54,7 @@ I built it so my friends and I could watch League of Legends Worlds together, bu
 - Playback stays in sync across everyone's devices, with smooth correction instead of constant skipping.
 - On a live YouTube stream, **Go live** jumps everyone to the live edge.
 - Several people can screen share at once, each with audio. Everyone picks which share to watch, and the owner or a controller can put one on air. A notice appears when someone starts sharing.
+- **Your own video files:** pick a video from your computer and watch it together. Friends who don't have the file watch a live feed from your browser (no upload: the video never touches the server). Friends who do have the same file can pick it and play their own copy, synced to the room in full quality. Wrong files are refused (a fingerprint of the size and a few slices must match). Chrome and Edge remember the file across a refresh. Sharing the feed works from Chrome, Edge, Firefox and Safari on a computer; TVs always use the feed.
 - Twitch live channels can't be time-synced by embeds, so the app says so and suggests screen share.
 - Reactions: send emoji that float across the screen for everyone.
 

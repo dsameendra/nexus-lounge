@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signOutAction } from "@/app/account/actions";
 import { AVATARS, avatarPath } from "@/lib/avatars";
+import { canRememberFiles, forgetFiles } from "@/lib/local-files";
 import { Avatar } from "./Avatar";
 import { CheckIcon } from "./Icons";
 import { LegalLinks } from "./LegalLinks";
@@ -20,6 +21,9 @@ export function AccountClient({ name: initialName, image: initialImage, guest, i
   const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [canForget, setCanForget] = useState(false);
+  const [forgotten, setForgotten] = useState(false);
+  useEffect(() => setCanForget(canRememberFiles()), []);
 
   const trimmed = name.trim();
   const dirty = trimmed !== saved.name || avatar !== saved.avatar;
@@ -150,6 +154,21 @@ export function AccountClient({ name: initialName, image: initialImage, guest, i
       <form action={signOutAction} className="mt-4">
         <button className="h-11 w-full rounded-xl bg-panel font-semibold transition hover:bg-panel-2 active:scale-[0.99]">Sign out</button>
       </form>
+
+      {canForget && (
+        <section className="mt-8 rounded-[var(--radius-sheet)] bg-panel p-5">
+          <h2 className="font-semibold">Remembered video files</h2>
+          <p className="mt-1.5 text-sm leading-relaxed text-label-2">
+            This browser remembers which video files you picked so they can reopen after a refresh. Only a reference is kept, in this browser, and the files stay where they are.
+          </p>
+          <button
+            onClick={() => void forgetFiles().then(() => setForgotten(true))}
+            className="mt-4 h-11 rounded-xl bg-panel-2 px-5 font-semibold transition hover:bg-panel-3 active:scale-95"
+          >
+            {forgotten ? "Forgotten" : "Forget remembered files"}
+          </button>
+        </section>
+      )}
 
       <section className="mt-8 rounded-[var(--radius-sheet)] border border-danger/40 p-5">
         <h2 className="font-semibold text-danger">Delete account</h2>
