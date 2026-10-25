@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { localFileSchema } from "./local-file.ts";
 import { PLAYLIST_ID } from "./parse-url.ts";
 import { YOUTUBE_VIDEO_ID, mediaSourceSchema, playlistItemSchema, reactionEmojiSchema, roomIdSchema, roomNameSchema, roomSettingsSchema, roomStateSchema, tvModeSchema } from "./types.ts";
 
@@ -10,7 +11,7 @@ const position = z.enum(["end", "next"]);
 export const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("join"), roomId: roomIdSchema, ticket: z.string() }),
   z.object({ type: z.literal("ping"), clientTime: z.number() }),
-  z.object({ type: z.literal("stream.add"), source: mediaSourceSchema }),
+  z.object({ type: z.literal("stream.add"), source: mediaSourceSchema, file: localFileSchema.optional() }),
   z.object({ type: z.literal("stream.remove"), streamId }),
   z.object({
     type: z.literal("stream.control"),
@@ -40,6 +41,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("presence.voice"), deafened: z.boolean() }),
   z.object({ type: z.literal("share.stop"), userId: z.string() }),
   z.object({ type: z.literal("presence.watch"), streamId: streamId.nullable() }),
+  z.object({ type: z.literal("presence.feed"), streamId: streamId.nullable() }),
   z.object({ type: z.literal("tv.output"), mode: tvModeSchema }),
 ]);
 export type ClientMessage = z.infer<typeof clientMessageSchema>;

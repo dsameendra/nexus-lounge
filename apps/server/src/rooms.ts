@@ -2,6 +2,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { WebSocket } from "ws";
 import {
   LIMITS,
+  MAX_LOCAL_STREAMS_PER_USER,
   defaultRoomSettings,
   isScreenId,
   isQueueable,
@@ -10,6 +11,7 @@ import {
   type QueueItem,
   type RoomSettings,
   streamKey,
+  type LocalFile,
   type MediaSource,
   type Member,
   type PendingRequest,
@@ -188,7 +190,7 @@ export function connect(roomId: string, user: SessionPayload, socket: WebSocket)
     existing.member.image = user.image;
   } else {
     room.connections.set(user.sub, {
-      member: { id: user.sub, name: user.name, image: user.image, guest: user.guest, deafened: false, watching: null, tvOf: user.tv ? (user.tvOf ?? null) : null, tvMode: user.tv ? "both" : null },
+      member: { id: user.sub, name: user.name, image: user.image, guest: user.guest, deafened: false, watching: null, tvOf: user.tv ? (user.tvOf ?? null) : null, tvMode: user.tv ? "both" : null, feed: null },
       sockets: new Set([socket]),
     });
   }
@@ -227,24 +229,32 @@ function canControl(room: StoredRoom, user: SessionPayload, stream: Stream) {
   return !user.guest && (isController(room, user.sub) || stream.addedBy.id === user.sub);
 }
 
-export function addStream(roomId: string, user: SessionPayload, source: MediaSource): Result {
+export function addStream(roomId: string, user: SessionPayload, source: MediaSource, file?: LocalFile): Result {
   const room = rooms.get(roomId);
   if (!room) return fail("Room not found");
   if (user.guest) return fail("Sign in with Discord to add streams");
+  const local = source.type === "local";
+  if (local !== Boolean(file)) return fail(local ? "Missing file details" : "Unexpected file details");
+  if (local && !canShareScreen(roomId, user)) return fail("Only the host and controllers can add local files in this room");
   const id = streamKey(source);
   if (room.streams.some((stream) => stream.id === id)) return ok;
+  if (local && room.streams.filter((stream) => stream.source.type === "local" && stream.addedBy.id === user.sub).length >= MAX_LOCAL_STREAMS_PER_USER) {
+    return fail(`You can add up to ${MAX_LOCAL_STREAMS_PER_USER} local files at a time. Remove one first.`);
+  }
   if (room.streams.length >= MAX_STREAMS) return fail("This room has too many streams. Remove one first.");
 
   const stream: Stream = {
     id,
     source,
-    title: fallbackTitle(source),
+    title: file?.name ?? fallbackTitle(source),
     addedBy: { id: user.sub, name: user.name },
     addedAt: Date.now(),
     playback: { position: null, playing: false, updatedAt: Date.now() },
+    ...(file ? { file } : {}),
   };
   room.streams.push(stream);
   broadcast(roomId);
+  if (local) return ok;
 
   void fetchTitle(source).then((title) => {
     if (!title || !room.streams.includes(stream)) return;
@@ -263,9 +273,15 @@ export function removeStream(roomId: string, user: SessionPayload, streamId: str
   if (room.featuredId === streamId) room.featuredId = null;
   for (const connection of room.connections.values()) {
     if (connection.member.watching === streamId) connection.member.watching = null;
+    if (connection.member.feed === streamId) connection.member.feed = null;
   }
   broadcast(roomId);
   return ok;
+}
+
+export function localOwnerOf(roomId: string, streamId: string) {
+  const stream = rooms.get(roomId)?.streams.find((candidate) => candidate.id === streamId);
+  return stream?.source.type === "local" ? stream.addedBy.id : null;
 }
 
 export function controlStream(
@@ -291,10 +307,11 @@ export function controlStream(
   return ok;
 }
 
-export function establishStream(roomId: string, streamId: string, position: number): Result {
+export function establishStream(roomId: string, userId: string, streamId: string, position: number): Result {
   const room = rooms.get(roomId);
   const stream = room?.streams.find((candidate) => candidate.id === streamId);
   if (!room || !stream) return fail("Stream not found");
+  if (stream.source.type === "local" && stream.addedBy.id !== userId) return ok;
   if (stream.playback.position !== null || (stream.source.type === "twitch" && stream.source.isLive)) return ok;
   stream.playback.position = position;
   stream.playback.updatedAt = Date.now();
@@ -333,6 +350,20 @@ export function setWatching(roomId: string, userId: string, streamId: string | n
   if (streamId !== null && !isScreenId(streamId) && !room.streams.some((stream) => stream.id === streamId)) return ok;
   if (connection.member.watching === streamId) return ok;
   connection.member.watching = streamId;
+  broadcast(roomId);
+  return ok;
+}
+
+export function setFeed(roomId: string, userId: string, streamId: string | null): Result {
+  const room = rooms.get(roomId);
+  const connection = room?.connections.get(userId);
+  if (!room || !connection) return fail("Room not found");
+  if (streamId !== null) {
+    const stream = room.streams.find((candidate) => candidate.id === streamId);
+    if (!stream || stream.source.type !== "local" || stream.addedBy.id === userId) return ok;
+  }
+  if (connection.member.feed === streamId) return ok;
+  connection.member.feed = streamId;
   broadcast(roomId);
   return ok;
 }
@@ -591,8 +622,8 @@ export function advanceQueue(roomId: string, user: SessionPayload, fromStreamId:
   }
 
   const index = room.streams.findIndex((stream) => stream.id === fromStreamId);
-  const next = room.streams[index + 1];
-  if (index === -1 || !next) return ok;
+  const next = index === -1 ? undefined : room.streams.slice(index + 1).find((stream) => stream.source.type !== "local");
+  if (!next) return ok;
 
   room.featuredId = next.id;
   const twitchLive = next.source.type === "twitch" && next.source.isLive;
@@ -651,7 +682,9 @@ export function canShareScreen(roomId: string, user: { sub: string; guest: boole
 }
 
 export function publishInputs(roomId: string, user: { sub: string; guest: boolean }) {
-  return { guest: user.guest, micBlocked: micBlocked(roomId, user.sub), canShare: canShareScreen(roomId, user) };
+  const canShare = canShareScreen(roomId, user);
+  const owns = rooms.get(roomId)?.streams.some((stream) => stream.source.type === "local" && stream.addedBy.id === user.sub) ?? false;
+  return { guest: user.guest, micBlocked: micBlocked(roomId, user.sub), canShare, canFeed: canShare && owns };
 }
 
 export function connectedUsers(roomId: string) {
@@ -766,6 +799,7 @@ export function queueStream(roomId: string, user: SessionPayload, streamId: stri
   if (!canQueue(user)) return fail("Sign in with Discord to add to the queue");
   const stream = room.streams.find((candidate) => candidate.id === streamId);
   if (!stream) return fail("Stream not found");
+  if (stream.source.type === "local") return fail("Local files can't be queued");
   if (!isQueueable(stream.source)) return fail("Live streams can't be queued");
   const entry: QueueItem = { id: newQueueId(), source: stream.source, title: stream.title, addedBy: { id: user.sub, name: user.name } };
   if (!pushQueue(room, [entry], position)) return fail(`The queue is full (${LIMITS.queue} videos max)`);

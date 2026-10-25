@@ -12,6 +12,6 @@ export function syncAllPermissions(roomId: string) {
 export async function stopScreenShare(roomId: string, targetId: string) {
   const target = rooms.connectedUsers(roomId).find((user) => user.sub === targetId);
   if (!target) return;
-  await applyPermissions(roomId, targetId, { ...rooms.publishInputs(roomId, target), canShare: false });
+  await applyPermissions(roomId, targetId, { ...rooms.publishInputs(roomId, target), canShare: false, canFeed: false });
   setTimeout(() => void syncPermissions(roomId, target), 900);
 }

@@ -15,14 +15,21 @@ function send(socket: WebSocket, message: ServerMessage) {
 
 function handle(roomId: string, user: SessionPayload, message: Exclude<ClientMessage, { type: "join" | "ping" | "playlist.open" }>) {
   switch (message.type) {
-    case "stream.add":
-      return rooms.addStream(roomId, user, message.source);
-    case "stream.remove":
-      return rooms.removeStream(roomId, user, message.streamId);
+    case "stream.add": {
+      const result = rooms.addStream(roomId, user, message.source, message.file);
+      if (result.ok && message.source.type === "local") void syncPermissions(roomId, user);
+      return result;
+    }
+    case "stream.remove": {
+      const owner = rooms.localOwnerOf(roomId, message.streamId);
+      const result = rooms.removeStream(roomId, user, message.streamId);
+      if (result.ok && owner) void syncPermissions(roomId, { sub: owner, guest: rooms.isGuest(roomId, owner) });
+      return result;
+    }
     case "stream.control":
       return rooms.controlStream(roomId, user, message.streamId, message.action, message.position);
     case "stream.establish":
-      return rooms.establishStream(roomId, message.streamId, message.position);
+      return rooms.establishStream(roomId, user.sub, message.streamId, message.position);
     case "stream.feature":
       return rooms.featureStream(roomId, user, message.streamId);
     case "role.setController": {
@@ -79,6 +86,8 @@ function handle(roomId: string, user: SessionPayload, message: Exclude<ClientMes
     }
     case "presence.watch":
       return rooms.setWatching(roomId, user.sub, message.streamId);
+    case "presence.feed":
+      return rooms.setFeed(roomId, user.sub, message.streamId);
     case "tv.output":
       return rooms.setTvOutput(roomId, user.sub, message.mode);
   }
