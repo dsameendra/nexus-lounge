@@ -187,6 +187,11 @@ export const ChevronDownIcon = (p: P) => (
     <path d="M6 9.5l6 6 6-6" />
   </Icon>
 );
+export const ChevronLeftIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M14.5 6l-6 6 6 6" />
+  </Icon>
+);
 export const QueueNextIcon = (p: P) => (
   <Icon {...p}>
     <path d="M4 7h11M4 12h7M4 17h7" />

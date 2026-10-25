@@ -5,6 +5,7 @@ import { isSilent } from "@nexus/shared";
 import type { CaptionState, QualityOption } from "@/lib/players/types";
 import { CaptionsMenu } from "./CaptionsMenu";
 import { AirPlayIcon, FillIcon, FitIcon, FullscreenIcon, PauseIcon, PlayIcon, SyncIcon, VolumeIcon, VolumeOffIcon } from "./Icons";
+import { MoreMenu } from "./MoreMenu";
 import { QualityMenu } from "./QualityMenu";
 
 export type SyncStatus = "synced" | "syncing" | "waiting" | "unsynced";
@@ -146,13 +147,15 @@ export function PlayerControls(props: PlayerControlsProps) {
 
         {captions && onCaptionTrack && onCaptionSize && <CaptionsMenu captions={captions} onTrack={onCaptionTrack} onSize={onCaptionSize} />}
 
-        <QualityMenu options={qualityOptions} value={quality} note={qualityNote} link={qualityLink} onSelect={onQuality} />
+        <div className="hidden @md:contents">
+          <QualityMenu options={qualityOptions} value={quality} note={qualityNote} link={qualityLink} onSelect={onQuality} />
 
-        {onAirPlay && (
-          <button onClick={onAirPlay} aria-label="AirPlay and screen mirroring" title="AirPlay and screen mirroring" className={iconButton}>
-            <AirPlayIcon />
-          </button>
-        )}
+          {onAirPlay && (
+            <button onClick={onAirPlay} aria-label="AirPlay and screen mirroring" title="AirPlay and screen mirroring" className={iconButton}>
+              <AirPlayIcon />
+            </button>
+          )}
+        </div>
 
         {!minimal && (
           <div className="flex shrink-0 items-center">
@@ -172,13 +175,24 @@ export function PlayerControls(props: PlayerControlsProps) {
           </div>
         )}
 
+        <MoreMenu
+          qualityOptions={qualityOptions}
+          quality={quality}
+          qualityNote={qualityNote}
+          qualityLink={qualityLink}
+          onQuality={onQuality}
+          fit={minimal ? undefined : fit}
+          onFit={minimal ? undefined : onFit}
+          onAirPlay={onAirPlay}
+        />
+
         {!minimal && onFit && fit && (
           <button
             onClick={onFit}
             aria-label={fit === "fill" ? "Fit to screen" : "Fill screen"}
             aria-pressed={fit === "fill"}
             title={fit === "fill" ? "Showing the whole picture: tap to fit" : "Fill the screen (crops the edges)"}
-            className={iconButton}
+            className={`${iconButton} max-@md:hidden`}
           >
             {fit === "fill" ? <FitIcon /> : <FillIcon />}
           </button>

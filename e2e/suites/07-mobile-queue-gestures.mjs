@@ -6,6 +6,7 @@ const results = [];
 const check = (ok, label) => { results.push({ ok, label }); console.log(ok ? "  ✓" : "  ✗ FAIL", label); };
 const visible = async (loc, timeout = 15000) => { try { await loc.first().waitFor({ state: "visible", timeout }); return true; } catch { return false; } };
 const until = async (fn, timeout = 20000) => { const end = Date.now() + timeout; while (Date.now() < end) { try { if (await fn()) return true; } catch {} await sleep(300); } return false; };
+const CHANNEL = process.env.TWITCH_CHANNEL ?? "xqc";
 const PLAYLIST = "https://www.youtube.com/playlist?list=PL6B3937A5D230E335";
 
 const chrome = await chromium.launch({ executablePath: CHROME, headless: true, args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required"] });
@@ -35,7 +36,7 @@ const mp = member.page;
 await mp.goto(`${BASE}/room/${room}`); await mp.getByRole("button", { name: "Join room" }).click();
 await addStream(op, "https://www.youtube.com/watch?v=aqz-KE-bpKQ", "Play for everyone");
 await addStream(op, "https://www.youtube.com/watch?v=jNQXAC9IVRw", "Add to library");
-await addStream(op, "https://www.twitch.tv/monstercat", "Add to library");
+await addStream(op, `https://www.twitch.tv/${CHANNEL}`, "Add to library");
 
 console.log("Playlists");
 await op.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
@@ -100,7 +101,7 @@ await rowAction(op, 0, "Remove from queue");
 check(await until(async () => (await queueRows.count()) === before - 2), "Remove works");
 
 console.log("Live streams are not queueable");
-const twitchCard = op.locator("section[aria-label='Streams'] li", { hasText: "monstercat" }).first();
+const twitchCard = op.locator("section[aria-label='Streams'] li", { hasText: CHANNEL }).first();
 await openMenu(twitchCard, op);
 check((await op.getByRole("menuitem", { name: "Add to queue" }).count()) === 0, "a live stream has no Add to queue action");
 await op.keyboard.press("Escape");
@@ -216,6 +217,38 @@ console.log("Touch gestures on the video (Chrome, touch emulation)");
   await touch.context.close();
 }
 
+console.log("Player bar on a narrow screen (Subtitles stay, the rest moves into More)");
+{
+  const host = await person(chrome, "discord-e7-cc-host", "Captions Host");
+  await host.page.goto(BASE); await host.page.click("text=Create room"); await host.page.waitForURL(/\/room\//);
+  const ccRoom = host.page.url().split("/room/")[1];
+  await host.page.getByRole("button", { name: "Join room" }).click();
+  await addStream(host.page, "https://www.youtube.com/watch?v=jNQXAC9IVRw", "Play for everyone");
+  const narrow = await person(chrome, "discord-e7-owner", "Owner Seven", { width: 390, height: 664 }, { isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  const p = narrow.page;
+  await p.goto(`${BASE}/room/${ccRoom}`); await p.getByRole("button", { name: "Join room" }).click();
+  await p.waitForSelector("iframe[src*=youtube]");
+  const cc = p.getByRole("button", { name: "Subtitles", exact: true });
+  check(await visible(cc, 40000), "the Subtitles button is on the phone player bar");
+  const more = p.getByRole("button", { name: "More", exact: true });
+  check(await visible(more, 3000), "a More button holds the extra controls");
+  check((await p.getByRole("button", { name: "Video quality" }).count()) === 0 || !(await p.getByRole("button", { name: "Video quality" }).first().isVisible()), "quality is not squeezed onto the bar");
+  const inside = await p.evaluate(() => {
+    const names = ["Subtitles", "More", "Mute", "Unmute", "Fullscreen"];
+    const buttons = [...document.querySelectorAll("button")].filter((b) => names.includes(b.getAttribute("aria-label") ?? "") && b.offsetParent && b.closest(".\\@container"));
+    return buttons.map((b) => { const r = b.getBoundingClientRect(); return { n: b.getAttribute("aria-label"), ok: r.left >= 0 && r.right <= innerWidth && r.width > 0 }; });
+  });
+  check(inside.length >= 3 && inside.every((b) => b.ok), `every bar button fits inside the screen (${inside.map((b) => b.n).join(", ")})`);
+  const box = await p.evaluate(() => { const r = document.querySelector("iframe[src*=youtube]").getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 3 }; });
+  await p.touchscreen.tap(box.x, box.y); await sleep(500);
+  await more.tap();
+  check(await visible(p.getByRole("menuitem", { name: /Quality/ }), 3000), "More lists Quality");
+  await p.getByRole("menuitem", { name: /Quality/ }).tap();
+  check(await visible(p.getByRole("menuitemradio").first(), 3000) || await visible(p.getByText(/chooses the quality automatically/), 3000), "Quality opens inside More");
+  await p.keyboard.press("Escape");
+  await narrow.context.close(); await host.context.close();
+}
+
 console.log("Fit or fill, and safe areas (fullscreen)");
 {
   const geometry = (page) => page.evaluate(() => {
@@ -270,7 +303,7 @@ console.log("Twitch is never covered (all sizes)");
 {
   const { page: tp, context } = await person(chrome, "discord-e7-owner", "Owner Seven");
   await tp.goto(`${BASE}/room/${room}`); await tp.getByRole("button", { name: "Join room" }).click();
-  await tp.locator("section[aria-label='Streams'] li", { hasText: "monstercat" }).first().getByRole("button", { name: /Watch/ }).click();
+  await tp.locator("section[aria-label='Streams'] li", { hasText: CHANNEL }).first().getByRole("button", { name: /Watch/ }).click();
   await tp.waitForSelector("iframe[src*='twitch.tv']", { timeout: 30000 });
   await sleep(4000);
   for (const [label, vw, vh] of [["desktop", 1280, 800], ["phone portrait", 390, 800], ["phone landscape", 844, 390]]) {
@@ -278,6 +311,7 @@ console.log("Twitch is never covered (all sizes)");
     await sleep(800);
     const hits = await tp.evaluate(() => {
       const frame = document.querySelector("iframe[src*='twitch.tv']");
+      frame.scrollIntoView({ block: "start" });
       const r = frame.getBoundingClientRect();
       const bad = [];
       for (const fx of [0.1, 0.5, 0.9]) for (const fy of [0.1, 0.5, 0.9]) {

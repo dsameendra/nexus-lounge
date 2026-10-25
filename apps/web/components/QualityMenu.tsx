@@ -40,40 +40,57 @@ export function QualityMenu({
       </button>
       {anchor && (
         <Popover x={anchor.x} y={anchor.y} placement="above" width="w-56" label="Video quality" onClose={() => setAnchor(null)}>
-          <p className="border-b border-line px-3 py-2 text-[11px] font-semibold tracking-wide text-label-2 uppercase">Quality</p>
-          {options.length > 0 ? (
-            <ul className="scroll-thin max-h-64 overflow-y-auto py-1">
-              {options.map((option) => (
-                <li key={option.id}>
-                  <button
-                    role="menuitemradio"
-                    aria-checked={option.id === value}
-                    onClick={() => {
-                      onSelect(option.id);
-                      setAnchor(null);
-                    }}
-                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition hover:bg-white/10"
-                  >
-                    {option.label}
-                    {option.id === value && <CheckIcon className="text-accent" />}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="px-3 py-3 text-sm">
-              <p className="flex items-center justify-between">
-                Auto <CheckIcon className="text-accent" />
-              </p>
-              <p className="mt-2 text-xs leading-relaxed text-label-2">{note}</p>
-              {link && (
-                <a href={link.href} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-accent hover:underline">
-                  {link.label}
-                </a>
-              )}
-            </div>
-          )}
+          <QualityPanel options={options} value={value} note={note} link={link} onSelect={(id) => { onSelect(id); setAnchor(null); }} />
         </Popover>
+      )}
+    </>
+  );
+}
+
+export function QualityPanel({
+  options,
+  value,
+  note,
+  link,
+  onSelect,
+}: {
+  options: QualityOption[];
+  value: string;
+  note?: string;
+  link?: { href: string; label: string };
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <>
+      <p className="border-b border-line px-3 py-2 text-[11px] font-semibold tracking-wide text-label-2 uppercase">Quality</p>
+      {options.length > 0 ? (
+        <ul className="scroll-thin max-h-64 overflow-y-auto py-1">
+          {options.map((option) => (
+            <li key={option.id}>
+              <button
+                role="menuitemradio"
+                aria-checked={option.id === value}
+                onClick={() => onSelect(option.id)}
+                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition hover:bg-white/10"
+              >
+                {option.label}
+                {option.id === value && <CheckIcon className="text-accent" />}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="px-3 py-3 text-sm">
+          <p className="flex items-center justify-between">
+            Auto <CheckIcon className="text-accent" />
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-label-2">{note}</p>
+          {link && (
+            <a href={link.href} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-accent hover:underline">
+              {link.label}
+            </a>
+          )}
+        </div>
       )}
     </>
   );
