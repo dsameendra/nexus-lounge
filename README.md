@@ -27,6 +27,10 @@ I built it so my friends and I could watch League of Legends Worlds together, bu
 | :---: | :---: |
 | <img src="docs/screenshots/queue-playlists.png" width="430" /> | <img src="docs/screenshots/mobile-landscape-panel.png" width="430" /> |
 
+| Choose where video plays (TV connected) | Phone player bar: More menu | Account |
+| :---: | :---: | :---: |
+| <img src="docs/screenshots/tv-output.png" width="430" /> | <img src="docs/screenshots/mobile-player-bar.png" width="170" /> | <img src="docs/screenshots/account.png" width="240" /> |
+
 <details><summary>TV mode</summary>
 <img src="docs/screenshots/tv-mode.png" alt="TV mode shows only the video" />
 </details>
