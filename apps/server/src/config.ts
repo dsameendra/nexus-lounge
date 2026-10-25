@@ -9,7 +9,7 @@ const schema = z.object({
   LIVEKIT_API_SECRET: z.string().min(1),
   ADMIN_SECRET: z.string().optional(),
   ADMIN_DISCORD_IDS: z.string().optional(),
-  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(1),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(2),
 });
 
 const parsed = schema.safeParse(process.env);

@@ -65,3 +65,7 @@ None known to remain: the Railway GitHub app already had access to the private r
 | `ADMIN_TOTP_SECRET` | web only | Base32 key (`openssl rand 20 \| base32`) |
 
 Enrol the TOTP key in an authenticator app (manual entry, time-based, SHA-1, 6 digits, 30 seconds). Mark the secrets as sealed variables in Railway. To rotate `ADMIN_SECRET`, change it on both services in the same deploy; to revoke an admin, remove their ID from both lists.
+
+## Client IP behind Railway
+
+Railway puts two proxies in front of the server and overwrites any client-supplied `X-Forwarded-For`, so the server trusts exactly two hops (`TRUST_PROXY_HOPS`, default 2). Probe it after changes: send a spoofed `X-Forwarded-For` and confirm the logged `remoteAddress` is your real IP.
