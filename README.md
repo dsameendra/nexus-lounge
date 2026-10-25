@@ -11,6 +11,8 @@ Voice, chat, synced YouTube and Twitch, and screen sharing in one shared room. I
 
 </div>
 
+**Live at [nexuslounge.party](https://nexuslounge.party).**
+
 I built it so my friends and I could watch League of Legends Worlds together, but it's general purpose: sports, premieres, VODs, movie nights.
 
 ## Screenshots
