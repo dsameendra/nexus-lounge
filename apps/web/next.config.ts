@@ -8,7 +8,12 @@ try {
 const config: NextConfig = {
   transpilePackages: ["@nexus/shared"],
   async redirects() {
-    return [{ source: "/:path*", has: [{ type: "host", value: "www.nexuslounge.party" }], destination: "https://nexuslounge.party/:path*", permanent: true }];
+    return ["www.nexuslounge.party", "web-production-795645.up.railway.app"].map((host) => ({
+      source: "/:path*",
+      has: [{ type: "host" as const, value: host }],
+      destination: "https://nexuslounge.party/:path*",
+      permanent: true,
+    }));
   },
   async headers() {
     const adminHeaders = [
@@ -33,6 +38,7 @@ const config: NextConfig = {
       {
         source: "/:path*",
         headers: [
+          { key: "Strict-Transport-Security", value: "max-age=15552000; includeSubDomains" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
