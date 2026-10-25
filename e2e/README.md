@@ -22,6 +22,7 @@ node run.mjs queue layouts   # suites whose file name contains one of these word
 | `AUTH_SECRET` / `AUTH_SECRET_OVERRIDE` | Secret used to mint cookies | `AUTH_SECRET` from `../.env` |
 | `COOKIE_DOMAIN`, `COOKIE_SECURE=1`, `COOKIE_SALT=__Secure-authjs.session-token` | Needed for an https deployment | localhost values |
 | `CHROME` | Path to Chrome | auto-detected |
+| `TWITCH_CHANNEL` | A live, non-region-locked channel for the Twitch suite (it skips itself if offline) | `xqc` |
 
 Against production, pass the deployed secret through `AUTH_SECRET_OVERRIDE` without echoing it, and set the three cookie variables for the web domain.
 

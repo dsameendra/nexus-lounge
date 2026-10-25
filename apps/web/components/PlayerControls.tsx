@@ -4,7 +4,7 @@ import { useState } from "react";
 import { isSilent } from "@nexus/shared";
 import type { CaptionState, QualityOption } from "@/lib/players/types";
 import { CaptionsMenu } from "./CaptionsMenu";
-import { AirPlayIcon, FullscreenIcon, PauseIcon, PlayIcon, SyncIcon, VolumeIcon, VolumeOffIcon } from "./Icons";
+import { AirPlayIcon, FillIcon, FitIcon, FullscreenIcon, PauseIcon, PlayIcon, SyncIcon, VolumeIcon, VolumeOffIcon } from "./Icons";
 import { QualityMenu } from "./QualityMenu";
 
 export type SyncStatus = "synced" | "syncing" | "waiting" | "unsynced";
@@ -42,6 +42,8 @@ export interface PlayerControlsProps {
   muted: boolean;
   canFullscreen: boolean;
   hideVolume?: boolean;
+  fit?: "fit" | "fill";
+  onFit?: () => void;
   qualityOptions: QualityOption[];
   quality: string;
   qualityNote?: string;
@@ -62,7 +64,7 @@ export interface PlayerControlsProps {
 
 export function PlayerControls(props: PlayerControlsProps) {
   const {
-    variant, visible, minimal = false, playing, time, duration, live, atEdge, canControl, canSeek, status, volume, muted, canFullscreen, hideVolume = false,
+    variant, visible, minimal = false, playing, time, duration, live, atEdge, canControl, canSeek, status, volume, muted, canFullscreen, hideVolume = false, fit, onFit,
     qualityOptions, quality, qualityNote, qualityLink, onPlayPause, onSeek, onVolume, onMute, onFullscreen, onResync, onGoLive, onQuality, onAirPlay, captions, onCaptionTrack, onCaptionSize,
   } = props;
   const [scrub, setScrub] = useState<number | null>(null);
@@ -168,6 +170,18 @@ export function PlayerControls(props: PlayerControlsProps) {
               className={`hidden h-1 w-20 accent-white ${hideVolume ? "" : "@md:block"}`}
             />
           </div>
+        )}
+
+        {!minimal && onFit && fit && (
+          <button
+            onClick={onFit}
+            aria-label={fit === "fill" ? "Fit to screen" : "Fill screen"}
+            aria-pressed={fit === "fill"}
+            title={fit === "fill" ? "Showing the whole picture: tap to fit" : "Fill the screen (crops the edges)"}
+            className={iconButton}
+          >
+            {fit === "fill" ? <FitIcon /> : <FillIcon />}
+          </button>
         )}
 
         {!minimal && canFullscreen && (

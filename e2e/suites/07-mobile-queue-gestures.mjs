@@ -192,9 +192,18 @@ console.log("iPhone fullscreen (no Fullscreen API)");
   await p.getByRole("button", { name: "Fullscreen", exact: true }).click();
   await sleep(600);
   check(await p.evaluate(() => !document.documentElement.classList.contains("immersive") && window.__frame === document.querySelector("iframe[src*=youtube]")), "exit restores the layout with the same player");
+  await mobile.context.close();
+}
+
+
+console.log("Touch gestures on the video (Chrome, touch emulation)");
+{
+  const touch = await person(chrome, "discord-e7-owner", "Owner Seven", { width: 390, height: 664 }, { isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  const p = touch.page;
+  await p.goto(`${BASE}/room/${room}`); await p.getByRole("button", { name: "Join room" }).click();
+  await p.waitForSelector("iframe[src*=youtube]"); await sleep(5000);
   const tap = async (x, y) => { await p.touchscreen.tap(x, y); };
   const stage = await p.evaluate(() => { const r = document.querySelector("iframe[src*=youtube]").getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
-  await p.getByText("Tap to start watching").click({ timeout: 2500 }).catch(() => {}); await sleep(500);
   await tap(stage.x + stage.w * 0.85, stage.y + stage.h / 2); await tap(stage.x + stage.w * 0.85, stage.y + stage.h / 2);
   check(await visible(p.getByText("+10s"), 3000), "double-tap on the right side skips forward 10 seconds (with a visible hint)");
   await sleep(900);
@@ -203,8 +212,58 @@ console.log("iPhone fullscreen (no Fullscreen API)");
   await sleep(900);
   await tap(stage.x + stage.w / 2, stage.y + stage.h / 2); await tap(stage.x + stage.w / 2, stage.y + stage.h / 2);
   await sleep(800);
-  check(await p.evaluate(() => document.documentElement.classList.contains("immersive")), "double-tap in the middle goes fullscreen");
-  await mobile.context.close();
+  check(await p.evaluate(() => Boolean(document.fullscreenElement) || document.documentElement.classList.contains("immersive")), "double-tap in the middle goes fullscreen");
+  await touch.context.close();
+}
+
+console.log("Fit or fill, and safe areas (fullscreen)");
+{
+  const geometry = (page) => page.evaluate(() => {
+    const frame = document.querySelector("iframe[src*=youtube]");
+    const host = frame?.parentElement;
+    const area = host?.parentElement;
+    const r = (el) => { const x = el.getBoundingClientRect(); return { x: Math.round(x.x), y: Math.round(x.y), w: Math.round(x.width), h: Math.round(x.height) }; };
+    return host && area ? { host: r(host), area: r(area) } : null;
+  });
+  await op.goto(`${BASE}/room/${room}`); await op.getByRole("button", { name: "Join room" }).click();
+  await op.locator("section[aria-label='Streams'] li", { hasText: "Me at the zoo" }).first().getByRole("button", { name: /Watch/ }).click();
+  await op.waitForSelector("iframe[src*=youtube]"); await sleep(2500);
+  await op.evaluate(() => localStorage.setItem("nexus-video-fit", "fit"));
+  await op.mouse.click(5, 400);
+  await op.keyboard.press("f");
+  check(await until(async () => await op.evaluate(() => Boolean(document.fullscreenElement)), 5000), "fullscreen is on");
+  await sleep(800);
+  check(await visible(op.getByRole("button", { name: "Fill screen" }), 5000), "desktop fullscreen offers Fill screen");
+  let g = await geometry(op);
+  check(g && g.host.w === g.area.w && g.host.h === g.area.h, "fit: the player exactly fills the stage and the whole picture shows");
+  await op.getByRole("button", { name: "Fill screen" }).click(); await sleep(500);
+  g = await geometry(op);
+  check(g && g.host.w >= g.area.w && g.host.h >= g.area.h && (g.host.w > g.area.w || g.host.h > g.area.h) && Math.abs(g.host.w / g.host.h - 16 / 9) < 0.02, "fill: the 16:9 picture grows to cover the stage (edges are cropped)");
+  check((await op.evaluate(() => localStorage.getItem("nexus-video-fit"))) === "fill" && (await visible(op.getByRole("button", { name: "Fit to screen" }), 3000)), "the choice is remembered and the button flips to Fit to screen");
+  await op.getByRole("button", { name: "Fit to screen" }).click(); await sleep(400);
+  g = await geometry(op);
+  check(g && g.host.w === g.area.w && g.host.h === g.area.h, "switching back to fit restores the picture");
+  await op.evaluate(() => document.exitFullscreen());
+  await sleep(500);
+  check((await op.getByRole("button", { name: "Fill screen" }).count()) === 0, "the fit/fill button only shows while fullscreen or in phone landscape");
+
+  const land = await person(wk, "discord-e7-owner", "Owner Seven", { width: 844, height: 390 }, { isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  const lp = land.page;
+  await lp.goto(`${BASE}/room/${room}`); await lp.getByRole("button", { name: "Join room" }).click(); await sleep(5000);
+  await lp.evaluate(() => localStorage.setItem("nexus-video-fit", "fit"));
+  await lp.reload(); await lp.getByRole("button", { name: "Join room" }).click(); await sleep(5000);
+  await lp.getByText("Tap to start watching").click({ timeout: 2500 }).catch(() => {}); await sleep(500);
+  await lp.getByRole("button", { name: "Fill screen" }).click(); await sleep(500);
+  g = await geometry(lp);
+  check(g && g.host.w === g.area.w && g.host.h > g.area.h, "phone landscape: Fill crops top and bottom of a wide screen");
+  await lp.getByRole("button", { name: "Fit to screen" }).click();
+  await lp.getByRole("button", { name: "Fullscreen", exact: true }).click(); await sleep(800);
+  await lp.evaluate(() => { const box = document.querySelector("section[aria-label='Now watching'] > div"); box.style.setProperty("--safe-l", "59px"); box.style.setProperty("--safe-r", "0px"); });
+  await sleep(300);
+  g = await geometry(lp);
+  const vw = await lp.evaluate(() => innerWidth);
+  check(g && g.area.x === 59 && g.area.w === vw - 59, "landscape fullscreen keeps the picture inside the safe area (a notch on one side no longer shifts it)");
+  await land.context.close();
 }
 
 console.log("Twitch is never covered (all sizes)");

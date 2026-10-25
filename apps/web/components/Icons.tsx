@@ -211,3 +211,15 @@ export const PlaylistIcon = (p: P) => (
     <path d="M18 14.5v5l4-2.5-4-2.5Z" fill="currentColor" />
   </Icon>
 );
+export const FitIcon = (p: P) => (
+  <Icon {...p}>
+    <rect x="3" y="6" width="18" height="12" rx="2" />
+    <path d="M9 12h6M9 12l1.6-1.6M9 12l1.6 1.6M15 12l-1.6-1.6M15 12l-1.6 1.6" />
+  </Icon>
+);
+export const FillIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4" />
+    <rect x="8" y="9" width="8" height="6" rx="1" fill="currentColor" stroke="none" opacity="0.5" />
+  </Icon>
+);

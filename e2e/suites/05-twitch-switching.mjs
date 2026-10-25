@@ -1,6 +1,7 @@
 import { launch, newPage, sleep } from "../lib.mjs";
 import { mintSession } from "../session.mjs";
 const BASE = process.env.BASE ?? "http://localhost:3001";
+const CHANNEL = process.env.TWITCH_CHANNEL ?? "xqc"; // must be live and not region-locked; the suite skips itself when it is offline
 const results = [];
 const check = (ok, label) => { results.push({ ok, label }); console.log(ok ? "  ✓" : "  ✗ FAIL", label); };
 const until = async (fn, timeout = 25000) => { const end = Date.now() + timeout; while (Date.now() < end) { try { if (await fn()) return true; } catch {} await sleep(400); } return false; };
@@ -19,20 +20,26 @@ const add = async (url, mode) => {
   await page.getByRole("button", { name: mode }).click();
   await sleep(1500);
 };
-await add("https://www.twitch.tv/caedrel", "Play for everyone");
+await add(`https://www.twitch.tv/${CHANNEL}`, "Play for everyone");
 await add("https://www.youtube.com/watch?v=jNQXAC9IVRw", "Add to library");
 const debug = async () => (await page.locator("pre").first().innerText().catch(() => ""));
-const twitchPlaying = async () => /twitch:live:caedrel \| state=playing/.test(await debug());
+const twitchPlaying = async () => new RegExp(`twitch:live:${CHANNEL} \\| state=playing`).test(await debug());
 
 console.log("Twitch starts on its own");
+await until(async () => (await twitchPlaying()) || (await page.getByText("This channel is offline right now.").count()) > 0, 40000);
+if ((await page.getByText("This channel is offline right now.").count()) > 0) {
+  console.log(`  - skipped: ${CHANNEL} is offline right now (set TWITCH_CHANNEL to a channel that is live)`);
+  await browser.close();
+  process.exit(0);
+}
 check(await until(twitchPlaying, 40000), "the Twitch channel is playing after loading");
 
 console.log("Switching away and back");
 await page.getByRole("button", { name: /Watch Me at the zoo/ }).click();
 check(await until(async () => /youtube:jNQXAC9IVRw/.test(await debug()) || (await page.locator("iframe[src*='youtube']").count()) > 0, 20000), "switched to the YouTube video");
 await sleep(3000);
-await page.getByRole("button", { name: /Watch caedrel/ }).click();
-check(await until(async () => (await page.locator("iframe[src*='twitch']").count()) > 0 && (await page.locator("h1").first().innerText()).includes("caedrel")), "switched back to the Twitch channel");
+await page.getByRole("button", { name: new RegExp(`Watch ${CHANNEL}`) }).click();
+check(await until(async () => (await page.locator("iframe[src*='twitch']").count()) > 0 && (await page.locator("h1").first().innerText()).includes(CHANNEL)), "switched back to the Twitch channel");
 check(await until(twitchPlaying, 30000), "it starts playing by itself, without clicking play");
 await sleep(5000);
 check(await twitchPlaying(), "and it keeps playing");

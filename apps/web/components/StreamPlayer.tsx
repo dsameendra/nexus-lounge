@@ -14,6 +14,7 @@ import { openTvSheet, useAppleAirPlaySupport } from "./useAirPlay";
 import { COMPACT_SCREEN, PHONE_LANDSCAPE, hasElementFullscreen, useMediaQuery } from "./useMediaQuery";
 import { isTypingTarget } from "@nexus/shared";
 import { FullscreenIcon } from "./Icons";
+import { useVideoFit } from "./useVideoFit";
 
 function sourceUrl(stream: Stream) {
   const { type, id, isLive } = stream.source;
@@ -90,6 +91,7 @@ export function StreamPlayer({
   const canControlRef = useRef(canControlStream);
   const compactScreen = useMediaQuery(COMPACT_SCREEN);
   const phoneLand = useMediaQuery(PHONE_LANDSCAPE);
+  const { fit, toggle: toggleFit } = useVideoFit();
   const [ripple, setRipple] = useState<{ zone: "left" | "right"; key: number } | null>(null);
   const lastTap = useRef({ time: 0, zone: "" });
   const touchAt = useRef(0);
@@ -393,6 +395,8 @@ export function StreamPlayer({
   const ytNative = Boolean(stream?.source.type === "youtube" && (activeAdapter as YouTubeAdapter | undefined)?.native);
   const overlayControls = !isTwitch && !ytNative && (fullscreen || compactScreen);
   const hideBar = phoneLand && !fullscreen && (isTwitch || ytNative);
+  const fillable = (fullscreen || phoneLand) && !isTwitch && !ytNative;
+  const filling = fillable && fit === "fill";
   const showControls = controlsShown || !ui.playing || ui.blocked;
 
   function togglePlay() {
@@ -539,6 +543,8 @@ export function StreamPlayer({
       onMute={() => setMuted((value) => !value)}
       onFullscreen={onFullscreen}
       hideVolume={!hasElementFullscreen()}
+      fit={fillable ? fit : undefined}
+      onFit={fillable ? toggleFit : undefined}
       onResync={resync}
       onGoLive={goLive}
       canFullscreen={canFullscreen}
@@ -565,8 +571,20 @@ export function StreamPlayer({
   );
 
   return (
-    <div className="absolute inset-0 bg-black" onPointerMove={revealControls}>
-      <div ref={hostRefs.youtube} className={`absolute inset-0 ${stream?.source.type === "youtube" && visible ? "" : "pointer-events-none opacity-0"}`} />
+    <div
+      className="absolute inset-y-0 right-[var(--safe-r,0px)] left-[var(--safe-l,0px)] bg-black"
+      style={filling ? { containerType: "size" } : undefined}
+      onPointerMove={revealControls}
+    >
+      <div
+        ref={hostRefs.youtube}
+        className={`absolute ${filling ? "" : "inset-0"} ${stream?.source.type === "youtube" && visible ? "" : "pointer-events-none opacity-0"}`}
+        style={
+          filling
+            ? { left: "50%", top: "50%", width: "max(100cqw, calc(100cqh * 16 / 9))", height: "max(100cqh, calc(100cqw * 9 / 16))", transform: "translate(-50%, -50%)" }
+            : undefined
+        }
+      />
       <div ref={hostRefs.twitch} className={`absolute inset-0 overflow-hidden ${stream?.source.type === "twitch" && visible ? "" : "pointer-events-none opacity-0"}`} />
 
       {visible && stream && (
@@ -601,7 +619,7 @@ export function StreamPlayer({
           )}
 
           {(ui.error || ui.stalled) && (
-            <div className="animate-fade absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/80 px-6 text-center">
+            <div className="animate-fade absolute inset-0 z-[15] flex flex-col items-center justify-center gap-3 bg-black/80 px-6 text-center">
               <p className="max-w-sm text-sm">{ui.error ?? "This is taking longer than usual."}</p>
               <div className="flex gap-2">
                 <button onClick={retry} className="h-9 rounded-full bg-white/15 px-4 text-sm font-medium transition hover:bg-white/25 active:scale-95">
@@ -636,7 +654,7 @@ export function StreamPlayer({
             <button
               autoFocus={bare}
               onClick={startPlayback}
-              className="animate-fade absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/60"
+              className="animate-fade absolute inset-0 z-[15] flex flex-col items-center justify-center gap-3 bg-black/60"
             >
               <span className="material flex size-20 items-center justify-center rounded-full text-4xl">
                 <PlayIcon />

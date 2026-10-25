@@ -67,6 +67,7 @@ I built it so my friends and I could watch League of Legends Worlds together, bu
 - Portrait: the video, tabs and chat stay visible above a compact voice dock, and the player controls float over the video instead of taking space.
 - Landscape: a slim header and a full-height video; the side panel (chat, streams, people) opens beside it on demand and the voice controls live in the header.
 - Fullscreen everywhere: the browser's Fullscreen API where it exists (desktop, Android, iPad). iPhone has none, so there is an immersive mode, and viewers get YouTube's own controls whose fullscreen button opens iOS's native player (Twitch always has its own). Screen shares go to the native iOS player directly.
+- Fit or Fill: in fullscreen (and landscape on a phone) a button switches between showing the whole picture and filling the screen by cropping the edges. It works on desktop too, remembers your choice, and is not offered for Twitch (its own controls would be cropped). In landscape, fullscreen keeps the picture inside the notch's safe area.
 - Gestures: double-tap the left or right side of a video to skip 10 seconds (controllers), double-tap the middle (or double-click) for fullscreen, tap to show the controls.
 - The screen stays on while you're in a room or TV mode (Screen Wake Lock).
 - Installable PWA with an offline page, app shortcuts and install screenshots.

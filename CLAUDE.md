@@ -22,6 +22,7 @@ Virtual watch-party PWA: rooms with LiveKit voice/chat/screen share, synced YouT
 - `pl:` = phone landscape (short, landscape, under 1024px wide). `compact:` = phone portrait or phone landscape. Defined in `globals.css`; use them instead of `max-sm:`/`landscape:` so the two phone orientations stay in sync.
 - Use container queries (`@container`, `@md:`) inside the player controls: the stage can be narrow because of the side panel, not because of the viewport.
 - Use `overflow-clip`, not `overflow-hidden`, on layout shells: hidden containers can be scrolled by focus and shift the whole app sideways on iOS.
+- Fullscreen boxes set `--safe-l/--safe-r` (notch insets); the player and share area offset themselves with them so the picture stays centred in the visible area. Fit/Fill (`useVideoFit`) scales the YouTube host with container query units (`cqw/cqh`) rather than `object-fit`, because the iframe is cross-origin.
 - Menus use `Popover` (portal, fixed); never position dropdowns inside cards.
 
 ## Gotchas

@@ -10,9 +10,12 @@ import { BroadcastIcon, FilmIcon, PlusIcon, SyncIcon } from "./Icons";
 import { useRoom } from "./RoomProvider";
 import { StreamPlayer } from "./StreamPlayer";
 import { shareName, useEffectiveSource } from "./useEffectiveSource";
-import { hasElementFullscreen } from "./useMediaQuery";
+import { PHONE_LANDSCAPE, hasElementFullscreen, useMediaQuery } from "./useMediaQuery";
+import { useVideoFit } from "./useVideoFit";
 import { useStageFullscreen } from "./useStageFullscreen";
 import { WatchArea } from "./WatchArea";
+
+const SAFE = "[--safe-l:env(safe-area-inset-left)] [--safe-r:env(safe-area-inset-right)]";
 
 export function Stage({ onAdd }: { onAdd: () => void }) {
   const { state, self, select, send, isController, canAdd } = useRoom();
@@ -21,7 +24,10 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const { active: fullscreen, immersive, toggle: toggleFullscreen } = useStageFullscreen(boxRef);
 
+  const phoneLand = useMediaQuery(PHONE_LANDSCAPE);
+  const { fit } = useVideoFit();
   const showingScreen = Boolean(share);
+  const fillable = fullscreen || phoneLand;
 
   function toggleStage() {
     if (share && !fullscreen && !hasElementFullscreen()) {
@@ -50,9 +56,9 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
         ref={boxRef}
         className={
           immersive
-            ? "fixed inset-0 z-[70] flex flex-col bg-black"
+            ? `fixed inset-0 z-[70] flex flex-col bg-black ${SAFE}`
             : fullscreen
-              ? "flex h-full w-full flex-col bg-black"
+              ? `flex h-full w-full flex-col bg-black ${SAFE}`
               : "bg-black lg:bg-transparent"
         }
       >
@@ -74,8 +80,9 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
         {reactionsOn && !twitchActive && effectiveId && <FloatingReactions />}
 
         {share && (
-          <div className="absolute inset-0 z-10" onDoubleClick={toggleStage}>
-            <WatchArea share={share} />
+          <div className="absolute inset-y-0 right-[var(--safe-r,0px)] left-[var(--safe-l,0px)] z-10" onDoubleClick={toggleStage}>
+            <WatchArea share={share} fill={fillable && fit === "fill"} />
+            {share && phoneLand && !fullscreen && <ScreenBar share={share} container={boxRef.current} onFullscreen={toggleStage} fillable overlay />}
           </div>
         )}
 
@@ -103,7 +110,7 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
       </div>
       <div ref={setSlot} className={immersive ? "pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]" : undefined} />
       {reactionsOn && twitchActive && <ReactionStrip />}
-      {share && slot && createPortal(<ScreenBar share={share} container={boxRef.current} onFullscreen={toggleStage} />, slot)}
+      {share && slot && !(phoneLand && !fullscreen) && createPortal(<ScreenBar share={share} container={boxRef.current} onFullscreen={toggleStage} fillable={fullscreen} />, slot)}
       </div>
 
       <div className="space-y-3 px-4 pt-3 lg:px-0">

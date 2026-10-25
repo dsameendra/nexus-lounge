@@ -4,7 +4,7 @@ import { useLocalParticipant, VideoTrack, type TrackReference } from "@livekit/c
 import { Avatar, parseImage } from "./Avatar";
 import { shareName } from "./useEffectiveSource";
 
-export function WatchArea({ share }: { share: TrackReference }) {
+export function WatchArea({ share, fill = false }: { share: TrackReference; fill?: boolean }) {
   const { localParticipant } = useLocalParticipant();
   const sharer = share.participant;
   const name = shareName(share);
@@ -26,7 +26,7 @@ export function WatchArea({ share }: { share: TrackReference }) {
 
   return (
     <>
-      <VideoTrack trackRef={share} className="size-full bg-black object-contain" />
+      <VideoTrack trackRef={share} className={`size-full bg-black ${fill ? "object-cover" : "object-contain"}`} />
       <div className="material pointer-events-none absolute top-3 left-3 flex items-center gap-2 rounded-full px-3 py-1 text-xs">
         <span className="size-2 rounded-full bg-live" />
         {name} is sharing
