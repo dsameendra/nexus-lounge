@@ -50,11 +50,14 @@ button,
   touch-action: manipulation;
 }
 
-button:focus-visible,
-input:focus-visible,
-[tabindex]:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+/* In the base layer so utilities such as outline-none win and fields with their own ring don't get a second outline. */
+@layer base {
+  button:focus-visible,
+  input:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
 }
 
 .material {

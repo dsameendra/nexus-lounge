@@ -38,6 +38,15 @@ await addStream(op, "https://www.youtube.com/watch?v=aqz-KE-bpKQ", "Play for eve
 await addStream(op, "https://www.youtube.com/watch?v=jNQXAC9IVRw", "Add to library");
 await addStream(op, `https://www.twitch.tv/${CHANNEL}`, "Add to library");
 
+console.log("Focus rings");
+await op.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
+const focusStyle = async () => op.evaluate(() => { const el = document.activeElement; const s = getComputedStyle(el); return { tag: el.tagName, outline: s.outlineStyle, wrapper: getComputedStyle(el.closest("label") ?? el).boxShadow }; });
+await op.waitForSelector("input[placeholder='Paste a YouTube or Twitch link']");
+const addFocus = await focusStyle();
+check(addFocus.tag === "INPUT" && addFocus.outline === "none" && /0px 0px 0px 2px/.test(addFocus.wrapper), `the Add a stream field shows one focus ring (the field's), not two (outline ${addFocus.outline})`);
+await op.keyboard.press("Escape");
+await sleep(400);
+
 console.log("Playlists");
 await op.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
 await op.fill("input[placeholder='Paste a YouTube or Twitch link']", PLAYLIST);
