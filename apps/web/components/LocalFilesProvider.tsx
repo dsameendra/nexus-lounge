@@ -26,6 +26,8 @@ interface LocalFilesValue {
   sharing: string | null;
   feedError: string | null;
   listen: (streamId: string, gain: number) => void;
+  note: (streamId: string) => { busy: boolean; problem: string | null };
+  setNote: (streamId: string, patch: Partial<{ busy: boolean; problem: string | null }>) => void;
 }
 
 const Context = createContext<LocalFilesValue | null>(null);
@@ -76,6 +78,7 @@ export function LocalFilesProvider({ children }: { children: React.ReactNode }) 
   const bump = useCallback(() => setVersion((value) => value + 1), []);
   const [rememberedNames, setRememberedNames] = useState<Record<string, string>>({});
   const tried = useRef(new Set<string>());
+  const [notes, setNotes] = useState<Record<string, { busy: boolean; problem: string | null }>>({});
   const [sharing, setSharing] = useState<string | null>(null);
   const [feedError, setFeedError] = useState<string | null>(null);
   const canHost = useMemo(() => canHostFeed(), []);
@@ -333,8 +336,10 @@ export function LocalFilesProvider({ children }: { children: React.ReactNode }) 
       sharing,
       feedError,
       listen,
+      note: (streamId) => notes[streamId] ?? { busy: false, problem: null },
+      setNote: (streamId, patch) => setNotes((previous) => ({ ...previous, [streamId]: { busy: false, problem: null, ...previous[streamId], ...patch } })),
     }),
-    [canHost, version, attach, adopt, detach, rememberedNames, resume, requestFeed, sharing, feedError, listen],
+    [canHost, version, attach, adopt, detach, rememberedNames, resume, requestFeed, sharing, feedError, listen, notes],
   );
 
   return <Context.Provider value={value}>{children}</Context.Provider>;

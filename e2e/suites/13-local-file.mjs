@@ -74,6 +74,7 @@ const join_ = async (sub, name, room) => {
   return entry;
 };
 
+const inList = (page) => page.locator('section[aria-label="Streams"]');
 const owner = await join_("discord-local-owner", "Owner");
 const p = owner.page;
 await p.goto(BASE);
@@ -101,8 +102,10 @@ const t1 = (await feedVideo(bob.page))?.t ?? 0;
 await sleep(2000);
 check(((await feedVideo(bob.page))?.t ?? 0) > t1 + 1, "the picture keeps moving");
 check((await bob.page.getByText(/is sharing/).count()) === 0, "the feed is not shown as a screen share");
-check(await bob.page.getByText("I have this file").isVisible(), "the friend can switch to their own copy");
-check(await p.getByText(/Sharing live/).isVisible(), "the owner is told the live feed is on");
+check(await inList(bob.page).getByRole("button", { name: /I have this file/ }).isVisible(), "the stream list shows an \"I have this file\" button without opening any menu");
+check(await bob.page.getByRole("button", { name: "I have this file", exact: true }).isVisible(), "and the video has the same button in its top-left corner");
+check(await bob.page.getByText("Watching Owner's live feed").isVisible(), "and says whose live feed is being watched");
+check(await p.getByText(/Sharing live/).first().isVisible(), "the owner is told the live feed is on");
 const published = async () => (await svc.listParticipants(room)).find((x) => x.identity === "discord-local-owner")?.tracks.filter((t) => t.name?.startsWith("file:")).length ?? 0;
 check((await published()) === 2, "the owner publishes a picture and a sound track");
 
@@ -149,27 +152,24 @@ check(await until(async () => (await localVideo(p))?.t > 29), "a seek moves the 
 
 console.log("A friend with the file plays it locally");
 const cara = await join_("discord-local-cara", "Cara", room);
-await cara.page.mouse.move(400, 300);
-await cara.page.getByRole("button", { name: "I have this file" }).click();
+await inList(cara.page).getByRole("button", { name: /I have this file/ }).click();
 check(await until(async () => { const v = await localVideo(cara.page); return v && v.w > 0 && !v.paused; }, 25000), "picking the same file starts it locally");
 check(await until(async () => Math.abs(((await localVideo(cara.page))?.t ?? -99) - ((await localVideo(p))?.t ?? 99)) < 2), "it stays on the room clock with the owner");
 
 console.log("A different file is refused");
 const dan = await join_("discord-local-dan", "Dan", room);
 await dan.page.evaluate(() => { window.__which = "b"; });
-await dan.page.mouse.move(400, 300);
-await dan.page.getByRole("button", { name: "I have this file" }).click();
+await dan.page.getByRole("button", { name: "I have this file", exact: true }).click();
 check(await until(async () => (await dan.page.getByText(/isn't the same file/).count()) > 0), "a different file is blocked with a clear message");
 check((await localVideo(dan.page)) === null, "nothing plays from the wrong file");
 
 console.log("Nothing is sent while everyone has the file");
-await bob.page.mouse.move(400, 300);
-await bob.page.getByRole("button", { name: "I have this file" }).click();
-await bob.page.getByText("Playing your copy").waitFor({ timeout: 15000 });
+await bob.page.getByRole("button", { name: "I have this file", exact: true }).click();
+await bob.page.getByText("Playing your copy").first().waitFor({ timeout: 15000 });
 await dan.page.close();
 check(await until(async () => (await published()) === 0, 30000), "the owner stops publishing once nobody needs the feed");
-await bob.page.mouse.move(420, 320);
-await bob.page.getByRole("button", { name: /use live feed/ }).click();
+check((await bob.page.getByRole("button", { name: /use live feed/i }).count()) === 2, "your own copy can be swapped for the live feed from the list or from the video");
+await inList(bob.page).getByRole("button", { name: /Use live feed/ }).click();
 check(await until(async () => (await published()) === 2, 20000), "and starts again when someone goes back to the feed");
 
 console.log("The TV uses the live feed");
