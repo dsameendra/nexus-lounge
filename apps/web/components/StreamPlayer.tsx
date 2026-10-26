@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { SILENT_BELOW, atLiveEdge, computeCorrection, expectedPosition, isDeviceSource, isSilent, liveEdgeTarget, liveJumpTarget, median, shouldLiveSeek, sliderToGain, type Stream } from "@nexus/shared";
+import { SILENT_BELOW, atLiveEdge, computeCorrection, expectedPosition, isDeviceSource, isEmbedOnlySource, isSilent, isUnsyncedSource, liveEdgeTarget, liveJumpTarget, median, shouldLiveSeek, sliderToGain, type Stream } from "@nexus/shared";
 import { YouTubeAdapter } from "@/lib/players/youtube";
 import { TwitchAdapter } from "@/lib/players/twitch";
+import { KickAdapter } from "@/lib/players/kick";
 import type { PlayerAdapter } from "@/lib/players/types";
 import { PlayIcon } from "./Icons";
 import { PlayerControls, type SyncStatus } from "./PlayerControls";
@@ -20,13 +21,16 @@ import { useTvOutput } from "./useTvOutput";
 function sourceUrl(stream: Stream) {
   const { type, id, isLive } = stream.source;
   if (type === "youtube") return `https://www.youtube.com/watch?v=${id}`;
+  if (type === "kick") return `https://kick.com/${id}`;
   return isLive ? `https://www.twitch.tv/${id}` : `https://www.twitch.tv/videos/${id}`;
 }
 
-type Provider = "youtube" | "twitch";
+type Provider = "youtube" | "twitch" | "kick";
+
+const providerName = (type: string) => (type === "youtube" ? "YouTube" : type === "kick" ? "Kick" : "Twitch");
 type PlayableStream = Stream & { source: { type: Provider } };
 
-// Local files have their own player; the embedded YouTube/Twitch players only ever see their own sources.
+// Local files have their own player; the embedded YouTube/Twitch/Kick players only ever see their own sources.
 function playable(stream: Stream | null) {
   return stream && !isDeviceSource(stream.source) ? (stream as PlayableStream) : null;
 }
@@ -104,10 +108,11 @@ export function StreamPlayer({
   const [ripple, setRipple] = useState<{ zone: "left" | "right"; key: number } | null>(null);
   const lastTap = useRef({ time: 0, zone: "" });
   const touchAt = useRef(0);
-  const hostRefs = { youtube: useRef<HTMLDivElement>(null), twitch: useRef<HTMLDivElement>(null) };
+  const hostRefs = { youtube: useRef<HTMLDivElement>(null), twitch: useRef<HTMLDivElement>(null), kick: useRef<HTMLDivElement>(null) };
   const adapters = useRef<Partial<Record<Provider, PlayerAdapter>>>({});
   const mem = useRef({
     loadedId: null as string | null,
+    loadedType: null as string | null,
     loadedAt: 0,
     graceUntil: 0,
     lastPlayCmd: 0,
@@ -123,7 +128,7 @@ export function StreamPlayer({
     immediate: false,
     liveId: null as string | null,
     learn: false,
-    lead: { youtube: 0.5, twitch: 1 } as Record<Provider, number>,
+    lead: { youtube: 0.5, twitch: 1, kick: 0 } as Record<Provider, number>,
   });
   const debugRef = useRef(typeof window !== "undefined" && new URLSearchParams(window.location.search).has("debug"));
   const [initialVolume] = useState(loadVolume);
@@ -149,7 +154,12 @@ export function StreamPlayer({
       let adapter = adapters.current[type];
       const host = hostRefs[type].current;
       if (!adapter && host) {
-        adapter = type === "youtube" ? new YouTubeAdapter(host, !hasElementFullscreen() && !(latest.current.stream && canControlRef.current(latest.current.stream))) : new TwitchAdapter(host);
+        adapter =
+          type === "youtube"
+            ? new YouTubeAdapter(host, !hasElementFullscreen() && !(latest.current.stream && canControlRef.current(latest.current.stream)))
+            : type === "kick"
+              ? new KickAdapter(host, latest.current.muted)
+              : new TwitchAdapter(host);
         adapter.subscribe((event) => {
           if (event === "blocked") patch({ blocked: true });
         });
@@ -161,29 +171,32 @@ export function StreamPlayer({
     [patch],
   );
 
-  const resetTwitch = useCallback(() => {
-    const existing = adapters.current.twitch;
+  // Twitch and Kick players are rebuilt on every switch: Twitch pauses and Kick keeps playing sound when hidden.
+  const resetEmbed = useCallback((type: "twitch" | "kick") => {
+    const existing = adapters.current[type];
     if (!existing) return;
     existing.destroy();
-    delete adapters.current.twitch;
+    delete adapters.current[type];
   }, []);
 
   const tick = useCallback(() => {
     const { stream, visible, volume, muted } = latest.current;
     const m = mem.current;
 
-    for (const type of ["youtube", "twitch"] as const) {
+    for (const type of ["youtube", "twitch", "kick"] as const) {
       const other = adapters.current[type];
       const inactive = !stream || !visible || stream.source.type !== type;
-      if (type === "twitch" && other && inactive) {
-        resetTwitch();
+      if (type !== "youtube" && other && inactive) {
+        resetEmbed(type);
+        // Showing the same stream again has to build a new player, so it must load again.
+        if (m.loadedType === type) m.loadedId = null;
         continue;
       }
       if (other?.ready && inactive && other.getState() === "playing") other.pause();
     }
     if (!stream || !visible) return;
 
-    if (stream.source.type === "twitch" && m.loadedId !== null && m.loadedId !== stream.id) resetTwitch();
+    if (isEmbedOnlySource(stream.source) && m.loadedId !== null && m.loadedId !== stream.id) resetEmbed(stream.source.type as "twitch" | "kick");
 
     const adapter = ensureAdapter(stream.source.type);
     if (!adapter || !clock.ready || (!adapter.ready && stream.source.type === "youtube")) {
@@ -194,13 +207,14 @@ export function StreamPlayer({
 
     const now = Date.now();
     const playback = stream.playback;
-    const syncable = !(stream.source.type === "twitch" && stream.source.isLive);
+    const syncable = !isUnsyncedSource(stream.source);
 
     if (m.loadedId !== stream.id) {
       const expected = syncable ? expectedPosition(playback, clock.now()) : null;
       const lead = playback.playing && !stream.source.isLive ? m.lead[stream.source.type] : 0;
       Object.assign(m, {
         loadedId: stream.id,
+        loadedType: stream.source.type,
         loadedAt: now,
         graceUntil: now + 4000,
         rate: 1,
@@ -361,7 +375,7 @@ export function StreamPlayer({
       adapter.setRate(1);
       m.rate = 1;
     }
-  }, [clock, ensureAdapter, patch, resetTwitch, send]);
+  }, [clock, ensureAdapter, patch, resetEmbed, send]);
 
   useEffect(() => {
     const id = setInterval(tick, 400);
@@ -440,9 +454,9 @@ export function StreamPlayer({
   }, [stream?.id, revealControls]);
 
   const activeAdapter = stream ? adapters.current[stream.source.type] : undefined;
-  const syncable = Boolean(stream && !(stream.source.type === "twitch" && stream.source.isLive));
+  const syncable = Boolean(stream && !isUnsyncedSource(stream.source));
   const canControl = Boolean(stream && syncable && canControlStream(stream));
-  const isTwitch = stream?.source.type === "twitch";
+  const isTwitch = Boolean(stream && isEmbedOnlySource(stream.source));
   const ytNative = Boolean(stream?.source.type === "youtube" && (activeAdapter as YouTubeAdapter | undefined)?.native);
   const overlayControls = !isTwitch && !ytNative && (fullscreen || compactScreen);
   const hideBar = phoneLand && !fullscreen && (isTwitch || ytNative);
@@ -497,7 +511,7 @@ export function StreamPlayer({
   }
 
   function retry() {
-    if (stream?.source.type === "twitch") resetTwitch();
+    if (stream && isEmbedOnlySource(stream.source)) resetEmbed(stream.source.type as "twitch" | "kick");
     mem.current.loadedId = null;
     patch({ stalled: false, error: null, loading: true });
   }
@@ -610,6 +624,7 @@ export function StreamPlayer({
       canFullscreen={canFullscreen}
       fullscreen={fullscreen}
       minimal={isTwitch && !syncable}
+      minimalLabel={stream ? `Live on ${providerName(stream.source.type)}` : undefined}
       qualityOptions={activeAdapter?.qualities() ?? []}
       quality={ui.qualityValue}
       qualityNote={activeAdapter?.qualityNote}
@@ -647,6 +662,7 @@ export function StreamPlayer({
         }
       />
       <div ref={hostRefs.twitch} className={`absolute inset-0 overflow-hidden ${stream?.source.type === "twitch" && visible ? "" : "pointer-events-none opacity-0"}`} />
+      <div ref={hostRefs.kick} className={`absolute inset-0 overflow-hidden ${stream?.source.type === "kick" && visible ? "" : "pointer-events-none opacity-0"}`} />
 
       {visible && stream && (
         <>
@@ -692,7 +708,7 @@ export function StreamPlayer({
                   rel="noreferrer"
                   className="flex h-9 items-center rounded-full bg-white/15 px-4 text-sm font-medium transition hover:bg-white/25 active:scale-95"
                 >
-                  Open on {stream.source.type === "youtube" ? "YouTube" : "Twitch"}
+                  Open on {providerName(stream.source.type)}
                 </a>
               </div>
             </div>
@@ -753,7 +769,7 @@ export function StreamPlayer({
                           </button>
                           {" · "}
                           <a href={sourceUrl(stream)} target="_blank" rel="noreferrer" className="text-accent hover:underline">
-                            Open on Twitch
+                            Open on {providerName(stream.source.type)}
                           </a>
                         </>
                       )}

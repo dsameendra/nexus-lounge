@@ -26,6 +26,10 @@ import {
   reactionEmojiSchema,
   roomSettingsSchema,
   streamKey,
+  mediaSourceSchema,
+  isUnsyncedSource,
+  isEmbedOnlySource,
+  isQueueable,
 } from "../src/index.ts";
 import { signSessionToken, verifySessionToken } from "../src/session-token.ts";
 
@@ -443,4 +447,33 @@ test("live jump: boundary at the tolerance, no DVR, room ahead of the edge, seek
   assert.equal(shouldLiveSeek(100, 100 + LIVE_SEEK_THRESHOLD + 0.1), true);
   assert.equal(shouldLiveSeek(100 + LIVE_SEEK_THRESHOLD + 0.1, 100), true);
   assert.equal(liveEdgeTarget(1000), 1000 - LIVE_EDGE_MARGIN, "a controller's Go live sends the edge minus the margin");
+});
+
+test("kick urls", () => {
+  assert.deepEqual(parseMediaUrl("https://kick.com/Trainwreckstv"), { ok: true, source: { type: "kick", id: "trainwreckstv", isLive: true } });
+  assert.deepEqual(parseMediaUrl("kick.com/some-channel/"), { ok: true, source: { type: "kick", id: "some-channel", isLive: true } });
+  assert.deepEqual(parseMediaUrl("https://player.kick.com/xqc?autoplay=true"), { ok: true, source: { type: "kick", id: "xqc", isLive: true } });
+  assert.deepEqual(parseMediaUrl("https://kick.com/some_user"), { ok: true, source: { type: "kick", id: "some-user", isLive: true } });
+  assert.match((parseMediaUrl("https://kick.com/video/0a1b2c3d") as { reason: string }).reason, /videos and clips/);
+  assert.equal(parseMediaUrl("https://kick.com/categories/gaming").ok, false);
+  assert.equal(parseMediaUrl("https://kick.com/").ok, false);
+  assert.equal(parseMediaUrl("https://kick.com/xqc/videos/abc").ok, false);
+  assert.equal(parseMediaUrl("https://kick.com/xqc/clips/clip_01").ok, false);
+  assert.equal(parseMediaUrl("https://player.kick.com/video/0a1b2c3d").ok, false);
+  assert.equal(parseMediaUrl("https://kick.com.evil.test/xqc").ok, false);
+});
+
+test("kick sources are live, unsynced and never queued", () => {
+  const source = { type: "kick" as const, id: "xqc", isLive: true };
+  assert.equal(mediaSourceSchema.safeParse(source).success, true);
+  assert.equal(mediaSourceSchema.safeParse({ ...source, isLive: false }).success, false);
+  assert.equal(mediaSourceSchema.safeParse({ ...source, id: "x" }).success, false);
+  assert.equal(mediaSourceSchema.safeParse({ ...source, id: "Has Space" }).success, false);
+  assert.equal(streamKey(source), "kick:live:xqc");
+  assert.equal(isUnsyncedSource(source), true);
+  assert.equal(isUnsyncedSource({ type: "twitch", isLive: true }), true);
+  assert.equal(isUnsyncedSource({ type: "twitch", isLive: false }), false);
+  assert.equal(isUnsyncedSource({ type: "youtube", isLive: true }), false);
+  assert.equal(isEmbedOnlySource(source) && isEmbedOnlySource({ type: "twitch" }) && !isEmbedOnlySource({ type: "youtube" }), true);
+  assert.equal(isQueueable(source), false);
 });

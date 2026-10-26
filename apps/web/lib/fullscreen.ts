@@ -15,6 +15,12 @@ export async function enterFullscreen(element: HTMLElement = document.documentEl
     if (target.requestFullscreen) await target.requestFullscreen();
     else await target.webkitRequestFullscreen?.();
   } catch {}
+  // Some TV browsers expose the standard call but don't act on it.
+  if (!isFullscreen()) {
+    try {
+      await target.webkitRequestFullscreen?.();
+    } catch {}
+  }
 }
 
 export async function exitFullscreen() {

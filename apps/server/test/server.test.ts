@@ -240,6 +240,24 @@ test("twitch live cannot be controlled", async () => {
   host.socket.close();
 });
 
+test("kick channels are live, have no clock and cannot be controlled", async () => {
+  const { id } = await createRoom("host");
+  const host = await join(id, "host");
+  host.send({ type: "stream.add", source: { type: "kick", id: "examplechannel", isLive: false } });
+  await host.until(() => host.errors.length > 0);
+  host.send({ type: "stream.add", source: { type: "kick", id: "examplechannel", isLive: true } });
+  await host.until(() => host.state!.streams.length === 1);
+  const stream = host.state!.streams[0]!;
+  assert.equal(stream.id, "kick:live:examplechannel");
+  host.send({ type: "stream.feature", streamId: stream.id });
+  await host.until(() => host.state!.featuredId === stream.id);
+  assert.deepEqual({ ...host.state!.streams[0]!.playback, updatedAt: 0 }, { position: null, playing: false, updatedAt: 0 });
+  const before = host.errors.length;
+  host.send({ type: "stream.control", streamId: stream.id, action: "play", position: 1 });
+  await host.until(() => host.errors.length > before);
+  host.socket.close();
+});
+
 test("password and ticket enforcement", async () => {
   const { id } = await createRoom("host", "hunter2");
   assert.equal((await ticketFor(id, "friend")).status, 403);

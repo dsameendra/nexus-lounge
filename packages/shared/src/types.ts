@@ -70,15 +70,18 @@ export const roomPasswordSchema = z.string().min(1).max(64);
 export const createRoomRequestSchema = z.object({ password: roomPasswordSchema.optional(), name: roomNameSchema.optional() });
 export const joinRoomRequestSchema = z.object({ password: z.string().max(64).optional() });
 
+export const KICK_CHANNEL = /^[a-z0-9][a-z0-9_-]{1,24}$/;
+
 export const mediaSourceSchema = z
   .object({
-    type: z.enum(["youtube", "twitch", "local", "torrent", "link"]),
+    type: z.enum(["youtube", "twitch", "kick", "local", "torrent", "link"]),
     id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
     isLive: z.boolean(),
   })
   .refine((source) => {
     if (source.type === "local" || source.type === "link") return LOCAL_ID.test(source.id) && !source.isLive;
     if (source.type === "torrent") return TORRENT_ID.test(source.id) && !source.isLive;
+    if (source.type === "kick") return KICK_CHANNEL.test(source.id) && source.isLive;
     return true;
   }, "Invalid stream");
 
@@ -87,6 +90,16 @@ export function isDeviceSource(source: { type: string }) {
   return source.type === "local" || source.type === "torrent" || source.type === "link";
 }
 export type MediaSource = z.infer<typeof mediaSourceSchema>;
+
+// Live streams in someone else's player have no shared clock: Twitch channels and every Kick channel (Kick's embed has no API).
+export function isUnsyncedSource(source: { type: string; isLive: boolean }) {
+  return source.type === "kick" || (source.type === "twitch" && source.isLive);
+}
+
+// Players that pause or break when anything covers them, so nothing is drawn over them.
+export function isEmbedOnlySource(source: { type: string }) {
+  return source.type === "twitch" || source.type === "kick";
+}
 
 export const playbackSchema = z.object({
   position: z.number().nullable(),
@@ -184,6 +197,7 @@ export type JoinResponse = z.infer<typeof joinResponseSchema>;
 
 export function streamKey(source: MediaSource) {
   if (source.type === "local" || source.type === "torrent" || source.type === "link") return `${source.type}:${source.id}`;
+  if (source.type === "kick") return `kick:live:${source.id}`;
   return source.type === "youtube" ? `youtube:${source.id}` : `twitch:${source.isLive ? "live" : "vod"}:${source.id}`;
 }
 

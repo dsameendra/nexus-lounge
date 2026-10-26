@@ -97,7 +97,7 @@ export function TvSheet({ onClose }: { onClose: () => void }) {
           <h3 className="mb-1.5 px-1 text-xs font-semibold tracking-wide text-label-2 uppercase">AirPlay</h3>
           <div className="rounded-2xl bg-panel-2 p-4 text-sm text-label-2">
             <p>
-              YouTube and Twitch play inside their own players, which can&apos;t be sent to AirPlay directly. Mirror a clean full-screen view instead:
+              YouTube, Twitch and Kick play inside their own players, which can&apos;t be sent to AirPlay directly. Mirror a clean full-screen view instead:
             </p>
             <ol className="mt-2 list-decimal space-y-1 pl-5">
               <li>Open the TV view below on this device.</li>

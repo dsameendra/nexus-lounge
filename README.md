@@ -5,7 +5,7 @@
 # Nexus Lounge
 
 **Watch together, wherever you are.**
-Voice, chat, synced YouTube and Twitch, and screen sharing in one shared room. Installs as an app on phones and desktops.
+Voice, chat, synced YouTube, Twitch and Kick, and screen sharing in one shared room. Installs as an app on phones and desktops.
 
 <img src="docs/screenshots/desktop-room.png" alt="A room with a synced video, voice and chat" width="860" />
 
@@ -47,7 +47,7 @@ I built it so my friends and I could watch League of Legends Worlds together, bu
 - Roles: the owner can make other Discord users controllers, who can pick what the room watches, control playback, reorder the queue, put a screen share on air, and stop someone's screen share.
 
 **Watching**
-- Paste any YouTube or Twitch link (video, live stream, channel, past broadcast) to add it to the room's stream list.
+- Paste any YouTube, Twitch or Kick link (video, live stream, channel, past broadcast; Kick channels only) to add it to the room's stream list.
 - **Queue:** an "Up next" list that everyone sees. Signed-in people add videos to the end or to the front ("Play next"); controllers reorder, play now, remove and clear. When a video ends, the next one in the queue starts (a controller needs to be watching). Live streams can't be queued, and with an empty queue the library order is used.
 - **Playlists:** paste a YouTube playlist link and it shows up as one expandable item. Add the whole playlist to the queue, or tick just the videos you want.
 - Every stream has its own shared clock, so some people can watch one stream while others watch another, and anyone can switch without losing sync. The owner or a controller can put one stream "on air" for everyone; guests always follow it.
@@ -56,14 +56,14 @@ I built it so my friends and I could watch League of Legends Worlds together, bu
 - Several people can screen share at once, each with audio. Everyone picks which share to watch, and the owner or a controller can put one on air. A notice appears when someone starts sharing.
 - **Your own video files:** pick a video from your computer and watch it together. Friends who don't have the file watch a live feed from your browser (no upload: the video never touches the server). Friends who do have the same file can pick it and play their own copy, synced to the room in full quality. Wrong files are refused (a fingerprint of the size and a few slices must match). Chrome and Edge remember the file across a refresh. Sharing the feed works from Chrome, Edge, Firefox and Safari on a computer; TVs always use the feed.
 - **Stremio, magnets and video links:** the host and controllers can add a magnet link, a Stremio stream link or a video link (including the signed links debrid and addon services give you). Torrents play through the Stremio app on your computer (`127.0.0.1:11470`, or any address you set); links play straight in the browser when they can, and through Stremio when they can't (insecure `http` redirects, formats your browser can't decode, services that block browsers), which converts them to HLS that plays everywhere. Matroska plays as it is on Chrome and Edge, and HEVC/AC3/E-AC3 are used directly where your browser decodes them. Friends without Stremio watch a live feed from the owner's browser. Friends with Stremio tap **Play with my Stremio** to download the torrent themselves, in sync, with no load on the owner, or paste their own link or magnet to the same video (the size and length must match). Links stay in the owner's tab and are never sent to the room or the server, expired ones can be replaced in place, and error clips from link services are flagged. Chrome and Edge ask once to let the site reach devices on your network. Subtitles (tracks inside the video, files that came with a torrent, a file from your computer, or a search by title through OpenSubtitles) are chosen per person.
-- Twitch live channels can't be time-synced by embeds, so the app says so and suggests screen share.
+- Twitch live channels and Kick channels can't be time-synced by embeds, so the app says so and suggests screen share. Kick links must be channels (kick.com/name); Kick videos and clips are refused.
 - Reactions: send emoji that float across the screen for everyone.
 
 **Playback controls**
 - Subtitles on YouTube (language list from the video, on/off, text size), remembered between videos.
 - Quality: the real list on Twitch, Auto/High/Low on screen shares. YouTube no longer lets embedded players choose a quality, so the menu says so.
 - Volume: a perceptual curve, truly silent at the bottom, remembered between sessions.
-- AirPlay: screen shares offer the AirPlay picker where Safari supports it; for YouTube and Twitch (which can't be sent to AirPlay directly) the TV sheet explains how to mirror the clean TV view to an Apple TV.
+- AirPlay: screen shares offer the AirPlay picker where Safari supports it; for YouTube, Twitch and Kick (which can't be sent to AirPlay directly) the TV sheet explains how to mirror the clean TV view to an Apple TV.
 
 **Voice and chat**
 - Voice joins muted and deafened. Unmuting also undeafens you, and the browser only asks for the microphone at that moment. Mute, deafen, push-to-talk (any key, or hold the mic button) and speaking indicators match what everyone hears.
@@ -154,7 +154,7 @@ docs/            Railway notes and screenshots
 - Voice, speaking indicators, screen share and chat run through LiveKit. Playback state, the stream list, roles, guest approvals and moderation run over the server's WebSocket, and every message is validated with zod (`packages/shared/src/protocol.ts`).
 - Each stream stores `position`, `playing` and a server timestamp. Clients estimate the server clock (median of ping samples) and compute the expected position locally. Drift is the median of the last few readings, small drift is fixed by gently changing playback speed, and seeks are rare and debounced. Add `?debug` to a room URL to see the live numbers.
 - Permissions are enforced on the server and in the LiveKit token, not just hidden in the UI: guests can't add streams, share, or create rooms; only the owner can mute, deafen, remove people, let guests in or change room settings; sharing can be limited to controllers.
-- Twitch embeds must not be covered by anything on the page (Twitch disables playback if they are), so nothing is ever drawn over a Twitch player: its own controls are used and our status lines sit below it.
+- Twitch embeds must not be covered by anything on the page (Twitch disables playback if they are), so nothing is ever drawn over a Twitch or Kick player: its own controls are used and our status lines sit below it.
 - YouTube titles are fetched server-side from YouTube's public oEmbed endpoint (no key needed).
 - Rooms live in server memory and vanish on restart. Redis is the natural next step for persistence and running more than one server instance.
 

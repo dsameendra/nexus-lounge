@@ -80,7 +80,7 @@ check(await gone(row(guest, "Other Two").locator("[title='Muted by the room owne
 
 console.log("Volume: the bottom of the slider is silent and settings are remembered");
 await owner.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
-await owner.fill("input[placeholder='Paste a YouTube or Twitch link']", "https://www.youtube.com/watch?v=jNQXAC9IVRw");
+await owner.fill("input[placeholder='Paste a YouTube, Twitch or Kick link']", "https://www.youtube.com/watch?v=jNQXAC9IVRw");
 await owner.getByRole("button", { name: "Play for everyone" }).click();
 await guest.getByRole("tab", { name: "Chat" }).click();
 check(await visible(guest.locator("iframe[src*='youtube']"), 30000), "stream is playing for the guest");

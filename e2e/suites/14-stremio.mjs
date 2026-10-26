@@ -160,6 +160,29 @@ await p.getByRole("button", { name: "Play for everyone" }).click();
 await closed(p);
 check(await until(async () => { const v = await playing(p, "converted"); return v && v.w > 0 && !v.paused && v.t > 1; }, 45000), "and plays through the converted stream");
 
+console.log("A slow connection to the room");
+// The room answers a second late: the stream is opened here before the room has heard of it, and must not be dropped meanwhile.
+const slow = await person("discord-sm-slow", "Slow", GOOD);
+let opens = 0;
+slow.page.on("console", (message) => { if (/\[nexus stream .*opened after/.test(message.text())) opens++; });
+await slow.page.routeWebSocket(/:4000\/ws/, (ws) => {
+  const server = ws.connectToServer();
+  ws.onMessage((message) => server.send(message));
+  server.onMessage((message) => setTimeout(() => ws.send(message), 1200));
+});
+await slow.page.goto(BASE); await slow.page.click("text=Create room"); await slow.page.waitForURL(/\/room\//);
+await slow.page.getByRole("button", { name: "Join room" }).click();
+await openAdd(slow.page);
+await paste(slow.page, link("/ok.webm"));
+await slow.page.getByText(/^Ready\./).waitFor({ timeout: 40000 });
+await slow.page.getByRole("button", { name: "Play for everyone" }).click();
+await closed(slow.page);
+check(await until(async () => (await inList(slow.page).locator("li").count()) === 1, 15000), "the stream shows up once the room answers");
+await sleep(2500);
+check((await inList(slow.page).getByText(/Paste the link again|Friends are waiting/).count()) === 0 && (await inList(slow.page).getByText(/Playing your link/).count()) === 1, "and the owner is still playing it, not asked to paste the link again");
+check(opens === 1, "and it was opened once: the player was never thrown away and rebuilt");
+await slow.context.close();
+
 console.log("Matroska files");
 // A second owner: one person can add only five device streams at a time.
 const mk = await person("discord-sm-mkv", "Mkv", GOOD);

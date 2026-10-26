@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { isTvBrowser } from "@/lib/tv-browser";
 import { AudioTrack, isTrackReference, useTracks } from "@livekit/components-react";
 import { Track } from "livekit-client";
-import { isDeviceSource, isTypingTarget, screenId } from "@nexus/shared";
+import { isDeviceSource, isEmbedOnlySource, isTypingTarget, screenId } from "@nexus/shared";
 import { enterFullscreen, exitFullscreen, fullscreenSupported, isFullscreen } from "@/lib/fullscreen";
 import { ProviderBadge } from "./Badges";
 import { FloatingReactions } from "./Reactions";
@@ -73,13 +74,14 @@ export function TvRoom() {
   const fullscreen = useTvFullscreen();
   const [focused, setFocused] = useState(false);
   const idleCursor = useIdleCursor();
+  const [tvBrowser] = useState(isTvBrowser);
   const { send, status, state, self } = useRoom();
   const mode = state.members.find((member) => member.id === self.id)?.tvMode ?? "both";
   const playing = mode !== "here";
   const { effectiveId, stream, share } = useEffectiveSource();
   const [toast, setToast] = useState(false);
   const showingScreen = Boolean(share);
-  const showFullscreen = fullscreen.supported && stream?.source.type !== "twitch";
+  const showFullscreen = fullscreen.supported && !(stream && isEmbedOnlySource(stream.source));
   const title = stream?.title ?? (share ? `${share.participant.name || share.participant.identity}'s screen` : null);
 
   useEffect(() => {
@@ -109,7 +111,7 @@ export function TvRoom() {
   }, [title]);
 
   return (
-    <div className={`fixed inset-0 overflow-hidden bg-black ${idleCursor ? "cursor-none" : ""}`}>
+    <div className={`fixed inset-0 overflow-hidden bg-black ${tvBrowser ? "tv-browser" : ""} ${idleCursor && !tvBrowser ? "cursor-none" : ""}`}>
       {playing && <ScreenAudio effectiveId={effectiveId} />}
       <div className="absolute inset-0">
         <StreamPlayer stream={stream} visible={Boolean(stream) && !showingScreen && playing} onFullscreen={() => {}} bare />
@@ -128,7 +130,7 @@ export function TvRoom() {
         </div>
       )}
 
-      {state.room.settings.reactions && effectiveId && stream?.source.type !== "twitch" && <FloatingReactions />}
+      {state.room.settings.reactions && effectiveId && !(stream && isEmbedOnlySource(stream.source)) && <FloatingReactions />}
 
       {!effectiveId && playing && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 text-center">
@@ -141,8 +143,8 @@ export function TvRoom() {
       )}
 
       <div
-        className={`material pointer-events-none absolute top-10 left-10 z-20 flex max-w-[70vw] items-center gap-5 rounded-3xl px-8 py-5 transition duration-500 ${
-          toast && title ? "translate-y-0 opacity-100" : "-translate-y-4 opacity-0"
+        className={`material pointer-events-none absolute top-10 left-10 z-20 flex max-w-[70vw] items-center gap-5 rounded-3xl px-8 py-5 ${
+          tvBrowser ? (toast && title ? "" : "invisible") : `transition duration-500 ${toast && title ? "translate-y-0 opacity-100" : "-translate-y-4 opacity-0"}`
         }`}
       >
         {stream && <ProviderBadge source={stream.source} />}
@@ -156,13 +158,21 @@ export function TvRoom() {
             fullscreen.toggle();
             if (event.detail > 0) event.currentTarget.blur();
           }}
-          onFocus={(event) => setFocused(event.currentTarget.matches(":focus-visible"))}
+          onFocus={(event) => {
+            // Browsers without :focus-visible (older TV engines) throw here: treat any focus as keyboard focus.
+            let keyboard = true;
+            try {
+              keyboard = event.currentTarget.matches(":focus-visible");
+            } catch {}
+            setFocused(keyboard);
+          }}
           onBlur={() => setFocused(false)}
           aria-label={fullscreen.active ? "Exit fullscreen" : "Enter fullscreen"}
           title={fullscreen.active ? "Exit fullscreen (F)" : "Enter fullscreen (F)"}
-          className={`material absolute top-10 right-10 z-30 flex size-20 items-center justify-center rounded-full text-4xl text-white transition duration-300 hover:brightness-125 focus-visible:ring-4 focus-visible:ring-accent focus-visible:outline-none active:scale-95 ${
-            idleCursor && !focused ? "pointer-events-none opacity-0" : "opacity-100"
-          }`}
+          className={`material absolute top-10 right-10 z-30 flex size-20 items-center justify-center rounded-full text-4xl text-white focus-visible:ring-4 focus-visible:ring-accent focus-visible:outline-none ${
+            tvBrowser ? "" : "transition duration-300 hover:brightness-125 active:scale-95"
+          } ${idleCursor && !focused ? (tvBrowser ? "pointer-events-none" : "pointer-events-none opacity-0") : "opacity-100"}`}
+          data-idle={tvBrowser && idleCursor && !focused ? "true" : undefined}
         >
           {fullscreen.active ? <ExitFullscreenIcon /> : <FullscreenIcon />}
         </button>

@@ -52,7 +52,7 @@ export function StreamLibrary({ onAdd }: { onAdd: () => void }) {
 
       {empty && (
         <div className="rounded-2xl border border-dashed border-line px-6 py-10 text-center text-sm text-label-2">
-          {canAdd ? "Add a YouTube or Twitch link to build your watch list." : "The host hasn't added anything yet."}
+          {canAdd ? "Add a YouTube, Twitch or Kick link to build your watch list." : "The host hasn't added anything yet."}
         </div>
       )}
 

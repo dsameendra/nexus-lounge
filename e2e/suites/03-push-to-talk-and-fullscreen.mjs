@@ -49,7 +49,7 @@ await ptt.keyboard.up("v");
 console.log("Auto-advance plays exactly the next video");
 const add = async (url, mode) => {
   await owner.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
-  await owner.fill("input[placeholder='Paste a YouTube or Twitch link']", url);
+  await owner.fill("input[placeholder='Paste a YouTube, Twitch or Kick link']", url);
   await owner.getByRole("button", { name: mode }).click();
   await sleep(1200);
 };

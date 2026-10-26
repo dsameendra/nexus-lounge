@@ -8,7 +8,7 @@ await owner.page.goto(BASE); await owner.page.click("text=Create room"); await o
 const room = owner.page.url().split("/room/")[1];
 await owner.page.getByRole("button", { name: "Join room" }).click();
 await owner.page.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
-await owner.page.fill("input[placeholder='Paste a YouTube or Twitch link']", "https://www.youtube.com/watch?v=jNQXAC9IVRw");
+await owner.page.fill("input[placeholder='Paste a YouTube, Twitch or Kick link']", "https://www.youtube.com/watch?v=jNQXAC9IVRw");
 await owner.page.getByRole("button", { name: "Play for everyone" }).click();
 await sleep(1500);
 

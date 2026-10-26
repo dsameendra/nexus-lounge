@@ -6,6 +6,7 @@ import {
   defaultRoomSettings,
   isDeviceSource,
   isScreenId,
+  isUnsyncedSource,
   isQueueable,
   type PlaylistItem,
   type PlaylistSummary,
@@ -299,7 +300,7 @@ export function controlStream(
   const stream = room?.streams.find((candidate) => candidate.id === streamId);
   if (!room || !stream) return fail("Stream not found");
   if (!canControl(room, user, stream)) return fail("You don't have control of this stream");
-  if (stream.source.type === "twitch" && stream.source.isLive) return fail("Twitch live streams can't be synced");
+  if (isUnsyncedSource(stream.source)) return fail("Live streams in their own player can't be synced");
   if (action === "seek" && position === null) return fail("Seek needs a position");
 
   const playback = stream.playback;
@@ -316,7 +317,7 @@ export function establishStream(roomId: string, userId: string, streamId: string
   const stream = room?.streams.find((candidate) => candidate.id === streamId);
   if (!room || !stream) return fail("Stream not found");
   if (isDeviceSource(stream.source) && stream.addedBy.id !== userId) return ok;
-  if (stream.playback.position !== null || (stream.source.type === "twitch" && stream.source.isLive)) return ok;
+  if (stream.playback.position !== null || isUnsyncedSource(stream.source)) return ok;
   stream.playback.position = position;
   stream.playback.updatedAt = Date.now();
   broadcast(roomId);
@@ -630,8 +631,8 @@ export function advanceQueue(roomId: string, user: SessionPayload, fromStreamId:
   if (!next) return ok;
 
   room.featuredId = next.id;
-  const twitchLive = next.source.type === "twitch" && next.source.isLive;
-  next.playback = twitchLive
+  const unsynced = isUnsyncedSource(next.source);
+  next.playback = unsynced
     ? { position: null, playing: false, updatedAt: Date.now() }
     : { position: next.source.isLive ? null : 0, playing: true, updatedAt: Date.now() };
   broadcast(roomId);

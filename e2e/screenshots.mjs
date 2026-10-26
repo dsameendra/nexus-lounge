@@ -22,7 +22,7 @@ await p.goto(BASE); await p.getByRole("button", { name: "Create room" }).click()
 const room = p.url().split("/room/")[1];
 await p.getByRole("button", { name: "Join room" }).click();
 await p.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
-await p.fill("input[placeholder='Paste a YouTube or Twitch link']", "https://www.youtube.com/watch?v=jNQXAC9IVRw");
+await p.fill("input[placeholder='Paste a YouTube, Twitch or Kick link']", "https://www.youtube.com/watch?v=jNQXAC9IVRw");
 await p.getByRole("button", { name: "Play for everyone" }).click();
 await p.waitForSelector("iframe[src*=youtube]");
 const tv = await newPage(browser, { width: 1280, height: 720 });
