@@ -27,7 +27,7 @@ export function infoHashFrom(text: string) {
 }
 
 export function isPrivateHost(hostname: string) {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.+$/, "");
   if (!host.includes(".") && !host.includes(":")) return true;
   if (host === "localhost" || /\.(local|localhost|internal|lan|home|corp|intranet)$/.test(host)) return true;
   const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
@@ -90,7 +90,8 @@ export function parseStremioInput(input: string): StremioInput {
     const xt = params.getAll("xt").find((value) => /^urn:btih:/i.test(value));
     const infoHash = xt ? infoHashFrom(xt.replace(/^urn:btih:/i, "")) : null;
     if (!infoHash) return { kind: "error", reason: "That magnet link has no usable torrent hash." };
-    const so = Number(params.get("so")?.split(",")[0]);
+    const soText = params.get("so")?.split(",")[0]?.trim();
+    const so = soText ? Number(soText) : NaN;
     return { kind: "torrent", infoHash, fileIdx: Number.isInteger(so) && so >= 0 && so < 10000 ? so : null, trackers: sanitizeTrackers(params.getAll("tr")), name: cleanName(params.get("dn")) };
   }
 

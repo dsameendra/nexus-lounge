@@ -121,8 +121,14 @@ function run<T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRe
     (db) =>
       new Promise<T>((resolve, reject) => {
         const request = work(db.transaction(STORE, mode).objectStore(STORE));
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          db.close();
+          resolve(request.result);
+        };
+        request.onerror = () => {
+          db.close();
+          reject(request.error);
+        };
       }),
   );
 }
