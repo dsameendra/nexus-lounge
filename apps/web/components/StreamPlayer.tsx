@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { SILENT_BELOW, atLiveEdge, computeCorrection, expectedPosition, isDeviceSource, isSilent, LIVE_SEEK_THRESHOLD, liveEdgeTarget, liveJumpTarget, median, sliderToGain, type Stream } from "@nexus/shared";
+import { SILENT_BELOW, atLiveEdge, computeCorrection, expectedPosition, isDeviceSource, isSilent, liveEdgeTarget, liveJumpTarget, median, shouldLiveSeek, sliderToGain, type Stream } from "@nexus/shared";
 import { YouTubeAdapter } from "@/lib/players/youtube";
 import { TwitchAdapter } from "@/lib/players/twitch";
 import type { PlayerAdapter } from "@/lib/players/types";
@@ -121,6 +121,7 @@ export function StreamPlayer({
     lastSample: 0,
     seekSince: 0,
     immediate: false,
+    liveId: null as string | null,
     learn: false,
     lead: { youtube: 0.5, twitch: 1 } as Record<Provider, number>,
   });
@@ -197,7 +198,7 @@ export function StreamPlayer({
 
     if (m.loadedId !== stream.id) {
       const expected = syncable ? expectedPosition(playback, clock.now()) : null;
-      const lead = playback.playing ? m.lead[stream.source.type] : 0;
+      const lead = playback.playing && !stream.source.isLive ? m.lead[stream.source.type] : 0;
       Object.assign(m, {
         loadedId: stream.id,
         loadedAt: now,
@@ -208,10 +209,12 @@ export function StreamPlayer({
         drifts: [],
         seekSince: 0,
         immediate: false,
+        liveId: null,
         learn: false,
         seenUpdate: playback.updatedAt,
       });
       applyVolume(adapter, volume, muted);
+      adapter.setRate(1);
       adapter.load(stream.source, expected === null ? null : expected + lead, syncable ? playback.playing : true);
       patch({ loading: true, blocked: false, time: 0, duration: 0, ended: false, endedFor: null });
       return;
@@ -225,7 +228,13 @@ export function StreamPlayer({
     m.waitSince = 0;
 
     const state = adapter.getState();
-    const live = adapter.isLive() || stream.source.isLive;
+    if ((adapter.isLive() || stream.source.isLive) && m.liveId !== stream.id) {
+      m.liveId = stream.id;
+      m.immediate = true;
+      m.rate = 1;
+      adapter.setRate(1);
+    }
+    const live = m.liveId === stream.id;
     const stalled = state === "idle" && !adapter.error && now - m.loadedAt > 8000;
     patch({ playing: state === "playing" || state === "buffering", loading: state === "idle", live, error: adapter.error, stalled, muteBlocked: Boolean(adapter.muteBlocked), qualityCount: adapter.qualities().length, qualityValue: adapter.quality(), captionKey: captionKeyOf(adapter) });
     if (debugRef.current) {
@@ -249,6 +258,10 @@ export function StreamPlayer({
     const expected = expectedPosition(playback, clock.now());
 
     const length = adapter.getDuration();
+    if (!live && (state === "idle" || length <= 0) && now - m.loadedAt < 8000) {
+      patch({ status: "syncing" });
+      return;
+    }
     const past = !live && length > 0 && expected !== null && expected >= length - 0.5;
     if (past) {
       if (state === "playing") adapter.pause();
@@ -286,14 +299,13 @@ export function StreamPlayer({
     if (live) {
       const edge = adapter.getDuration();
       patch({ status: "synced" });
-      if (edge <= 0) return;
-      if (m.rate !== 1) {
-        adapter.setRate(1);
-        m.rate = 1;
+      if (edge <= 0) {
+        if (now - m.loadedAt > 8000) m.immediate = false;
+        return;
       }
       if (m.immediate && state !== "idle") {
         const to = liveJumpTarget(expected, edge);
-        if (Math.abs(adapter.getTime() - to) > LIVE_SEEK_THRESHOLD) adapter.seek(to);
+        if (shouldLiveSeek(adapter.getTime(), to)) adapter.seek(to);
         Object.assign(m, { immediate: false, drifts: [], seekSince: 0 });
       }
       return;
@@ -398,7 +410,7 @@ export function StreamPlayer({
       if (!adapter?.ready) return;
       const time = adapter.getTime();
       const duration = adapter.getDuration();
-      patch({ time: Math.floor(time * 2) / 2, duration: Math.floor(duration), atEdge: atLiveEdge(time, duration) });
+      patch({ time: Math.floor(time * 2) / 2, duration: Math.floor(duration), atEdge: (mem.current.liveId === stream.id && duration <= 0) || atLiveEdge(time, duration) });
     }, 500);
     return () => clearInterval(id);
   }, [visible, stream, patch]);
@@ -457,7 +469,9 @@ export function StreamPlayer({
     if (!stream || !activeAdapter) return;
     const expected = expectedPosition(stream.playback, clock.now());
     const edge = activeAdapter.getDuration();
-    if (expected !== null) activeAdapter.seek(activeAdapter.isLive() && edge > 0 ? liveJumpTarget(expected, edge) : expected);
+    const live = mem.current.liveId === stream.id;
+    if (expected !== null && !(live && edge <= 0)) activeAdapter.seek(live ? liveJumpTarget(expected, edge) : expected);
+    mem.current.immediate = false;
     mem.current.graceUntil = Date.now() + 3500;
     mem.current.drifts = [];
     if (stream.playback.playing) activeAdapter.play();
@@ -470,10 +484,15 @@ export function StreamPlayer({
       return;
     }
     const duration = activeAdapter.getDuration();
-    if (canControl && duration > 0) {
+    if (duration <= 0) {
+      mem.current.immediate = false;
+      activeAdapter.play();
+    } else if (canControl) {
       send({ type: "stream.control", streamId: stream.id, action: "play", position: liveEdgeTarget(duration) });
     } else {
-      resync();
+      activeAdapter.seek(liveEdgeTarget(duration));
+      mem.current.immediate = false;
+      activeAdapter.play();
     }
   }
 

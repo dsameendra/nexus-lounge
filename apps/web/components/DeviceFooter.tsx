@@ -1,6 +1,7 @@
 "use client";
 
 import type { Stream } from "@nexus/shared";
+import { useEffect, useState } from "react";
 import { CheckIcon, FilmIcon, LinkIcon, SyncIcon } from "./Icons";
 import { useLocalFiles } from "./LocalFilesProvider";
 import { getStremioLimits, useStremio } from "@/lib/stremio";
@@ -26,6 +27,19 @@ export function DeviceFooter({ stream }: { stream: Stream }) {
   const live = files.sharing === stream.id;
   const icon = d.kind === "link" ? <LinkIcon /> : <FilmIcon />;
   const progress = d.stats && d.entry ? `${Math.round(d.stats.progress * 100)}% downloaded · ${speed(d.stats.speed)} · ${d.stats.peers} ${d.stats.peers === 1 ? "peer" : "peers"}` : null;
+
+  const [, refresh] = useState(0);
+  const entry = d.entry ?? null;
+  useEffect(() => {
+    if (!entry || entry.source.kind !== "url") return;
+    const bump = () => refresh((n) => n + 1);
+    const timer = setInterval(bump, 5000);
+    const off = entry.subscribePerf(bump);
+    return () => {
+      clearInterval(timer);
+      off();
+    };
+  }, [entry]);
 
   const hint = streamHint(d.entry ?? null, d.stats, getStremioLimits());
 

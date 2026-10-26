@@ -432,3 +432,15 @@ test("subtitles: SubRip becomes WebVTT, styling noise goes, segments merge witho
   assert.equal(isTextSubtitleCodec("subrip"), true);
   assert.equal(isTextSubtitleCodec("hdmv_pgs_subtitle"), false);
 });
+
+test("live jump: boundary at the tolerance, no DVR, room ahead of the edge, seek threshold", async () => {
+  const { liveJumpTarget, liveEdgeTarget, shouldLiveSeek, LIVE_EDGE_MARGIN, LIVE_SEEK_THRESHOLD } = await import("../src/index.ts");
+  assert.equal(liveJumpTarget(986, 1000), 996, "14 s behind the edge still goes to the edge");
+  assert.equal(liveJumpTarget(985, 1000), 985, "15 s behind keeps the room position");
+  assert.equal(liveJumpTarget(30, 0), 30, "no DVR window: nothing to jump to");
+  assert.equal(liveJumpTarget(2000, 1000), 996, "room ahead of the edge goes to the edge");
+  assert.equal(shouldLiveSeek(100, 100 + LIVE_SEEK_THRESHOLD), false);
+  assert.equal(shouldLiveSeek(100, 100 + LIVE_SEEK_THRESHOLD + 0.1), true);
+  assert.equal(shouldLiveSeek(100 + LIVE_SEEK_THRESHOLD + 0.1, 100), true);
+  assert.equal(liveEdgeTarget(1000), 1000 - LIVE_EDGE_MARGIN, "a controller's Go live sends the edge minus the margin");
+});

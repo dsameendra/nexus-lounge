@@ -23,12 +23,24 @@ export interface Playable {
 // then), so wait longer than hls.js would before it gives up and asks again, which would only restart the work.
 const PATIENT = { maxTimeToFirstByteMs: 45_000, maxLoadTimeMs: 180_000, timeoutRetry: { maxNumRetry: 3, retryDelayMs: 500, maxRetryDelayMs: 2000 }, errorRetry: { maxNumRetry: 4, retryDelayMs: 800, maxRetryDelayMs: 6000 } };
 
+// How long a way of playing gets to show its first picture: a direct file is given up on quickly, a playlist waits for the converter.
+export const URL_OPEN_MS = 60_000;
+export const PLAYLIST_OPEN_MS = 180_000;
+const SLOW_DIRECT_MS = 25_000;
+
+function debugOn() {
+  try {
+    return Boolean(localStorage.getItem("nexus-debug"));
+  } catch {
+    return false;
+  }
+}
+
 // How a stream started and whether it kept up: for the log and for explaining slow playback.
 export interface StreamPerf {
   openedMs: number | null;
   firstFrameMs: number | null;
   stalls: number;
-  stalledMs: number;
   recentStallAt: number;
   fellBack: number;
 }
@@ -66,7 +78,10 @@ export class LocalEntry {
   private startAt = 0;
   private startedAt = 0;
   private stalledSince = 0;
-  readonly perf: StreamPerf = { openedMs: null, firstFrameMs: null, stalls: 0, stalledMs: 0, recentStallAt: 0, fellBack: 0 };
+  private metaListener: (() => void) | null = null;
+  private rearm: (() => void) | null = null;
+  private perfListeners = new Set<() => void>();
+  readonly perf: StreamPerf = { openedMs: null, firstFrameMs: null, stalls: 0, recentStallAt: 0, fellBack: 0 };
   private destroyed = false;
   subtitles: SubtitleOption[] = [];
   activeSubtitle: string | null = null;
@@ -96,9 +111,10 @@ export class LocalEntry {
       this.error = describeMediaError(video, source.kind === "url");
     });
     video.addEventListener("waiting", () => {
-      if (!this.stalledSince && !video.seeking && this.perf.firstFrameMs !== null) this.stalledSince = performance.now();
+      if (!this.stalledSince && !video.seeking && !video.paused && this.perf.firstFrameMs !== null) this.stalledSince = performance.now();
     });
     video.addEventListener("playing", () => {
+      this.hlsRetries = 0;
       if (this.perf.firstFrameMs === null && this.startedAt) {
         this.perf.firstFrameMs = Math.round(performance.now() - this.startedAt);
         this.log(`first picture after ${this.perf.firstFrameMs} ms`);
@@ -108,8 +124,8 @@ export class LocalEntry {
         this.stalledSince = 0;
         if (waited > 400) {
           this.perf.stalls++;
-          this.perf.stalledMs += Math.round(waited);
           this.perf.recentStallAt = Date.now();
+          this.perfListeners.forEach((listener) => listener());
           this.log(`stalled ${Math.round(waited)} ms`);
         }
       }
@@ -117,8 +133,20 @@ export class LocalEntry {
     video.addEventListener("seeking", () => {
       this.stalledSince = 0;
     });
+    video.addEventListener("pause", () => {
+      this.stalledSince = 0;
+    });
     video.dataset.subSize = String(this.subtitleSize);
+    if (source.kind === "url" && debugOn()) {
+      const registry = ((window as unknown as { __nexusPerf?: Record<string, StreamPerf> }).__nexusPerf ??= {});
+      registry[streamId] = this.perf;
+    }
     this.initAudio();
+  }
+
+  subscribePerf(listener: () => void) {
+    this.perfListeners.add(listener);
+    return () => void this.perfListeners.delete(listener);
   }
 
   addSubtitles(options: SubtitleOption[]) {
@@ -152,16 +180,19 @@ export class LocalEntry {
         this.subtitleBusy = true;
         const vtt = await option.load();
         if (this.destroyed) return;
-        const url = URL.createObjectURL(new Blob([vtt], { type: "text/vtt" }));
-        const element = document.createElement("track");
-        element.kind = "subtitles";
-        element.label = option.label;
-        if (option.lang) element.srclang = option.lang;
-        element.src = url;
-        this.video.appendChild(element);
-        element.track.mode = "disabled";
-        loaded = { element, url };
-        this.subtitleTracks.set(id, loaded);
+        loaded = this.subtitleTracks.get(id);
+        if (!loaded) {
+          const url = URL.createObjectURL(new Blob([vtt], { type: "text/vtt" }));
+          const element = document.createElement("track");
+          element.kind = "subtitles";
+          element.label = option.label;
+          if (option.lang) element.srclang = option.lang;
+          element.src = url;
+          this.video.appendChild(element);
+          element.track.mode = "disabled";
+          loaded = { element, url };
+          this.subtitleTracks.set(id, loaded);
+        }
       }
       if (ask !== this.subtitleAsk) return;
       hideAll();
@@ -175,7 +206,7 @@ export class LocalEntry {
   }
 
   private log(message: string) {
-    if (this.source.kind === "url") console.debug(`[nexus stream ${this.streamId.slice(0, 8)}] ${message}`);
+    if (this.source.kind === "url" && debugOn()) console.debug(`[nexus stream ${this.streamId.slice(0, 8)}] ${message}`);
   }
 
   // Resolves once the video has its first frame size; with other ways to play queued, a failure or a long silence
@@ -188,6 +219,7 @@ export class LocalEntry {
         clearTimeout(timer);
         clearTimeout(slow);
         clearInterval(watch);
+        this.rearm = null;
         video.removeEventListener("loadedmetadata", onMeta);
         if (error) reject(new Error(error));
         else {
@@ -202,10 +234,21 @@ export class LocalEntry {
         this.error = "This browser can play this file's sound but not its picture. MP4 (H.264/AAC) and WebM work everywhere.";
         done(this.error);
       };
-      const timer = setTimeout(() => done(this.error ?? "This file couldn't be opened."), timeoutMs);
-      const slow = setTimeout(() => {
-        if (video.readyState < 1) this.fallBack("slow to open");
-      }, 25_000);
+      let timer: ReturnType<typeof setTimeout>;
+      let slow: ReturnType<typeof setTimeout>;
+      const arm = () => {
+        clearTimeout(timer);
+        clearTimeout(slow);
+        const playlist = Boolean(this.current?.hls);
+        timer = setTimeout(() => done(this.error ?? "This file couldn't be opened."), playlist ? Math.max(timeoutMs, PLAYLIST_OPEN_MS) : timeoutMs);
+        if (this.current && !playlist) {
+          slow = setTimeout(() => {
+            if (video.readyState < 1) this.fallBack("slow to open");
+          }, SLOW_DIRECT_MS);
+        }
+      };
+      this.rearm = arm;
+      arm();
       const watch = setInterval(() => {
         if (this.error) done(this.error);
       }, 250);
@@ -218,6 +261,8 @@ export class LocalEntry {
     const next = this.fallbacks.shift();
     if (!next || this.destroyed) return false;
     this.perf.fellBack++;
+    if (this.perf.openedMs !== null && this.video.currentTime > 2) this.startAt = this.video.currentTime;
+    this.dropMetaListener();
     this.log(`${why}; trying ${next.hls ? "a converted playlist" : "a direct file"}`);
     this.current = next;
     this.hlsRetries = 0;
@@ -226,7 +271,13 @@ export class LocalEntry {
     this.video.removeAttribute("src");
     this.video.load();
     void this.load();
+    this.rearm?.();
     return true;
+  }
+
+  private dropMetaListener() {
+    if (this.metaListener) this.video.removeEventListener("loadedmetadata", this.metaListener);
+    this.metaListener = null;
   }
 
   // Playlists go through hls.js where the browser has no native HLS (Safari has it). startAt is where the room is now,
@@ -276,7 +327,15 @@ export class LocalEntry {
       return;
     }
     const startAt = this.startAt;
-    if (startAt > 2) video.addEventListener("loadedmetadata", () => (video.currentTime = Math.min(startAt, Math.max(0, video.duration - 1) || startAt)), { once: true });
+    this.dropMetaListener();
+    if (startAt > 2) {
+      const seek = () => {
+        this.dropMetaListener();
+        video.currentTime = Math.min(startAt, Math.max(0, video.duration - 1) || startAt);
+      };
+      this.metaListener = seek;
+      video.addEventListener("loadedmetadata", seek);
+    }
     video.src = target ? target.url : this.url;
   }
 
@@ -467,6 +526,7 @@ export class LocalEntry {
 
   destroy() {
     this.destroyed = true;
+    this.dropMetaListener();
     for (const { url } of this.subtitleTracks.values()) URL.revokeObjectURL(url);
     this.subtitleTracks.clear();
     const { video } = this;

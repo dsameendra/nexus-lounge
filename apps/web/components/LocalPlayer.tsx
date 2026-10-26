@@ -7,7 +7,7 @@ import { RoomEvent, type RemoteTrack } from "livekit-client";
 import { SILENT_BELOW, expectedPosition, isSilent, isTypingTarget, sliderToGain, type Stream } from "@nexus/shared";
 import { fileFromDrop } from "@/lib/local-files";
 import { languageCode } from "@nexus/shared";
-import { subtitleFromFile, writeLanguagePref, writeSizePref, type SubtitleOption } from "@/lib/subtitles";
+import { readLanguagePref, subtitleFromFile, writeLanguagePref, writeSizePref, type SubtitleOption } from "@/lib/subtitles";
 import { FilmIcon, PlayIcon } from "./Icons";
 import { FEED_AUDIO, FEED_VIDEO, useLocalFiles } from "./LocalFilesProvider";
 import { PlayerControls, type SyncStatus } from "./PlayerControls";
@@ -369,7 +369,10 @@ export function LocalPlayer({
       onCaptionTrack={(id) => {
         if (!entry) return;
         void entry.selectSubtitle(id);
-        writeLanguagePref(id ? (languageCode(entry.subtitles.find((item) => item.id === id)?.lang) ?? "on") : "off");
+        if (!id) return writeLanguagePref("off");
+        const lang = languageCode(entry.subtitles.find((item) => item.id === id)?.lang);
+        if (lang) writeLanguagePref(lang);
+        else if (!readLanguagePref() || readLanguagePref() === "off") writeLanguagePref("on");
       }}
       onCaptionSize={(size) => {
         entry?.setSubtitleSize(size);

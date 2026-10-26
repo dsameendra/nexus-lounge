@@ -63,19 +63,57 @@ export const languageName = (code: string | null) => {
   }
 };
 
-async function readText(response: Response) {
-  if (!response.ok) throw new Error("The subtitle couldn't be downloaded.");
-  const buffer = await response.arrayBuffer();
-  if (buffer.byteLength > MAX_SUBTITLE_BYTES) throw new Error("That subtitle file is too big.");
-  return new TextDecoder("utf-8").decode(buffer);
+const TOO_BIG = "That subtitle file is too big.";
+
+function decodeText(buffer: Uint8Array) {
+  const text = new TextDecoder("utf-8").decode(buffer);
+  return text.includes("\uFFFD") ? new TextDecoder("windows-1252").decode(buffer) : text;
 }
 
-const path = (base: string, url: string) => url.slice(base.length);
+async function readBytes(response: Response) {
+  const declared = Number(response.headers.get("content-length"));
+  if (declared > MAX_SUBTITLE_BYTES) throw new Error(TOO_BIG);
+  if (!response.body) {
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    if (buffer.byteLength > MAX_SUBTITLE_BYTES) throw new Error(TOO_BIG);
+    return buffer;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_SUBTITLE_BYTES) {
+      void reader.cancel().catch(() => {});
+      throw new Error(TOO_BIG);
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return bytes;
+}
+
+async function readText(response: Response) {
+  if (!response.ok) throw new Error("The subtitle couldn't be downloaded.");
+  return decodeText(await readBytes(response));
+}
+
+const requestPath = (url: string) => {
+  const parsed = new URL(url);
+  return parsed.pathname + parsed.search;
+};
 
 async function stremioText(base: string, url: string, timeoutMs = 30_000) {
-  const response = await serverFetch(base, path(base, url), {}, timeoutMs);
+  const response = await serverFetch(base, requestPath(url), {}, timeoutMs);
   if (!response.ok) throw new Error("Stremio couldn't read the subtitles.");
-  return response.text();
+  return decodeText(await readBytes(response));
 }
 
 // Tracks inside the video, as Stremio lists them in the playlist it builds for this browser.
@@ -83,7 +121,7 @@ async function embeddedOptions(base: string, mediaUrl: string, known?: string): 
   const master = known ?? hlsUrl(base, mediaUrl, browserCaps());
   const text = await stremioText(base, master, 20_000);
   const options: SubtitleOption[] = [];
-  for (const line of text.split("\n")) {
+  for (const line of text.split(/\r?\n/)) {
     if (!line.startsWith("#EXT-X-MEDIA:") || !line.includes("TYPE=SUBTITLES")) continue;
     const attr = (name: string) => new RegExp(`${name}="([^"]*)"`).exec(line)?.[1] ?? null;
     const uri = attr("URI");
@@ -99,7 +137,7 @@ async function embeddedOptions(base: string, mediaUrl: string, known?: string): 
       origin: "embedded",
       load: async () => {
         const list = await stremioText(base, playlist);
-        const segments = list.split("\n").filter((row) => row && !row.startsWith("#"));
+        const segments = list.split(/\r?\n/).map((row) => row.trim()).filter((row) => row && !row.startsWith("#"));
         const parts: string[] = [];
         for (let i = 0; i < segments.length; i += 4) {
           parts.push(...(await Promise.all(segments.slice(i, i + 4).map((row) => stremioText(base, new URL(row, playlist).toString())))));
@@ -140,7 +178,7 @@ export async function discoverSubtitles(source: SubtitleSource): Promise<Subtitl
 export async function subtitleFromFile(file: File): Promise<SubtitleOption> {
   if (file.size > MAX_SUBTITLE_BYTES) throw new Error("That subtitle file is too big.");
   if (!/\.(srt|vtt)$/i.test(file.name)) throw new Error("Pick an .srt or .vtt subtitle file.");
-  const text = await file.text();
+  const text = decodeText(new Uint8Array(await file.arrayBuffer()));
   const lang = guessLanguage(file.name.replace(/\.[a-z0-9]+$/i, ""));
   const vtt = /\.vtt$/i.test(file.name) ? (text.trimStart().startsWith("WEBVTT") ? text : srtToVtt(text)) : srtToVtt(text);
   if (!vtt.includes("-->")) throw new Error("That file has no subtitles in it.");

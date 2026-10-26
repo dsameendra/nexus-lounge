@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useRoomContext } from "@livekit/components-react";
 import { AudioPresets, RoomEvent, Track } from "livekit-client";
 import { expectedPosition, languageCode, streamKey, type Stream } from "@nexus/shared";
-import { LocalEntry, registry, type EntrySource } from "@/lib/local-entry";
+import { LocalEntry, registry, URL_OPEN_MS, type EntrySource } from "@/lib/local-entry";
 import { canHostFeed, openRemembered, readFingerprint, recallFile, rememberFile, type PickedFile } from "@/lib/local-files";
 import { blindTorrentSource, friendlyError, requireStremio, resolveLinkForStream, resolveTorrentForStream, type Resolved } from "@/lib/remote-media";
 import { discoverSubtitles, readLanguagePref } from "@/lib/subtitles";
@@ -91,10 +91,12 @@ export function LocalFilesProvider({ children }: { children: React.ReactNode }) 
       const created = new LocalEntry(streamId, source);
       const { state: now, clock: roomClock } = latest.current;
       const playback = now.streams.find((item) => item.id === streamId)?.playback;
-      const at = playback && roomClock.ready ? expectedPosition(playback, roomClock.now()) : null;
+      const room = playback && roomClock.ready ? expectedPosition(playback, roomClock.now()) : null;
+      const length = now.streams.find((item) => item.id === streamId)?.file?.duration;
+      const at = room !== null && length && room >= length - 1 ? 0 : room;
       try {
         await created.start(at ?? 0);
-        await created.opened(source.kind === "url" ? 60_000 : 10_000);
+        await created.opened(source.kind === "url" ? URL_OPEN_MS : 10_000);
       } catch (error) {
         created.destroy();
         throw error;
@@ -108,7 +110,8 @@ export function LocalFilesProvider({ children }: { children: React.ReactNode }) 
         void discoverSubtitles(source.subs).then((found) => {
           created.addSubtitles(found);
           const saved = readLanguagePref();
-          const wanted = saved === "off" ? null : (saved ?? languageCode(navigator.language));
+          const pref = saved === "off" || (saved && saved !== "on" && /^[a-z]{2,3}$/.test(saved)) ? saved : null;
+          const wanted = pref === "off" ? null : (pref ?? languageCode(navigator.language));
           const match = wanted ? found.find((option) => option.lang === wanted) : undefined;
           if (match && created.activeSubtitle === null && !created.subtitleBusy) void created.selectSubtitle(match.id);
         });

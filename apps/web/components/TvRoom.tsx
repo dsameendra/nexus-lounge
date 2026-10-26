@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { AudioTrack, isTrackReference, useTracks } from "@livekit/components-react";
 import { Track } from "livekit-client";
-import { isDeviceSource, screenId } from "@nexus/shared";
+import { isDeviceSource, isTypingTarget, screenId } from "@nexus/shared";
+import { enterFullscreen, exitFullscreen, fullscreenSupported, isFullscreen } from "@/lib/fullscreen";
 import { ProviderBadge } from "./Badges";
 import { FloatingReactions } from "./Reactions";
 import { ExitFullscreenIcon, FilmIcon, FullscreenIcon } from "./Icons";
@@ -47,18 +48,13 @@ function useIdleCursor(delay = 3000) {
   return idle;
 }
 
-type FullscreenDoc = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => void };
-type FullscreenEl = HTMLElement & { webkitRequestFullscreen?: () => void };
-
 // The whole TV page goes fullscreen, so the choice is the viewer's: browsers on TVs often start in a window with chrome around it.
 function useTvFullscreen() {
   const [active, setActive] = useState(false);
   const [supported, setSupported] = useState(false);
   useEffect(() => {
-    const doc = document as FullscreenDoc;
-    const root = document.documentElement as FullscreenEl;
-    setSupported(Boolean(document.fullscreenEnabled || root.webkitRequestFullscreen));
-    const update = () => setActive(Boolean(document.fullscreenElement || doc.webkitFullscreenElement));
+    setSupported(fullscreenSupported());
+    const update = () => setActive(isFullscreen());
     update();
     document.addEventListener("fullscreenchange", update);
     document.addEventListener("webkitfullscreenchange", update);
@@ -68,13 +64,7 @@ function useTvFullscreen() {
     };
   }, []);
   const toggle = useCallback(() => {
-    const doc = document as FullscreenDoc;
-    const root = document.documentElement as FullscreenEl;
-    if (document.fullscreenElement || doc.webkitFullscreenElement) {
-      if (document.exitFullscreen) void document.exitFullscreen().catch(() => {});
-      else doc.webkitExitFullscreen?.();
-    } else if (root.requestFullscreen) void root.requestFullscreen().catch(() => {});
-    else root.webkitRequestFullscreen?.();
+    void (isFullscreen() ? exitFullscreen() : enterFullscreen());
   }, []);
   return { active, supported, toggle };
 }
@@ -89,6 +79,7 @@ export function TvRoom() {
   const { effectiveId, stream, share } = useEffectiveSource();
   const [toast, setToast] = useState(false);
   const showingScreen = Boolean(share);
+  const showFullscreen = fullscreen.supported && stream?.source.type !== "twitch";
   const title = stream?.title ?? (share ? `${share.participant.name || share.participant.identity}'s screen` : null);
 
   useEffect(() => {
@@ -97,11 +88,18 @@ export function TvRoom() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === "f" && !event.metaKey && !event.ctrlKey && !event.altKey) fullscreen.toggle();
+      if (event.key.toLowerCase() !== "f" || event.repeat || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      const target = event.target as HTMLElement | null;
+      if (isTypingTarget(target?.tagName, Boolean(target?.isContentEditable))) return;
+      if (showFullscreen) fullscreen.toggle();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [fullscreen.toggle]);
+  }, [fullscreen.toggle, showFullscreen]);
+
+  useEffect(() => {
+    if (!showFullscreen) setFocused(false);
+  }, [showFullscreen]);
 
   useEffect(() => {
     if (!title) return;
@@ -151,11 +149,14 @@ export function TvRoom() {
         <p className="truncate text-3xl font-semibold">{title}</p>
       </div>
 
-      {fullscreen.supported && stream?.source.type !== "twitch" && (
+      {showFullscreen && (
         <button
           type="button"
-          onClick={fullscreen.toggle}
-          onFocus={() => setFocused(true)}
+          onClick={(event) => {
+            fullscreen.toggle();
+            if (event.detail > 0) event.currentTarget.blur();
+          }}
+          onFocus={(event) => setFocused(event.currentTarget.matches(":focus-visible"))}
           onBlur={() => setFocused(false)}
           aria-label={fullscreen.active ? "Exit fullscreen" : "Enter fullscreen"}
           title={fullscreen.active ? "Exit fullscreen (F)" : "Enter fullscreen (F)"}

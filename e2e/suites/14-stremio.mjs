@@ -37,7 +37,7 @@ const browser = await launch({ args: ["--autoplay-policy=no-user-gesture-require
 const person = async (sub, name, base, room, extra = {}) => {
   const entry = await newPage(browser, { width: 1280, height: 800 });
   await entry.context.addCookies([await mintSession(sub, name)]);
-  await entry.page.addInitScript(([address, forced]) => { localStorage.setItem("nexus-stremio-server", address); if (forced) localStorage.setItem("nexus-stremio-force", forced); window.__pcs = []; const N = window.RTCPeerConnection; window.RTCPeerConnection = function (...a) { const pc = new N(...a); window.__pcs.push(pc); return pc; }; window.RTCPeerConnection.prototype = N.prototype; }, [base, extra.force ?? ""]);
+  await entry.page.addInitScript(([address, forced]) => { localStorage.setItem("nexus-stremio-server", address); localStorage.setItem("nexus-debug", "1"); if (forced) localStorage.setItem("nexus-stremio-force", forced); window.__pcs = []; const N = window.RTCPeerConnection; window.RTCPeerConnection = function (...a) { const pc = new N(...a); window.__pcs.push(pc); return pc; }; window.RTCPeerConnection.prototype = N.prototype; }, [base, extra.force ?? ""]);
   entry.sent = [];
   entry.page.on("websocket", (ws) => ws.on("framesent", (frame) => entry.sent.push(String(frame.payload))));
   if (room) { await entry.page.goto(`${BASE}/room/${room}`); await entry.page.getByRole("button", { name: "Join room" }).click(); }
@@ -76,7 +76,10 @@ check(await until(async () => { const v = await playing(p, GOOD); return v && !v
 check((await p.getByText("Stremio", { exact: true }).count()) > 0, "the stream is badged Stremio");
 
 console.log("Subtitles");
-const shown = (page) => page.evaluate(() => { const v = [...document.querySelectorAll("video")].find((el) => !el.srcObject && el.textTracks.length && !el.closest("[aria-hidden=true]")); const t = v && [...v.textTracks].find((x) => x.mode === "showing"); return t ? { label: t.label, cues: t.cues?.length ?? 0, text: t.cues?.[0]?.text ?? "" } : null; });
+// The video of the stream on stage: the visible one that is playing, else the first visible one (never the feed).
+const STAGE_VIDEO = `(() => { const vids = [...document.querySelectorAll("video")].filter((el) => !el.srcObject && !el.closest("[aria-hidden=true]") && el.getBoundingClientRect().width > 0); return vids.find((el) => !el.paused) ?? vids[0] ?? null; })()`;
+const shown = (page) => page.evaluate(`(() => { const v = ${STAGE_VIDEO}; const t = v && [...v.textTracks].find((x) => x.mode === "showing"); return t ? { label: t.label, cues: t.cues?.length ?? 0, text: t.cues?.[0]?.text ?? "" } : null; })()`);
+const stageSubSize = (page) => page.evaluate(`${STAGE_VIDEO}?.dataset.subSize`);
 check(await until(async () => { const s = await shown(p); return s && s.cues > 0 && s.text.includes("Torrent subtitle"); }, 20000), "a subtitle file that came with the torrent shows by itself in the viewer's language");
 await p.getByRole("button", { name: "Subtitles" }).click();
 check((await p.getByRole("menuitemradio").allTextContents()).some((text) => /English/.test(text)), "the Subtitles menu lists it");
@@ -89,7 +92,7 @@ await p.getByRole("menuitemradio", { name: /English/ }).click();
 check(await until(async () => ((await shown(p))?.cues ?? 0) > 0), "picking a track shows it again");
 await p.getByRole("button", { name: "Subtitles" }).click();
 await p.getByRole("button", { name: "Large", exact: true }).click();
-check(await p.evaluate(() => [...document.querySelectorAll("video")].some((v) => v.dataset.subSize === "1")), "the text size can be changed");
+check((await stageSubSize(p)) === "1", "the text size can be changed");
 await p.keyboard.press("Escape");
 
 console.log("A friend without Stremio watches the live feed");
@@ -151,7 +154,7 @@ await addLink("/nocors.webm");
 check(await p.getByText(/converted so every browser can play it/i).isVisible(), "a link the browser can't read goes through Stremio");
 await p.getByRole("button", { name: "Add to library" }).click();
 await closed(p);
-await addLink("/hevc.mkv");
+await addLink("/unsupported.mkv");
 check(await p.getByText(/converted so every browser can play it/i).isVisible(), "a format browsers can't decode goes through Stremio");
 await p.getByRole("button", { name: "Play for everyone" }).click();
 await closed(p);
@@ -163,6 +166,8 @@ const mk = await person("discord-sm-mkv", "Mkv", GOOD);
 const mp = mk.page;
 await mp.goto(BASE); await mp.click("text=Create room"); await mp.waitForURL(/\/room\//);
 await mp.getByRole("button", { name: "Join room" }).click();
+const debugLines = [];
+mp.on("console", (msg) => { if (msg.type() === "debug") debugLines.push(msg.text()); });
 const addMkv = async (path) => { await openAdd(mp); await paste(mp, link(path)); await mp.getByText(/^Ready\./).waitFor({ timeout: 40000 }); };
 const mkvDirect = await mp.evaluate(() => document.createElement("video").canPlayType('video/x-matroska; codecs="avc1.64002a,mp4a.40.2"') !== "");
 await addMkv("/h264.mkv");
@@ -173,7 +178,9 @@ check(await until(async () => { const v = await playing(mp, mkvDirect ? "http://
 await addMkv("/broken.mkv");
 await mp.getByRole("button", { name: "Play for everyone" }).click();
 await closed(mp);
-check(await until(async () => { const v = await playing(mp, "converted"); return v && v.w > 0 && !v.paused && v.t > 1; }, 45000), "a file the browser turns out not to decode falls back to Stremio's playlist by itself");
+check(await until(async () => { const v = await playing(mp, "converted"); return v && v.w > 0 && !v.paused && v.t > 1; }, 45000), "a file the browser can't decode plays through Stremio's playlist");
+if (mkvDirect) check(await until(async () => debugLines.some((line) => line.includes("trying a converted playlist")), 5000), "and the browser first tried the file directly, then fell back to the converted playlist by itself");
+else console.log("  (no Matroska demuxer in this browser: broken.mkv went straight to Stremio, the direct-play fallback isn't exercised)");
 
 console.log("Subtitles inside a video");
 await addLink("/subs.webm");
@@ -228,6 +235,7 @@ check(await until(async () => (await lone.page.getByRole("alert").filter({ hasTe
 console.log("Friends use their own link");
 await cara.page.reload(); await cara.page.getByRole("button", { name: "Join room" }).click();
 const card = (page, title) => inList(page).locator("li").filter({ has: page.getByText(title, { exact: true }) });
+const watch = async (page, title) => { const btn = card(page, title).getByRole("button", { name: `Watch ${title}`, exact: true }); if ((await btn.getAttribute("aria-pressed")) !== "true") await btn.click(); };
 const target = card(cara.page, "ok");
 await target.getByRole("button", { name: /I have this video/ }).click();
 await cara.page.getByLabel("Video link or magnet").fill(`http://127.0.0.1:11572/alt/ok.webm?other=${SECRET}`);
@@ -247,18 +255,18 @@ check(await until(async () => (await eve.page.getByRole("alert").filter({ hasTex
 await eve.page.keyboard.press("Escape");
 
 console.log("Replacing an expired link");
-await p.getByRole("button", { name: "Watch hevc" }).click();
-await card(p, "hevc").getByRole("button", { name: /Replace the link/ }).click();
+await watch(p, "unsupported");
+await card(p, "unsupported").getByRole("button", { name: /Replace the link/ }).click();
 await p.getByLabel("Video link or magnet").fill(`http://127.0.0.1:11572/alt/ok.webm?fresh=${SECRET}`);
 await p.getByRole("button", { name: "Replace link" }).click();
 check(await until(async () => { const v = await playing(p, "http://127.0.0.1:11572"); return v && v.w > 0 && !v.paused; }, 40000), "the owner keeps playing from the fresh link");
 check(await until(async () => { const v = await feedVideo(bob.page); return v && v.w > 0; }, 30000), "friends watching the live feed never lose the picture");
-await card(p, "hevc").getByRole("button", { name: /Replace the link/ }).waitFor();
+await card(p, "unsupported").getByRole("button", { name: /Replace the link/ }).waitFor();
 check(!owner.sent.some((frame) => frame.includes("fresh=")), "the fresh link isn't sent to the room either");
 
 console.log("Refresh and queue");
 await p.reload(); await p.getByRole("button", { name: "Join room" }).click();
-await p.getByRole("button", { name: "Watch hevc" }).click();
+await watch(p, "unsupported");
 check(await until(async () => { const v = await playing(p, "http://127.0.0.1:11572"); return v && v.w > 0; }, 60000), "a stream you were playing comes back after a refresh");
 await inList(p).locator("li").first().getByRole("button", { name: "More actions" }).click();
 check((await p.getByRole("menuitem", { name: /Add to queue/ }).count()) === 0, "these streams can't be queued");
