@@ -1,9 +1,9 @@
 "use client";
 
 import { isSubtitleFileName, looksLikePlaceholder, planLink, sameMedia, titleFromUrl, videoFilesOf, type Stream } from "@nexus/shared";
-import { browserCaps, directPlayable } from "./codecs";
-import type { EntrySource } from "./local-entry";
-import { checkStremio, createTorrent, getStremioBase, getStremioStatus, hlsUrl, probeMedia, statusMessage, torrentFileUrl, type TorrentInfo } from "./stremio";
+import { browserCaps, directPlayable, SAFE_CAPS } from "./codecs";
+import type { EntrySource, Playable } from "./local-entry";
+import { checkStremio, createTorrent, getStremioBase, getStremioStatus, hlsUrl, probeMedia, statusMessage, torrentFileUrl, torrentStats, type TorrentInfo } from "./stremio";
 
 // A problem with a message that is safe and useful to show.
 export class ResolveError extends Error {}
@@ -74,10 +74,28 @@ const LINK_ADVICE: Record<"insecure" | "blocked" | "codecs", string> = {
   codecs: "This video's format can't play in a browser. Open Stremio and try again: it can convert it for you.",
 };
 
+// The playlists Stremio can build for this video: copying what this browser decodes first, then plain H.264/AAC, which
+// plays everywhere, in case the first one doesn't start.
+function playlists(base: string, mediaUrl: string): Playable[] {
+  const caps = browserCaps();
+  const plain = caps.video.join() === SAFE_CAPS.video.join() && caps.audio.join() === SAFE_CAPS.audio.join();
+  const wide: Playable = { url: hlsUrl(base, mediaUrl, caps), hls: true };
+  return plain ? [wide] : [wide, { url: hlsUrl(base, mediaUrl, SAFE_CAPS), hls: true }];
+}
+
+// Direct when the browser can play the file as it is, else a playlist; every other way stays queued behind it.
+function urlSource(base: string | null, mediaUrl: string, direct: boolean, extra: Pick<Extract<EntrySource, { kind: "url" }>, "torrent" | "subs">): EntrySource {
+  const lists = base ? playlists(base, mediaUrl) : [];
+  const ways: Playable[] = direct || !base ? [{ url: mediaUrl, hls: false }, ...lists] : lists;
+  const [first, ...fallbacks] = ways as [Playable, ...Playable[]];
+  const master = first.hls ? first.url : lists[0]?.url;
+  return { kind: "url", url: first.url, hls: first.hls, fallbacks, ...extra, subs: extra.subs ? { ...extra.subs, master } : undefined };
+}
+
 export async function resolveLink(url: string, stremioBase: string | null, step: Step = () => {}): Promise<Resolved> {
   const pageSecure = location.protocol === "https:";
   step("Checking the link…");
-  const remote = await inspectRemote(url);
+  const [remote, probe] = await Promise.all([inspectRemote(url), stremioBase ? probeMedia(stremioBase, url, 60_000) : Promise.resolve(null)]);
   if (remote && remote.status >= 400) throw new ResolveError(`The link doesn't work (the service answered ${remote.status}). It may have expired.`);
   const finalIsHttp = remote ? remote.finalUrl.startsWith("http:") : url.startsWith("http:");
 
@@ -88,12 +106,6 @@ export async function resolveLink(url: string, stremioBase: string | null, step:
     const candidate = insecureAddress.replace(/^http:/, "https:");
     const retry = await inspectRemote(candidate, 8000);
     if (retry && retry.status < 400) upgraded = { url: candidate, remote: retry };
-  }
-
-  let probe = null;
-  if (stremioBase) {
-    step("Asking Stremio to read it…");
-    probe = await probeMedia(stremioBase, url, 60_000);
   }
 
   const plan = planLink({
@@ -110,7 +122,7 @@ export async function resolveLink(url: string, stremioBase: string | null, step:
   const subs = stremioBase && probe && probe.subtitleTracks > 0 ? { base: stremioBase, mediaUrl: url, embedded: true, extras: [] } : undefined;
   if (plan.how === "stremio" && stremioBase && probe) {
     const size = remote?.size ?? 0;
-    return { source: { kind: "url", url: hlsUrl(stremioBase, url, browserCaps()), hls: true, subs }, size, duration: probe.duration, name, how: "stremio", warning: looksLikePlaceholder({ size, duration: probe.duration }) ? PLACEHOLDER : null };
+    return { source: urlSource(stremioBase, url, false, { subs }), size, duration: probe.duration, name, how: "stremio", warning: looksLikePlaceholder({ size, duration: probe.duration }) ? PLACEHOLDER : null };
   }
 
   const playUrl = plan.how === "direct" && plan.upgrade && upgraded ? upgraded.url : url;
@@ -118,7 +130,7 @@ export async function resolveLink(url: string, stremioBase: string | null, step:
   step("Loading the video…");
   const duration = probe?.duration ?? (await loadDuration(playUrl));
   if (!duration) throw new ResolveError(LINK_ADVICE.codecs);
-  return { source: { kind: "url", url: playUrl, hls: false, subs }, size, duration, name, how: "direct", warning: looksLikePlaceholder({ size, duration }) ? PLACEHOLDER : null };
+  return { source: urlSource(stremioBase, playUrl, true, { subs }), size, duration, name, how: "direct", warning: looksLikePlaceholder({ size, duration }) ? PLACEHOLDER : null };
 }
 
 const PLACEHOLDER = "This looks like a very short clip, maybe an error video. The link may have expired or been limited by its service.";
@@ -157,14 +169,20 @@ export async function resolveTorrentFile(base: string, infoHash: string, choice:
   if (!file) throw new ResolveError("That file isn't in the torrent.");
   const mediaUrl = torrentFileUrl(base, infoHash, fileIdx);
   step("Waiting for peers and reading the video…");
-  const probe = await probeMedia(base, mediaUrl, 120_000);
+  const speed = (bytes: number) => (bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB/s` : `${Math.round(bytes / 1e3)} KB/s`);
+  const watch = setInterval(() => {
+    void torrentStats(base, infoHash, fileIdx).then((stats) => {
+      if (stats && stats.peers > 0) step(`Reading the video… ${stats.peers} ${stats.peers === 1 ? "peer" : "peers"} · ${speed(stats.speed)}`);
+    });
+  }, 1500);
+  const probe = await probeMedia(base, mediaUrl, 120_000).finally(() => clearInterval(watch));
   if (!probe) throw new ResolveError("Stremio couldn't read the video. The torrent may have no peers right now: try again in a moment.");
   const torrent = { base, infoHash, fileIdx };
   const direct = directPlayable(probe);
   const extras = choice.info.files.flatMap((item, index) => (isSubtitleFileName(item.name) ? [{ index, name: item.name, infoHash }] : []));
   const subs = probe.subtitleTracks > 0 || extras.length > 0 ? { base, mediaUrl, embedded: probe.subtitleTracks > 0, extras } : undefined;
   return {
-    source: direct ? { kind: "url", url: mediaUrl, hls: false, torrent, subs } : { kind: "url", url: hlsUrl(base, mediaUrl, browserCaps()), hls: true, torrent, subs },
+    source: urlSource(base, mediaUrl, direct, { torrent, subs }),
     size: file.length,
     duration: probe.duration,
     name: prettyName(file.name),
@@ -193,7 +211,7 @@ export async function resolveTorrentForStream(base: string, stream: Stream, step
 // Safari won't let this page ask Stremio anything, but a video can still load from it: play without the checks.
 export function blindTorrentSource(base: string, stream: Stream): EntrySource {
   const { infoHash, fileIdx } = torrentParts(stream);
-  return { kind: "url", url: hlsUrl(base, torrentFileUrl(base, infoHash, fileIdx), browserCaps()), hls: true, torrent: { base, infoHash, fileIdx } };
+  return urlSource(base, torrentFileUrl(base, infoHash, fileIdx), false, { torrent: { base, infoHash, fileIdx } });
 }
 
 export function friendlyError(error: unknown, fallback: string) {

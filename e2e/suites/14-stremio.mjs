@@ -157,6 +157,24 @@ await p.getByRole("button", { name: "Play for everyone" }).click();
 await closed(p);
 check(await until(async () => { const v = await playing(p, "converted"); return v && v.w > 0 && !v.paused && v.t > 1; }, 45000), "and plays through the converted stream");
 
+console.log("Matroska files");
+// A second owner: one person can add only five device streams at a time.
+const mk = await person("discord-sm-mkv", "Mkv", GOOD);
+const mp = mk.page;
+await mp.goto(BASE); await mp.click("text=Create room"); await mp.waitForURL(/\/room\//);
+await mp.getByRole("button", { name: "Join room" }).click();
+const addMkv = async (path) => { await openAdd(mp); await paste(mp, link(path)); await mp.getByText(/^Ready\./).waitFor({ timeout: 40000 }); };
+const mkvDirect = await mp.evaluate(() => document.createElement("video").canPlayType('video/x-matroska; codecs="avc1.64002a,mp4a.40.2"') !== "");
+await addMkv("/h264.mkv");
+check(await mp.getByText(mkvDirect ? /plays straight in your browser/i : /converted so every browser/i).isVisible(), `an H.264 Matroska file ${mkvDirect ? "plays as it is where the browser can" : "goes through Stremio where it can't"}`);
+await mp.getByRole("button", { name: "Play for everyone" }).click();
+await closed(mp);
+check(await until(async () => { const v = await playing(mp, mkvDirect ? "http://127.0.0.1:11572/h264.mkv" : "converted"); return v && v.w > 0 && !v.paused && v.t > 1; }, 45000), "and it plays");
+await addMkv("/broken.mkv");
+await mp.getByRole("button", { name: "Play for everyone" }).click();
+await closed(mp);
+check(await until(async () => { const v = await playing(mp, "converted"); return v && v.w > 0 && !v.paused && v.t > 1; }, 45000), "a file the browser turns out not to decode falls back to Stremio's playlist by itself");
+
 console.log("Subtitles inside a video");
 await addLink("/subs.webm");
 await p.getByRole("button", { name: "Play for everyone" }).click();
@@ -229,6 +247,7 @@ check(await until(async () => (await eve.page.getByRole("alert").filter({ hasTex
 await eve.page.keyboard.press("Escape");
 
 console.log("Replacing an expired link");
+await p.getByRole("button", { name: "Watch hevc" }).click();
 await card(p, "hevc").getByRole("button", { name: /Replace the link/ }).click();
 await p.getByLabel("Video link or magnet").fill(`http://127.0.0.1:11572/alt/ok.webm?fresh=${SECRET}`);
 await p.getByRole("button", { name: "Replace link" }).click();
@@ -239,6 +258,7 @@ check(!owner.sent.some((frame) => frame.includes("fresh=")), "the fresh link isn
 
 console.log("Refresh and queue");
 await p.reload(); await p.getByRole("button", { name: "Join room" }).click();
+await p.getByRole("button", { name: "Watch hevc" }).click();
 check(await until(async () => { const v = await playing(p, "http://127.0.0.1:11572"); return v && v.w > 0; }, 60000), "a stream you were playing comes back after a refresh");
 await inList(p).locator("li").first().getByRole("button", { name: "More actions" }).click();
 check((await p.getByRole("menuitem", { name: /Add to queue/ }).count()) === 0, "these streams can't be queued");

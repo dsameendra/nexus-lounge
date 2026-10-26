@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRoomContext } from "@livekit/components-react";
 import { AudioPresets, RoomEvent, Track } from "livekit-client";
-import { languageCode, streamKey, type Stream } from "@nexus/shared";
+import { expectedPosition, languageCode, streamKey, type Stream } from "@nexus/shared";
 import { LocalEntry, registry, type EntrySource } from "@/lib/local-entry";
 import { canHostFeed, openRemembered, readFingerprint, recallFile, rememberFile, type PickedFile } from "@/lib/local-files";
 import { blindTorrentSource, friendlyError, requireStremio, resolveLinkForStream, resolveTorrentForStream, type Resolved } from "@/lib/remote-media";
@@ -67,45 +67,6 @@ export function useLocalFiles() {
 
 export const NOT_THE_SAME_FILE = "That isn't the same file as the one in the room. Pick the exact same file (same size and content).";
 
-function ready(entry: LocalEntry, timeoutMs: number) {
-  return new Promise<void>((resolve, reject) => {
-    const { video } = entry;
-    if (video.readyState >= 1) return resolve();
-    const fail = () => {
-      clearInterval(watch);
-      reject(new Error(entry.error ?? "This file couldn't be opened."));
-    };
-    const timer = setTimeout(fail, timeoutMs);
-    const watch = setInterval(() => {
-      if (entry.error) {
-        clearTimeout(timer);
-        fail();
-      }
-    }, 250);
-    video.addEventListener(
-      "loadedmetadata",
-      () => {
-        clearTimeout(timer);
-        clearInterval(watch);
-        if (video.videoWidth === 0) {
-          entry.error = "This browser can play this file's sound but not its picture. MP4 (H.264/AAC) and WebM work everywhere.";
-          return fail();
-        }
-        resolve();
-      },
-      { once: true },
-    );
-    video.addEventListener(
-      "error",
-      () => {
-        clearTimeout(timer);
-        fail();
-      },
-      { once: true },
-    );
-  });
-}
-
 export function LocalFilesProvider({ children }: { children: React.ReactNode }) {
   const lk = useRoomContext();
   const { state, self, send, status, clock } = useRoom();
@@ -128,9 +89,12 @@ export function LocalFilesProvider({ children }: { children: React.ReactNode }) 
   const install = useCallback(
     async (streamId: string, source: EntrySource, picked?: PickedFile) => {
       const created = new LocalEntry(streamId, source);
+      const { state: now, clock: roomClock } = latest.current;
+      const playback = now.streams.find((item) => item.id === streamId)?.playback;
+      const at = playback && roomClock.ready ? expectedPosition(playback, roomClock.now()) : null;
       try {
-        await created.start();
-        await ready(created, source.kind === "url" ? 60_000 : 10_000);
+        await created.start(at ?? 0);
+        await created.opened(source.kind === "url" ? 60_000 : 10_000);
       } catch (error) {
         created.destroy();
         throw error;

@@ -20,6 +20,8 @@ export interface SubtitleSource {
   base: string;
   mediaUrl: string;
   embedded: boolean;
+  // The playlist this video is already playing from, so listing its tracks doesn't ask Stremio to open another session.
+  master?: string;
   extras: { index: number; name: string; infoHash: string }[];
 }
 
@@ -77,8 +79,8 @@ async function stremioText(base: string, url: string, timeoutMs = 30_000) {
 }
 
 // Tracks inside the video, as Stremio lists them in the playlist it builds for this browser.
-async function embeddedOptions(base: string, mediaUrl: string): Promise<SubtitleOption[]> {
-  const master = hlsUrl(base, mediaUrl, browserCaps());
+async function embeddedOptions(base: string, mediaUrl: string, known?: string): Promise<SubtitleOption[]> {
+  const master = known ?? hlsUrl(base, mediaUrl, browserCaps());
   const text = await stremioText(base, master, 20_000);
   const options: SubtitleOption[] = [];
   for (const line of text.split("\n")) {
@@ -131,7 +133,7 @@ function torrentOptions(source: SubtitleSource): SubtitleOption[] {
 }
 
 export async function discoverSubtitles(source: SubtitleSource): Promise<SubtitleOption[]> {
-  const [embedded, torrent] = await Promise.all([(source.embedded ? embeddedOptions(source.base, source.mediaUrl).catch(() => []) : Promise.resolve([])), Promise.resolve(torrentOptions(source))]);
+  const [embedded, torrent] = await Promise.all([(source.embedded ? embeddedOptions(source.base, source.mediaUrl, source.master).catch(() => []) : Promise.resolve([])), Promise.resolve(torrentOptions(source))]);
   return [...embedded, ...torrent];
 }
 

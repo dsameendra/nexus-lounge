@@ -11,7 +11,27 @@ export type SyncStatus = "synced" | "syncing" | "waiting";
 // Where an open video comes from: a file on this computer, or an address (a torrent served by Stremio, or a link).
 export type EntrySource =
   | { kind: "file"; file: File }
-  | { kind: "url"; url: string; hls: boolean; torrent?: { base: string; infoHash: string; fileIdx: number }; subs?: SubtitleSource };
+  | { kind: "url"; url: string; hls: boolean; torrent?: { base: string; infoHash: string; fileIdx: number }; subs?: SubtitleSource; fallbacks?: Playable[] };
+
+// One way to play an address. A stream lists the next ways to try when the first doesn't work in this browser.
+export interface Playable {
+  url: string;
+  hls: boolean;
+}
+
+// Stremio's converter can take a while to answer the first request of a playlist or a segment (it starts ffmpeg
+// then), so wait longer than hls.js would before it gives up and asks again, which would only restart the work.
+const PATIENT = { maxTimeToFirstByteMs: 45_000, maxLoadTimeMs: 180_000, timeoutRetry: { maxNumRetry: 3, retryDelayMs: 500, maxRetryDelayMs: 2000 }, errorRetry: { maxNumRetry: 4, retryDelayMs: 800, maxRetryDelayMs: 6000 } };
+
+// How a stream started and whether it kept up: for the log and for explaining slow playback.
+export interface StreamPerf {
+  openedMs: number | null;
+  firstFrameMs: number | null;
+  stalls: number;
+  stalledMs: number;
+  recentStallAt: number;
+  fellBack: number;
+}
 
 // One local file in this browser: its <video>, its audio graph and the loop that keeps it on the room clock.
 // The element stays at full volume and unmuted: a Web Audio source follows the element's volume, so everything
@@ -41,6 +61,12 @@ export class LocalEntry {
   readonly file: File | null;
   hls: Hls | null = null;
   private hlsRetries = 0;
+  private current: Playable | null;
+  private fallbacks: Playable[];
+  private startAt = 0;
+  private startedAt = 0;
+  private stalledSince = 0;
+  readonly perf: StreamPerf = { openedMs: null, firstFrameMs: null, stalls: 0, stalledMs: 0, recentStallAt: 0, fellBack: 0 };
   private destroyed = false;
   subtitles: SubtitleOption[] = [];
   activeSubtitle: string | null = null;
@@ -55,6 +81,8 @@ export class LocalEntry {
     this.source = source;
     this.file = source.kind === "file" ? source.file : null;
     this.url = source.kind === "file" ? URL.createObjectURL(source.file) : source.url;
+    this.current = source.kind === "url" ? { url: source.url, hls: source.hls } : null;
+    this.fallbacks = source.kind === "url" ? [...(source.fallbacks ?? [])] : [];
     const { video } = this;
     // The audio graph and the live feed both read the picture, which browsers only allow for same-origin or CORS media.
     if (source.kind === "url") video.crossOrigin = "anonymous";
@@ -63,7 +91,31 @@ export class LocalEntry {
     video.disablePictureInPicture = false;
     video.style.cssText = "width:100%;height:100%;display:block;background:#000;object-fit:contain";
     video.addEventListener("error", () => {
-      if (!this.hls) this.error = describeMediaError(video, source.kind === "url");
+      if (this.hls || this.destroyed) return;
+      if (this.fallBack("the browser couldn't play it")) return;
+      this.error = describeMediaError(video, source.kind === "url");
+    });
+    video.addEventListener("waiting", () => {
+      if (!this.stalledSince && !video.seeking && this.perf.firstFrameMs !== null) this.stalledSince = performance.now();
+    });
+    video.addEventListener("playing", () => {
+      if (this.perf.firstFrameMs === null && this.startedAt) {
+        this.perf.firstFrameMs = Math.round(performance.now() - this.startedAt);
+        this.log(`first picture after ${this.perf.firstFrameMs} ms`);
+      }
+      if (this.stalledSince) {
+        const waited = performance.now() - this.stalledSince;
+        this.stalledSince = 0;
+        if (waited > 400) {
+          this.perf.stalls++;
+          this.perf.stalledMs += Math.round(waited);
+          this.perf.recentStallAt = Date.now();
+          this.log(`stalled ${Math.round(waited)} ms`);
+        }
+      }
+    });
+    video.addEventListener("seeking", () => {
+      this.stalledSince = 0;
     });
     video.dataset.subSize = String(this.subtitleSize);
     this.initAudio();
@@ -122,30 +174,110 @@ export class LocalEntry {
     }
   }
 
-  // Playlists go through hls.js where the browser has no native HLS (Safari has it).
-  async start() {
-    const { video, source } = this;
+  private log(message: string) {
+    if (this.source.kind === "url") console.debug(`[nexus stream ${this.streamId.slice(0, 8)}] ${message}`);
+  }
+
+  // Resolves once the video has its first frame size; with other ways to play queued, a failure or a long silence
+  // moves on to the next one instead of giving up.
+  opened(timeoutMs: number) {
+    return new Promise<void>((resolve, reject) => {
+      const { video } = this;
+      if (video.readyState >= 1 && video.videoWidth > 0) return resolve();
+      const done = (error?: string) => {
+        clearTimeout(timer);
+        clearTimeout(slow);
+        clearInterval(watch);
+        video.removeEventListener("loadedmetadata", onMeta);
+        if (error) reject(new Error(error));
+        else {
+          this.perf.openedMs = Math.round(performance.now() - this.startedAt);
+          this.log(`opened after ${this.perf.openedMs} ms (${this.current?.hls ? "converted by Stremio" : "played directly"})`);
+          resolve();
+        }
+      };
+      const onMeta = () => {
+        if (video.videoWidth > 0) return done();
+        if (this.fallBack("no picture")) return;
+        this.error = "This browser can play this file's sound but not its picture. MP4 (H.264/AAC) and WebM work everywhere.";
+        done(this.error);
+      };
+      const timer = setTimeout(() => done(this.error ?? "This file couldn't be opened."), timeoutMs);
+      const slow = setTimeout(() => {
+        if (video.readyState < 1) this.fallBack("slow to open");
+      }, 25_000);
+      const watch = setInterval(() => {
+        if (this.error) done(this.error);
+      }, 250);
+      video.addEventListener("loadedmetadata", onMeta);
+    });
+  }
+
+  // Moves to the next way of playing this address. false when there is none left.
+  private fallBack(why: string) {
+    const next = this.fallbacks.shift();
+    if (!next || this.destroyed) return false;
+    this.perf.fellBack++;
+    this.log(`${why}; trying ${next.hls ? "a converted playlist" : "a direct file"}`);
+    this.current = next;
+    this.hlsRetries = 0;
+    this.hls?.destroy();
+    this.hls = null;
+    this.video.removeAttribute("src");
+    this.video.load();
+    void this.load();
+    return true;
+  }
+
+  // Playlists go through hls.js where the browser has no native HLS (Safari has it). startAt is where the room is now,
+  // so a late joiner asks for the right part first instead of loading the beginning and jumping.
+  async start(startAt = 0) {
+    this.startAt = startAt;
+    this.startedAt = performance.now();
+    await this.load();
+  }
+
+  private async load() {
+    const { video } = this;
+    const target = this.current;
     // Safari plays HLS natively and best; everywhere else hls.js is the proven path.
-    if (source.kind === "url" && source.hls && !(isApple() && video.canPlayType("application/vnd.apple.mpegurl"))) {
+    if (target && target.hls && !(isApple() && video.canPlayType("application/vnd.apple.mpegurl"))) {
       const { default: HlsClass } = await import("hls.js");
-      if (this.destroyed) return;
+      if (this.destroyed || this.current !== target) return;
       if (!HlsClass.isSupported()) {
-        this.error = "This browser can't play this kind of stream.";
+        if (!this.fallBack("no playlist support")) this.error = "This browser can't play this kind of stream.";
         return;
       }
-      const hls = new HlsClass({ maxBufferLength: 60, maxMaxBufferLength: 120, backBufferLength: 30 });
+      const hls = new HlsClass({
+        maxBufferLength: 40,
+        maxMaxBufferLength: 120,
+        backBufferLength: 30,
+        startPosition: this.startAt > 2 ? this.startAt : -1,
+        startFragPrefetch: true,
+        // The subtitle tracks Stremio lists are read and shown by us (and lose their first cues in its playlist), so hls.js stays out of them: otherwise a track appears twice.
+        enableWebVTT: false,
+        enableIMSC1: false,
+        enableCEA708Captions: false,
+        manifestLoadPolicy: { default: { ...PATIENT, maxTimeToFirstByteMs: 60_000 } },
+        playlistLoadPolicy: { default: PATIENT },
+        fragLoadPolicy: { default: PATIENT },
+      });
       this.hls = hls;
+      hls.subtitleDisplay = false;
       hls.on(HlsClass.Events.ERROR, (_event, data) => {
-        if (!data.fatal) return;
+        if (!data.fatal || this.hls !== hls) return;
+        this.log(`playlist error ${data.details}`);
         if (data.type === HlsClass.ErrorTypes.NETWORK_ERROR && this.hlsRetries++ < 3) hls.startLoad();
         else if (data.type === HlsClass.ErrorTypes.MEDIA_ERROR && this.hlsRetries++ < 3) hls.recoverMediaError();
-        else this.error = "The stream stopped. If it is a link, it may have expired.";
+        else if (!this.fallBack("the playlist failed")) this.error = "The stream stopped. If it is a link, it may have expired.";
       });
       hls.attachMedia(video);
-      hls.loadSource(source.url);
+      hls.loadSource(target.url);
       return;
     }
-    video.src = this.url;
+    const startAt = this.startAt;
+    if (startAt > 2) video.addEventListener("loadedmetadata", () => (video.currentTime = Math.min(startAt, Math.max(0, video.duration - 1) || startAt)), { once: true });
+    video.src = target ? target.url : this.url;
   }
 
   private initAudio() {

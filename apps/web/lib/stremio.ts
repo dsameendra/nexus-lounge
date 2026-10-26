@@ -11,9 +11,16 @@ const FORCE_KEY = "nexus-stremio-force";
 // insecure: this browser won't let an https page call an http Stremio (Safari); playing still works, checking doesn't.
 export type StremioStatus = "unknown" | "checking" | "connected" | "offline" | "denied" | "insecure";
 
+// What the owner's Stremio is set to do, read from its settings: used to explain slow playback.
+export interface StremioLimits {
+  downloadLimit: number;
+  hardwareAccel: boolean | null;
+}
+
 interface State {
   base: string;
   status: StremioStatus;
+  limits: StremioLimits | null;
 }
 
 export function normalizeServerUrl(input: string) {
@@ -36,7 +43,7 @@ function readBase() {
   }
 }
 
-let state: State = { base: DEFAULT_SERVER, status: "unknown" };
+let state: State = { base: DEFAULT_SERVER, status: "unknown", limits: null };
 let loaded = false;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((listener) => listener());
@@ -56,6 +63,16 @@ function set(next: Partial<State>) {
 
 export const getStremioBase = () => (load(), state.base);
 export const getStremioStatus = () => (load(), state.status);
+export const getStremioLimits = () => state.limits;
+
+function readLimits(data: unknown): StremioLimits | null {
+  const values = (data as { values?: Record<string, unknown> } | null)?.values;
+  if (!values) return null;
+  const hard = Number(values.btDownloadSpeedHardLimit);
+  const soft = Number(values.btDownloadSpeedSoftLimit);
+  const limit = Math.max(Number.isFinite(hard) ? hard : 0, Number.isFinite(soft) ? soft : 0);
+  return { downloadLimit: limit > 0 ? limit : 0, hardwareAccel: typeof values.transcodeHardwareAccel === "boolean" ? values.transcodeHardwareAccel : null };
+}
 
 export function setStremioBase(input: string) {
   const base = normalizeServerUrl(input);
@@ -64,7 +81,7 @@ export function setStremioBase(input: string) {
     if (base === DEFAULT_SERVER) localStorage.removeItem(KEY);
     else localStorage.setItem(KEY, base);
   } catch {}
-  set({ base, status: "unknown" });
+  set({ base, status: "unknown", limits: null });
   return true;
 }
 
@@ -113,6 +130,7 @@ export async function checkStremio(): Promise<StremioStatus> {
   const base = state.base;
   set({ status: "checking" });
   let status: StremioStatus;
+  let limits: StremioLimits | null = null;
   try {
     const forced = localStorage.getItem(FORCE_KEY);
     if (forced) {
@@ -120,11 +138,12 @@ export async function checkStremio(): Promise<StremioStatus> {
     } else {
       const response = await serverFetch(base, "/settings", {}, 4500);
       status = response.ok ? "connected" : "offline";
+      if (response.ok) limits = readLimits(await response.json().catch(() => null));
     }
   } catch {
     status = await diagnose(base);
   }
-  if (state.base === base) set({ status });
+  if (state.base === base) set({ status, limits });
   return status;
 }
 
