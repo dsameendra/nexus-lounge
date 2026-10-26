@@ -20,7 +20,7 @@ const person = async (browser, sub, name, viewport = { width: 1280, height: 800 
 };
 const addStream = async (page, url, mode) => {
   await page.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
-  await page.fill("input[placeholder='Paste a YouTube or Twitch link']", url);
+  await page.fill("input[placeholder='Paste a YouTube, Twitch or Kick link']", url);
   await page.getByRole("button", { name: mode }).click();
   await sleep(1200);
 };
@@ -41,7 +41,7 @@ await addStream(op, `https://www.twitch.tv/${CHANNEL}`, "Add to library");
 console.log("Focus rings");
 await op.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
 const focusStyle = async () => op.evaluate(() => { const el = document.activeElement; const s = getComputedStyle(el); return { tag: el.tagName, outline: s.outlineStyle, wrapper: getComputedStyle(el.closest("label") ?? el).boxShadow }; });
-await op.waitForSelector("input[placeholder='Paste a YouTube or Twitch link']");
+await op.waitForSelector("input[placeholder='Paste a YouTube, Twitch or Kick link']");
 const addFocus = await focusStyle();
 check(addFocus.tag === "INPUT" && addFocus.outline === "none" && /0px 0px 0px 2px/.test(addFocus.wrapper), `the Add a stream field shows one focus ring (the field's), not two (outline ${addFocus.outline})`);
 await op.keyboard.press("Escape");
@@ -49,7 +49,7 @@ await sleep(400);
 
 console.log("Playlists");
 await op.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
-await op.fill("input[placeholder='Paste a YouTube or Twitch link']", PLAYLIST);
+await op.fill("input[placeholder='Paste a YouTube, Twitch or Kick link']", PLAYLIST);
 check(await visible(op.getByText("YouTube playlist")), "pasting a playlist link is recognised");
 check(await visible(op.getByRole("button", { name: "Add playlist" })), "the sheet offers Add playlist");
 await op.getByRole("button", { name: "Add playlist" }).click();

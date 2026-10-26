@@ -1,4 +1,4 @@
-import type { MediaSource } from "./types.ts";
+import { KICK_CHANNEL, type MediaSource } from "./types.ts";
 
 const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
 const TWITCH_CHANNEL = /^[A-Za-z0-9_]{3,25}$/;
@@ -7,11 +7,18 @@ const TWITCH_RESERVED = new Set([
   "wallet", "friends", "messages", "prime", "store", "p", "popout", "moderator", "embed", "clips",
 ]);
 
+const KICK_RESERVED = new Set([
+  "categories", "category", "search", "browse", "following", "dashboard", "video", "videos", "clips", "clip", "community",
+  "terms-of-service", "privacy-policy", "community-guidelines", "dmca-policy", "support", "help", "login", "signup", "settings", "popout", "embed",
+  "api", "app", "emotes", "store", "subscriptions", "notifications", "messages", "creator-dashboard", "kick-prime", "prime", "live", "streamers",
+]);
+const KICK_NOT_CHANNEL = "Kick videos and clips aren't supported. Paste a channel link (kick.com/name) to watch it live.";
+
 export type ParseResult = { ok: true; source: MediaSource } | { ok: false; reason: string };
 
 export function parseMediaUrl(input: string): ParseResult {
   const text = input.trim();
-  if (!text) return { ok: false, reason: "Paste a YouTube or Twitch link." };
+  if (!text) return { ok: false, reason: "Paste a YouTube, Twitch or Kick link." };
 
   let url: URL;
   try {
@@ -53,7 +60,14 @@ export function parseMediaUrl(input: string): ParseResult {
     return { ok: false, reason: "Couldn't find a Twitch channel or video in that link." };
   }
 
-  return { ok: false, reason: "Only YouTube and Twitch links work for now." };
+  if (host === "kick.com" || host === "player.kick.com") {
+    const first = parts[0]?.toLowerCase();
+    if (host === "player.kick.com" && first === "video") return { ok: false, reason: KICK_NOT_CHANNEL };
+    if (!first || KICK_RESERVED.has(first) || parts[1]?.toLowerCase() === "videos" || parts[1]?.toLowerCase() === "clips") return { ok: false, reason: first && !KICK_RESERVED.has(first) ? KICK_NOT_CHANNEL : "Couldn't find a Kick channel in that link." };
+    return KICK_CHANNEL.test(first) ? { ok: true, source: { type: "kick", id: first, isLive: true } } : { ok: false, reason: "Couldn't find a Kick channel in that link." };
+  }
+
+  return { ok: false, reason: "Only YouTube, Twitch and Kick links work for now." };
 }
 
 function youtube(id: string, isLive: boolean): ParseResult {

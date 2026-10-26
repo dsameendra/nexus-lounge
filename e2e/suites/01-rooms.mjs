@@ -61,7 +61,7 @@ await op.keyboard.press("Escape");
 
 console.log("Streams, reactions");
 await op.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
-await op.fill("input[placeholder='Paste a YouTube or Twitch link']", "https://www.youtube.com/watch?v=jNQXAC9IVRw");
+await op.fill("input[placeholder='Paste a YouTube, Twitch or Kick link']", "https://www.youtube.com/watch?v=jNQXAC9IVRw");
 await op.getByRole("button", { name: "Play for everyone" }).click();
 check(await visible(gp.locator("iframe[src*='youtube']"), 30000), "guest gets the featured YouTube player");
 check(await visible(op.getByText("Me at the zoo").first(), 20000), "title is fetched and shown");
@@ -72,7 +72,7 @@ await op.screenshot({ path: "e2e-reaction.png" });
 
 console.log("Queue");
 await op.getByRole("button", { name: /Add$/ }).first().click();
-await op.fill("input[placeholder='Paste a YouTube or Twitch link']", "https://youtu.be/dQw4w9WgXcQ");
+await op.fill("input[placeholder='Paste a YouTube, Twitch or Kick link']", "https://youtu.be/dQw4w9WgXcQ");
 await op.getByRole("button", { name: "Add to library" }).click();
 check(await visible(op.getByText("Up next", { exact: true }).first(), 15000), "the item after the featured one is marked Up next");
 const cards = op.locator("section[aria-label='Streams'] li");

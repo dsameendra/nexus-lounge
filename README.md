@@ -5,7 +5,7 @@
 # Nexus Lounge
 
 **Watch together, wherever you are.**
-Voice, chat, synced YouTube and Twitch, and screen sharing in one shared room. Installs as an app on phones and desktops.
+Voice, chat, synced YouTube, Twitch and Kick, and screen sharing in one shared room. Installs as an app on phones and desktops.
 
 <img src="docs/screenshots/desktop-room.png" alt="A room with a synced video, voice and chat" width="860" />
 
@@ -47,7 +47,7 @@ I built it so my friends and I could watch League of Legends Worlds together, bu
 - Roles: the owner can make other Discord users controllers, who can pick what the room watches, control playback, reorder the queue, put a screen share on air, and stop someone's screen share.
 
 **Watching**
-- Paste any YouTube or Twitch link (video, live stream, channel, past broadcast) to add it to the room's stream list.
+- Paste any YouTube, Twitch or Kick link (video, live stream, channel, past broadcast; Kick channels only) to add it to the room's stream list.
 - **Queue:** an "Up next" list that everyone sees. Signed-in people add videos to the end or to the front ("Play next"); controllers reorder, play now, remove and clear. When a video ends, the next one in the queue starts (a controller needs to be watching). Live streams can't be queued, and with an empty queue the library order is used.
 - **Playlists:** paste a YouTube playlist link and it shows up as one expandable item. Add the whole playlist to the queue, or tick just the videos you want.
 - Every stream has its own shared clock, so some people can watch one stream while others watch another, and anyone can switch without losing sync. The owner or a controller can put one stream "on air" for everyone; guests always follow it.
@@ -63,7 +63,7 @@ I built it so my friends and I could watch League of Legends Worlds together, bu
 - Subtitles on YouTube (language list from the video, on/off, text size), remembered between videos.
 - Quality: the real list on Twitch, Auto/High/Low on screen shares. YouTube no longer lets embedded players choose a quality, so the menu says so.
 - Volume: a perceptual curve, truly silent at the bottom, remembered between sessions.
-- AirPlay: screen shares offer the AirPlay picker where Safari supports it; for YouTube and Twitch (which can't be sent to AirPlay directly) the TV sheet explains how to mirror the clean TV view to an Apple TV.
+- AirPlay: screen shares offer the AirPlay picker where Safari supports it; for YouTube, Twitch and Kick (which can't be sent to AirPlay directly) the TV sheet explains how to mirror the clean TV view to an Apple TV.
 
 **Voice and chat**
 - Voice joins muted and deafened. Unmuting also undeafens you, and the browser only asks for the microphone at that moment. Mute, deafen, push-to-talk (any key, or hold the mic button) and speaking indicators match what everyone hears.

@@ -1,6 +1,6 @@
 # Nexus Lounge
 
-Virtual watch-party PWA: rooms with LiveKit voice/chat/screen share, synced YouTube and Twitch playback, queue, roles, TV mode. General purpose (League of Legends Worlds is only a one-line mention in the README).
+Virtual watch-party PWA: rooms with LiveKit voice/chat/screen share, synced YouTube playback, Twitch and Kick, queue, roles, TV mode. General purpose (League of Legends Worlds is only a one-line mention in the README).
 
 ## Layout
 - `apps/web`: Next.js 16 (App Router), React 19, Tailwind 4, Auth.js v5 (Discord + guest credentials).
@@ -26,6 +26,7 @@ Virtual watch-party PWA: rooms with LiveKit voice/chat/screen share, synced YouT
 - Menus use `Popover` (portal, fixed); never position dropdowns inside cards.
 
 ## Gotchas
+- **Kick** (`type: "kick"`, channels only, always `isLive`, `kick:live:<slug>`): `player.kick.com/<channel>?autoplay=&muted=` in an iframe (`lib/players/kick.ts`; the embed has no API and no framing headers). Like Twitch live it has no shared clock (`isUnsyncedSource` in `types.ts`, used by the server and `StreamPlayer`), never gets an overlay (`isEmbedOnlySource`), and is torn down on every switch (hidden, it would keep playing sound). Mute can only be passed in the address, so muting reloads the embed. Kick videos and clips are refused in `parseMediaUrl`.
 - **Never overlay a Twitch embed.** Twitch pauses playback if anything covers it. Tear down and recreate the Twitch player on every stream switch.
 - YouTube embeds cannot be told a quality (the write APIs are no-ops); the player's pixel size drives what YouTube serves. Reads work. Captions use an undocumented module, so guard every call (`safe()`).
 - Per-stream clock: `{position, playing, updatedAt}`; correct drift with playback rate first, seek rarely and debounced.

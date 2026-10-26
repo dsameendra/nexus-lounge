@@ -31,6 +31,7 @@ export interface PlayerControlsProps {
   variant: "overlay" | "bar";
   visible: boolean;
   minimal?: boolean;
+  minimalLabel?: string;
   playing: boolean;
   time: number;
   duration: number;
@@ -68,7 +69,7 @@ export interface PlayerControlsProps {
 
 export function PlayerControls(props: PlayerControlsProps) {
   const {
-    variant, visible, minimal = false, playing, time, duration, live, atEdge, canControl, canSeek, status, volume, muted, canFullscreen, fullscreen = false, hideVolume = false, fit, onFit,
+    variant, visible, minimal = false, minimalLabel = "Live on Twitch", playing, time, duration, live, atEdge, canControl, canSeek, status, volume, muted, canFullscreen, fullscreen = false, hideVolume = false, fit, onFit,
     qualityOptions, quality, qualityNote, qualityLink, onPlayPause, onSeek, onVolume, onMute, onFullscreen, onResync, onGoLive, onQuality, onAirPlay, captions, onCaptionTrack, onCaptionSize, captionActions, captionNote,
   } = props;
   const [scrub, setScrub] = useState<number | null>(null);
@@ -146,7 +147,7 @@ export function PlayerControls(props: PlayerControlsProps) {
           </>
         )}
 
-        {minimal && <span className="flex-1 truncate px-1 text-sm text-label-2">Live on Twitch</span>}
+        {minimal && <span className="flex-1 truncate px-1 text-sm text-label-2">{minimalLabel}</span>}
 
         {captions && onCaptionTrack && onCaptionSize && <CaptionsMenu captions={captions} onTrack={onCaptionTrack} onSize={onCaptionSize} actions={captionActions} note={captionNote} />}
 

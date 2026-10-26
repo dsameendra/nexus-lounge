@@ -13,7 +13,7 @@ await p.goto(BASE); await p.click("text=Create room"); await p.waitForURL(/\/roo
 const room = p.url().split("/room/")[1];
 await p.getByRole("button", { name: "Join room" }).click();
 await p.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
-await p.fill("input[placeholder='Paste a YouTube or Twitch link']", "https://www.youtube.com/watch?v=jNQXAC9IVRw");
+await p.fill("input[placeholder='Paste a YouTube, Twitch or Kick link']", "https://www.youtube.com/watch?v=jNQXAC9IVRw");
 await p.getByRole("button", { name: "Play for everyone" }).click();
 await p.waitForSelector("iframe[src*=youtube]");
 const frameShown = () => p.evaluate(() => { const f = document.querySelector("iframe[src*=youtube]"); return Boolean(f) && Number(getComputedStyle(f.parentElement).opacity) > 0; });
@@ -103,6 +103,31 @@ await until(async () => !(await frameShown()));
 await tv.context.close();
 check(await until(async () => (await p.getByText(/Watch on ·/).count()) === 0, 30000), "the picker disappears when the TV disconnects");
 check(await until(frameShown), "the video comes back on this device automatically");
+
+console.log("A Samsung TV browser");
+// TV browsers draw video on a hardware layer; blur, fades and a hidden cursor above it can blank the picture, so none are used there.
+const tizen = await newPage(browser, { width: 1920, height: 1080 }, { userAgent: "Mozilla/5.0 (SMART-TV; LINUX; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) 85.0.4183.93/6.5 TV Safari/537.36" });
+await tizen.context.addCookies([await mintSession("discord-tvout-owner", "Owner TV")]);
+await tizen.page.goto(`${BASE}/room/${room}/tv`);
+await tizen.page.getByRole("button", { name: "Start watching" }).click({ timeout: 20000 }).catch(() => {});
+const tizenShown = () => tizen.page.evaluate(() => { const f = document.querySelector("iframe[src*=youtube]"); return Boolean(f) && Number(getComputedStyle(f.parentElement).opacity) > 0; });
+check(await until(tizenShown, 25000), "the TV browser shows the picture");
+await tizen.page.keyboard.press("ArrowRight");
+const tizenState = () => tizen.page.evaluate(() => {
+  const button = [...document.querySelectorAll("button")].find((b) => /fullscreen/i.test(b.getAttribute("aria-label") ?? ""));
+  const root = document.querySelector(".fixed.inset-0");
+  const blurred = [...document.querySelectorAll(".material")].filter((el) => { const c = getComputedStyle(el); return c.backdropFilter !== "none" || c.webkitBackdropFilter !== "none" && c.webkitBackdropFilter !== undefined && c.webkitBackdropFilter !== ""; }).length;
+  return { visibility: button ? getComputedStyle(button).visibility : null, cursor: root ? getComputedStyle(root).cursor : null, blurred, tv: Boolean(document.querySelector(".tv-browser")) };
+});
+check(await until(async () => (await tizenState()).visibility === "visible", 3000), "the fullscreen button shows when a remote key is pressed");
+check(await until(async () => (await tizenState()).visibility === "hidden", 8000), "and is taken out of the picture entirely when idle, not faded or blurred");
+check(await tizenShown(), "the picture is still there after the button hides");
+const idleState = await tizenState();
+check(idleState.tv && idleState.blurred === 0, "no overlay on the TV page uses a blur filter");
+check(idleState.cursor !== "none", "the cursor is not hidden");
+await tizen.page.keyboard.press("ArrowRight");
+check(await until(async () => (await tizenState()).visibility === "visible", 3000) && await tizenShown(), "the button returns on the next key and the picture stays");
+await tizen.context.close();
 
 await browser.close();
 const failed = results.filter((r) => !r.ok);

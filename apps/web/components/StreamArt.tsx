@@ -15,7 +15,7 @@ export function thumbnailUrl(stream: Stream) {
 export function StreamArt({ stream, className = "" }: { stream: Stream; className?: string }) {
   const [failed, setFailed] = useState(false);
   const url = thumbnailUrl(stream);
-  const tint = { youtube: "from-youtube/40", twitch: "from-twitch/50", local: "from-white/15", torrent: "from-white/15", link: "from-white/15" }[stream.source.type];
+  const tint = { youtube: "from-youtube/40", twitch: "from-twitch/50", kick: "from-kick/40", local: "from-white/15", torrent: "from-white/15", link: "from-white/15" }[stream.source.type];
 
   if (!url || failed) {
     return (

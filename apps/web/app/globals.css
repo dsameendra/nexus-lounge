@@ -28,6 +28,7 @@
   --color-warn: #ff9f0a;
   --color-youtube: #ff3b30;
   --color-twitch: #9146ff;
+  --color-kick: #53fc18;
 
   --radius-card: 16px;
   --radius-sheet: 24px;
@@ -64,6 +65,12 @@ button,
   background: rgba(28, 28, 30, 0.72);
   -webkit-backdrop-filter: saturate(180%) blur(24px);
   backdrop-filter: saturate(180%) blur(24px);
+}
+
+.tv-browser .material {
+  background: rgba(0, 0, 0, 0.78);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 .scroll-thin {

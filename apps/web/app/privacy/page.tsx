@@ -46,7 +46,7 @@ export default function PrivacyPage() {
         <h2>Third parties</h2>
         <ul>
           <li>Discord handles sign-in under its own privacy policy.</li>
-          <li>YouTube and Twitch players are embedded and may set their own cookies and collect data under their policies.</li>
+          <li>YouTube, Twitch and Kick players are embedded and may set their own cookies and collect data under their policies.</li>
           <li>The app is hosted on Railway, and voice and screen sharing run through LiveKit.</li>
           <li>We don&apos;t run analytics or advertising and don&apos;t sell data.</li>
         </ul>

@@ -139,7 +139,7 @@ export function AddStreamSheet({ onClose }: { onClose: () => void }) {
   }
 
   const primary = isController ? "everyone" : "me";
-  const label = source ? (source.type === "youtube" ? (source.isLive ? "YouTube live" : "YouTube video") : source.isLive ? `Twitch channel · ${source.id}` : "Twitch broadcast") : null;
+  const label = source ? (source.type === "youtube" ? (source.isLive ? "YouTube live" : "YouTube video") : source.type === "kick" ? `Kick channel · ${source.id}` : source.isLive ? `Twitch channel · ${source.id}` : "Twitch broadcast") : null;
 
   return (
     <Sheet title="Add a stream" onClose={onClose}>
@@ -172,7 +172,7 @@ export function AddStreamSheet({ onClose }: { onClose: () => void }) {
             autoFocus
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            placeholder="Paste a YouTube or Twitch link"
+            placeholder="Paste a YouTube, Twitch or Kick link"
             inputMode="url"
             autoCapitalize="off"
             autoCorrect="off"

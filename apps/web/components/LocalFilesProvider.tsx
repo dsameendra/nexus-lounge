@@ -81,10 +81,12 @@ export function LocalFilesProvider({ children }: { children: React.ReactNode }) 
   const [feedError, setFeedError] = useState<string | null>(null);
   const canHost = useMemo(() => canHostFeed(), []);
 
-  const latest = useRef({ state, self, send, clock });
+  const latest = useRef({ state, self, send, clock, status });
   useEffect(() => {
-    latest.current = { state, self, send, clock };
+    latest.current = { state, self, send, clock, status };
   });
+  // Streams this tab has seen in the room: only those can be "gone".
+  const seen = useRef(new Set<string>());
 
   const install = useCallback(
     async (streamId: string, source: EntrySource, picked?: PickedFile) => {
@@ -242,10 +244,14 @@ export function LocalFilesProvider({ children }: { children: React.ReactNode }) 
   // Keep every open file on the room clock, and drop files whose stream is gone.
   useEffect(() => {
     const id = setInterval(() => {
-      const { state, self, send, clock } = latest.current;
+      const { state, self, send, clock, status } = latest.current;
       for (const [streamId, entry] of entries.current) {
         const stream = state.streams.find((item) => item.id === streamId);
+        if (stream) seen.current.add(streamId);
         if (!stream) {
+          // A stream you just added is opened here before the room has heard of it, and the room's list is empty or stale while reconnecting: neither means it was removed.
+          if (status !== "open" || (!seen.current.has(streamId) && Date.now() - entry.createdAt < 30_000)) continue;
+          seen.current.delete(streamId);
           entry.destroy();
           entries.current.delete(streamId);
           setVersion((value) => value + 1);

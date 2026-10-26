@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FloatingReactions, ReactionBar, ReactionPicker, ReactionStrip } from "./Reactions";
 import { ScreenBar } from "./ScreenBar";
-import { expectedPosition, isDeviceSource, isScreenId, screenIdentity } from "@nexus/shared";
+import { expectedPosition, isDeviceSource, isEmbedOnlySource, isScreenId, isUnsyncedSource, screenIdentity } from "@nexus/shared";
 import { Pill, ProviderBadge } from "./Badges";
 import { BroadcastIcon, FilmIcon, PauseIcon, PlayIcon, PlusIcon, SyncIcon, TvIcon } from "./Icons";
 import { OutputPicker } from "./OutputPicker";
@@ -47,8 +47,8 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
     }
     toggleFullscreen();
   }
-  const twitchLive = stream?.source.type === "twitch" && stream.source.isLive;
-  const twitchActive = stream?.source.type === "twitch" && !showingScreen;
+  const unsyncedLive = Boolean(stream && isUnsyncedSource(stream.source));
+  const twitchActive = Boolean(stream && isEmbedOnlySource(stream.source)) && !showingScreen;
   const reactionsOn = state.room.settings.reactions;
   const featuredStream = state.streams.find((item) => item.id === featuredId);
   const roomIsElsewhere = !self.guest && !isFollowing && featuredId !== null;
@@ -102,7 +102,7 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
               <p className="mt-1 text-sm text-label-2">The video is off on this device. Voice and chat still work here.</p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2">
-              {stream && !(stream.source.type === "twitch" && stream.source.isLive) && canControlStream(stream) && (
+              {stream && !isUnsyncedSource(stream.source) && canControlStream(stream) && (
                 <button
                   onClick={() => send({ type: "stream.control", streamId: stream.id, action: stream.playback.playing ? "pause" : "play", position: expectedPosition(stream.playback, clock.now()) })}
                   className="flex h-10 items-center gap-1.5 rounded-full bg-white/10 px-4 text-sm font-medium transition hover:bg-white/15 active:scale-95"
@@ -135,7 +135,7 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
             <div>
               <p className="font-semibold">{self.guest ? "Waiting for the host" : "Nothing playing yet"}</p>
               <p className="mt-1 text-sm text-label-2">
-                {self.guest ? "The host will pick something to watch." : "Add a YouTube or Twitch link, or share your screen."}
+                {self.guest ? "The host will pick something to watch." : "Add a YouTube, Twitch or Kick link, or share your screen."}
               </p>
             </div>
             {canAdd && (
@@ -205,9 +205,9 @@ export function Stage({ onAdd }: { onAdd: () => void }) {
           </div>
         )}
 
-        {twitchLive && (
+        {unsyncedLive && (
           <p className="rounded-2xl bg-warn/12 px-4 py-3 text-sm leading-relaxed text-warn max-sm:py-2 max-sm:text-xs">
-            Twitch live streams can't be time-synced, so everyone sees them at their own delay.<span className="max-sm:hidden"> For a frame-accurate shared view, have one person share this tab with <span className="font-semibold">Share screen</span>.</span>
+            {stream?.source.type === "kick" ? "Kick" : "Twitch"} live streams can't be time-synced, so everyone sees them at their own delay.<span className="max-sm:hidden"> For a frame-accurate shared view, have one person share this tab with <span className="font-semibold">Share screen</span>.</span>
           </p>
         )}
       </div>

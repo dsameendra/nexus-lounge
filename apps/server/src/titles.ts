@@ -5,6 +5,7 @@ export function fallbackTitle(source: MediaSource) {
   if (source.type === "torrent") return "Torrent";
   if (source.type === "link") return "Video link";
   if (source.type === "youtube") return "YouTube video";
+  if (source.type === "kick") return source.id;
   return source.isLive ? source.id : `Twitch broadcast ${source.id}`;
 }
 

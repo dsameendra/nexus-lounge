@@ -7,7 +7,7 @@ export default function TermsPage() {
   return (
     <LegalPage title="Terms of Service" updated="25 October 2026">
       <p>
-        Nexus Lounge is a free, general-purpose virtual watch-party app: you create or join a room, watch YouTube and Twitch together in sync, talk by voice, chat and share your screen. By using it you agree to these terms.
+        Nexus Lounge is a free, general-purpose virtual watch-party app: you create or join a room, watch YouTube, Twitch and Kick together, talk by voice, chat and share your screen. By using it you agree to these terms.
       </p>
 
       <section>
@@ -25,7 +25,7 @@ export default function TermsPage() {
       <section>
         <h2>Third-party content</h2>
         <p>
-          Videos and streams come from YouTube and Twitch and play in their own embedded players. Their terms and privacy policies apply to that content, and Nexus Lounge doesn&apos;t host, copy or store it. Content may be unavailable if its owner restricts embedding.
+          Videos and streams come from YouTube, Twitch and Kick and play in their own embedded players. Their terms and privacy policies apply to that content, and Nexus Lounge doesn&apos;t host, copy or store it. Content may be unavailable if its owner restricts embedding.
         </p>
       </section>
 

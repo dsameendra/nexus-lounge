@@ -1,8 +1,8 @@
 import type { MediaSource } from "@nexus/shared";
 
 export function ProviderBadge({ source }: { source: MediaSource }) {
-  const tone = { youtube: "bg-youtube/20 text-youtube", twitch: "bg-twitch/25 text-[#b794ff]", local: "bg-white/15 text-label-2", torrent: "bg-white/15 text-label-2", link: "bg-white/15 text-label-2" }[source.type];
-  const label = { youtube: "YouTube", twitch: "Twitch", local: "File", torrent: "Stremio", link: "Link" }[source.type];
+  const tone = { youtube: "bg-youtube/20 text-youtube", twitch: "bg-twitch/25 text-[#b794ff]", kick: "bg-kick/20 text-kick", local: "bg-white/15 text-label-2", torrent: "bg-white/15 text-label-2", link: "bg-white/15 text-label-2" }[source.type];
+  const label = { youtube: "YouTube", twitch: "Twitch", kick: "Kick", local: "File", torrent: "Stremio", link: "Link" }[source.type];
   return (
     <span className={`inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase ${tone}`}>
       {label}
