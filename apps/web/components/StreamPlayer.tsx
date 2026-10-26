@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { SILENT_BELOW, atLiveEdge, computeCorrection, computeLiveCorrection, expectedPosition, isDeviceSource, isSilent, liveEdgeTarget, livePlayableTarget, median, sliderToGain, type Stream } from "@nexus/shared";
+import { SILENT_BELOW, atLiveEdge, computeCorrection, expectedPosition, isDeviceSource, isSilent, LIVE_SEEK_THRESHOLD, liveEdgeTarget, liveJumpTarget, median, sliderToGain, type Stream } from "@nexus/shared";
 import { YouTubeAdapter } from "@/lib/players/youtube";
 import { TwitchAdapter } from "@/lib/players/twitch";
 import type { PlayerAdapter } from "@/lib/players/types";
@@ -282,6 +282,23 @@ export function StreamPlayer({
       m.immediate = true;
     }
 
+    // Live: the room's position only decides where to go once per controller action; after that nothing chases it.
+    if (live) {
+      const edge = adapter.getDuration();
+      patch({ status: "synced" });
+      if (edge <= 0) return;
+      if (m.rate !== 1) {
+        adapter.setRate(1);
+        m.rate = 1;
+      }
+      if (m.immediate && state !== "idle") {
+        const to = liveJumpTarget(expected, edge);
+        if (Math.abs(adapter.getTime() - to) > LIVE_SEEK_THRESHOLD) adapter.seek(to);
+        Object.assign(m, { immediate: false, drifts: [], seekSince: 0 });
+      }
+      return;
+    }
+
     if (state === "buffering" || state === "idle" || state === "ended") {
       m.drifts = [];
       m.graceUntil = Math.max(m.graceUntil, now + 1500);
@@ -296,32 +313,29 @@ export function StreamPlayer({
     m.lastSample = now;
 
     const duration = adapter.getDuration();
-    const liveEdge = live && duration > 0;
-    const target = liveEdge ? livePlayableTarget(expected, duration) : duration > 0 ? Math.min(expected, duration) : expected;
+    const target = duration > 0 ? Math.min(expected, duration) : expected;
     m.drifts.push(adapter.getTime() - target);
     if (m.drifts.length > 5) m.drifts.shift();
     if (m.drifts.length < (m.immediate ? 1 : 3)) return;
 
     const drift = median(m.drifts);
-    patch({ status: Math.abs(drift) < (liveEdge ? 3 : 1) ? "synced" : "syncing" });
+    patch({ status: Math.abs(drift) < 1 ? "synced" : "syncing" });
 
     if (m.learn) {
       m.learn = false;
-      if (!liveEdge) {
-        const type = stream.source.type;
-        m.lead[type] = Math.min(3, Math.max(0, m.lead[type] - drift * 0.7));
-      }
+      const type = stream.source.type;
+      m.lead[type] = Math.min(3, Math.max(0, m.lead[type] - drift * 0.7));
     }
 
-    const correction = liveEdge ? computeLiveCorrection(drift, { playing: want, currentRate: m.rate }) : computeCorrection(drift, { playing: want, currentRate: m.rate, rates: adapter.rates });
+    const correction = computeCorrection(drift, { playing: want, currentRate: m.rate, rates: adapter.rates });
 
     if (correction.kind === "seek") {
       if (m.seekSince === 0) m.seekSince = now;
       const urgent = m.immediate || Math.abs(drift) > 5;
       if (urgent || now - m.seekSince >= 1200) {
-        adapter.seek(liveEdge ? target : target + (want ? m.lead[stream.source.type] : 0));
+        adapter.seek(target + (want ? m.lead[stream.source.type] : 0));
         if (m.rate !== 1) adapter.setRate(1);
-        Object.assign(m, { graceUntil: now + (liveEdge ? 8000 : 3500), rate: 1, drifts: [], seekSince: 0, immediate: false, learn: want });
+        Object.assign(m, { graceUntil: now + 3500, rate: 1, drifts: [], seekSince: 0, immediate: false, learn: want });
       }
       return;
     }
@@ -442,7 +456,8 @@ export function StreamPlayer({
   function resync() {
     if (!stream || !activeAdapter) return;
     const expected = expectedPosition(stream.playback, clock.now());
-    if (expected !== null) activeAdapter.seek(expected);
+    const edge = activeAdapter.getDuration();
+    if (expected !== null) activeAdapter.seek(activeAdapter.isLive() && edge > 0 ? liveJumpTarget(expected, edge) : expected);
     mem.current.graceUntil = Date.now() + 3500;
     mem.current.drifts = [];
     if (stream.playback.playing) activeAdapter.play();

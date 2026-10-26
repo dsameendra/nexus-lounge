@@ -5,8 +5,7 @@ import {
   MAX_CUE_GAIN,
   MAX_CUE_SECONDS,
   atLiveEdge,
-  computeLiveCorrection,
-  livePlayableTarget,
+  liveJumpTarget,
   cueLength,
   clientMessageSchema,
   computeCorrection,
@@ -116,19 +115,15 @@ test("session tokens", () => {
 });
 
 test("live edge helpers", () => {
-  assert.equal(liveEdgeTarget(1000), 992);
+  assert.equal(liveEdgeTarget(1000), 996);
   assert.equal(liveEdgeTarget(2), 0);
   assert.equal(atLiveEdge(990, 1000), true);
   assert.equal(atLiveEdge(900, 1000), false);
   assert.equal(atLiveEdge(0, 0), false);
-  // Nobody is asked to sit closer to their own edge than their player can hold.
-  assert.equal(livePlayableTarget(1000, 1000), 996);
-  assert.equal(livePlayableTarget(900, 1000), 900);
-  assert.equal(livePlayableTarget(5, 2), 0);
-  // Live streams never change speed, and small drift is left alone.
-  assert.deepEqual(computeLiveCorrection(-3, { playing: true, currentRate: 1 }), { kind: "none" });
-  assert.deepEqual(computeLiveCorrection(2, { playing: true, currentRate: 1.05 }), { kind: "reset-rate" });
-  assert.deepEqual(computeLiveCorrection(-6, { playing: true, currentRate: 1 }), { kind: "seek" });
+  // Near the edge a viewer goes to their own edge; far from it, to the position asked for.
+  assert.equal(liveJumpTarget(995, 1000), 996);
+  assert.equal(liveJumpTarget(1003, 1000), 996);
+  assert.equal(liveJumpTarget(500, 1000), 500);
 });
 
 test("push to talk helpers", () => {
