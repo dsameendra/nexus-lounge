@@ -40,6 +40,7 @@ export class LocalEntry {
   readonly file: File | null;
   hls: Hls | null = null;
   private hlsRetries = 0;
+  private destroyed = false;
 
   constructor(streamId: string, source: EntrySource) {
     this.streamId = streamId;
@@ -65,6 +66,7 @@ export class LocalEntry {
     // Safari plays HLS natively and best; everywhere else hls.js is the proven path.
     if (source.kind === "url" && source.hls && !(isApple() && video.canPlayType("application/vnd.apple.mpegurl"))) {
       const { default: HlsClass } = await import("hls.js");
+      if (this.destroyed) return;
       if (!HlsClass.isSupported()) {
         this.error = "This browser can't play this kind of stream.";
         return;
@@ -270,6 +272,7 @@ export class LocalEntry {
   }
 
   destroy() {
+    this.destroyed = true;
     const { video } = this;
     video.pause();
     this.hls?.destroy();

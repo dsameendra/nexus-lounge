@@ -28,10 +28,14 @@ export function StreamLinkSheet({ stream, onClose }: { stream: Stream | null; on
     const parsed = parseStremioInput(value);
     if (parsed.kind === "error") return setError(parsed.reason);
     setStep("Starting…");
+    let keepOpen = false;
     try {
       if (parsed.kind === "link") {
         const resolved = await files.playLink(stream, parsed.url, setStep);
-        if (resolved.warning) setWarning(resolved.warning);
+        if (resolved.warning) {
+          setWarning(resolved.warning);
+          keepOpen = true;
+        }
       } else {
         const base = await requireStremio();
         const choice = await openTorrent(base, parsed.infoHash, parsed.trackers, setStep);
@@ -43,7 +47,7 @@ export function StreamLinkSheet({ stream, onClose }: { stream: Stream | null; on
         }
         await files.adoptSource(stream.id, resolved);
       }
-      onClose();
+      if (!keepOpen) onClose();
     } catch (problem) {
       setError(friendlyError(problem, problem instanceof Error ? problem.message : "Couldn't open that link."));
     } finally {

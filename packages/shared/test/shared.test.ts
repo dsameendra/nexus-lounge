@@ -402,3 +402,11 @@ test("torrent and link streams: schemas, ids and queueing", async () => {
   const message = clientMessageSchema.parse({ type: "stream.add", source: torrent, file: { name: "Sintel", size: 1, duration: 5 }, trackers: ["udp://tracker.opentrackr.org:1337/announce", "udp://127.0.0.1:1"] });
   assert.deepEqual((message as { trackers: string[] }).trackers, ["udp://tracker.opentrackr.org:1337/announce"], "private trackers are dropped on the way in");
 });
+
+test("a trailing dot can't hide a private tracker host, and an empty so= means no file choice", async () => {
+  const { isPrivateHost, sanitizeTrackers, parseStremioInput } = await import("../src/index.ts");
+  assert.equal(isPrivateHost("localhost."), true);
+  assert.equal(isPrivateHost("printer.local."), true);
+  assert.deepEqual(sanitizeTrackers(["udp://localhost.:6969", "http://nas.lan.:80/announce"]), []);
+  assert.equal((parseStremioInput(`magnet:?xt=urn:btih:${HASH}&so=`) as { fileIdx: number | null }).fileIdx, null);
+});

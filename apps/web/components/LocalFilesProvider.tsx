@@ -70,12 +70,22 @@ function ready(entry: LocalEntry, timeoutMs: number) {
   return new Promise<void>((resolve, reject) => {
     const { video } = entry;
     if (video.readyState >= 1) return resolve();
-    const fail = () => reject(new Error(entry.error ?? "This file couldn't be opened."));
+    const fail = () => {
+      clearInterval(watch);
+      reject(new Error(entry.error ?? "This file couldn't be opened."));
+    };
     const timer = setTimeout(fail, timeoutMs);
+    const watch = setInterval(() => {
+      if (entry.error) {
+        clearTimeout(timer);
+        fail();
+      }
+    }, 250);
     video.addEventListener(
       "loadedmetadata",
       () => {
         clearTimeout(timer);
+        clearInterval(watch);
         if (video.videoWidth === 0) {
           entry.error = "This browser can play this file's sound but not its picture. MP4 (H.264/AAC) and WebM work everywhere.";
           return fail();
