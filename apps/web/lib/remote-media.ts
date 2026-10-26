@@ -1,6 +1,6 @@
 "use client";
 
-import { looksLikePlaceholder, planLink, sameMedia, titleFromUrl, videoFilesOf, type Stream } from "@nexus/shared";
+import { isSubtitleFileName, looksLikePlaceholder, planLink, sameMedia, titleFromUrl, videoFilesOf, type Stream } from "@nexus/shared";
 import { browserCaps, directPlayable } from "./codecs";
 import type { EntrySource } from "./local-entry";
 import { checkStremio, createTorrent, getStremioBase, getStremioStatus, hlsUrl, probeMedia, statusMessage, torrentFileUrl, type TorrentInfo } from "./stremio";
@@ -107,9 +107,10 @@ export async function resolveLink(url: string, stremioBase: string | null, step:
   if (plan.how === "none") throw new ResolveError(stremioBase ? "Stremio couldn't read that link either. It may have expired." : LINK_ADVICE[plan.reason]);
 
   const name = titleFromUrl(url);
+  const subs = stremioBase && probe && probe.subtitleTracks > 0 ? { base: stremioBase, mediaUrl: url, embedded: true, extras: [] } : undefined;
   if (plan.how === "stremio" && stremioBase && probe) {
     const size = remote?.size ?? 0;
-    return { source: { kind: "url", url: hlsUrl(stremioBase, url, browserCaps()), hls: true }, size, duration: probe.duration, name, how: "stremio", warning: looksLikePlaceholder({ size, duration: probe.duration }) ? PLACEHOLDER : null };
+    return { source: { kind: "url", url: hlsUrl(stremioBase, url, browserCaps()), hls: true, subs }, size, duration: probe.duration, name, how: "stremio", warning: looksLikePlaceholder({ size, duration: probe.duration }) ? PLACEHOLDER : null };
   }
 
   const playUrl = plan.how === "direct" && plan.upgrade && upgraded ? upgraded.url : url;
@@ -117,7 +118,7 @@ export async function resolveLink(url: string, stremioBase: string | null, step:
   step("Loading the video…");
   const duration = probe?.duration ?? (await loadDuration(playUrl));
   if (!duration) throw new ResolveError(LINK_ADVICE.codecs);
-  return { source: { kind: "url", url: playUrl, hls: false }, size, duration, name, how: "direct", warning: looksLikePlaceholder({ size, duration }) ? PLACEHOLDER : null };
+  return { source: { kind: "url", url: playUrl, hls: false, subs }, size, duration, name, how: "direct", warning: looksLikePlaceholder({ size, duration }) ? PLACEHOLDER : null };
 }
 
 const PLACEHOLDER = "This looks like a very short clip, maybe an error video. The link may have expired or been limited by its service.";
@@ -160,8 +161,10 @@ export async function resolveTorrentFile(base: string, infoHash: string, choice:
   if (!probe) throw new ResolveError("Stremio couldn't read the video. The torrent may have no peers right now: try again in a moment.");
   const torrent = { base, infoHash, fileIdx };
   const direct = directPlayable(probe);
+  const extras = choice.info.files.flatMap((item, index) => (isSubtitleFileName(item.name) ? [{ index, name: item.name, infoHash }] : []));
+  const subs = probe.subtitleTracks > 0 || extras.length > 0 ? { base, mediaUrl, embedded: probe.subtitleTracks > 0, extras } : undefined;
   return {
-    source: direct ? { kind: "url", url: mediaUrl, hls: false, torrent } : { kind: "url", url: hlsUrl(base, mediaUrl, browserCaps()), hls: true, torrent },
+    source: direct ? { kind: "url", url: mediaUrl, hls: false, torrent, subs } : { kind: "url", url: hlsUrl(base, mediaUrl, browserCaps()), hls: true, torrent, subs },
     size: file.length,
     duration: probe.duration,
     name: prettyName(file.name),

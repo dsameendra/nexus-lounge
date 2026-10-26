@@ -410,3 +410,20 @@ test("a trailing dot can't hide a private tracker host, and an empty so= means n
   assert.deepEqual(sanitizeTrackers(["udp://localhost.:6969", "http://nas.lan.:80/announce"]), []);
   assert.equal((parseStremioInput(`magnet:?xt=urn:btih:${HASH}&so=`) as { fileIdx: number | null }).fileIdx, null);
 });
+
+test("subtitles: SubRip becomes WebVTT, styling noise goes, segments merge without repeats", async () => {
+  const { srtToVtt, mergeVtt, guessLanguage, languageCode, isTextSubtitleCodec } = await import("../src/index.ts");
+  const srt = "﻿1\r\n00:00:01,500 --> 00:00:03,000\r\n{\\an8}<font color=\"red\">Hello</font> <i>there</i> & you\r\n\r\n2\r\n01:47,250 --> 01:50,5\r\nNext\r\n";
+  assert.equal(srtToVtt(srt), "WEBVTT\n\n00:00:01.500 --> 00:00:03.000\nHello <i>there</i> &amp; you\n\n00:01:47.250 --> 00:01:50.500\nNext\n");
+  assert.equal(srtToVtt(""), "WEBVTT\n");
+  const a = "WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000\n\n00:00:01.000 --> 00:00:02.000\nOne\n\n00:00:09.000 --> 00:00:12.000\nTwo\n";
+  const b = "WEBVTT\n\n00:00:09.000 --> 00:00:12.000\nTwo\n\n00:00:14.000 --> 00:00:15.000\nThree\n";
+  assert.equal(mergeVtt([a, b]), "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nOne\n\n00:00:09.000 --> 00:00:12.000\nTwo\n\n00:00:14.000 --> 00:00:15.000\nThree\n");
+  assert.equal(guessLanguage("Sintel.en.srt"), "en");
+  assert.equal(guessLanguage("Movie.2010.Spanish.srt"), "es");
+  assert.equal(guessLanguage("subs"), null);
+  assert.equal(languageCode("eng"), "en");
+  assert.equal(languageCode("pt-BR"), "pt");
+  assert.equal(isTextSubtitleCodec("subrip"), true);
+  assert.equal(isTextSubtitleCodec("hdmv_pgs_subtitle"), false);
+});

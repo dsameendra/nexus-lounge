@@ -16,10 +16,14 @@ export function CaptionsMenu({
   captions,
   onTrack,
   onSize,
+  actions = [],
+  note = null,
 }: {
   captions: CaptionState;
   onTrack: (id: string | null) => void;
   onSize: (size: number) => void;
+  actions?: { label: string; onClick: () => void }[];
+  note?: { text: string; error: boolean } | null;
 }) {
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
   const on = captions.active !== null;
@@ -62,6 +66,28 @@ export function CaptionsMenu({
               </li>
             ))}
           </ul>
+          {note && (
+            <p role={note.error ? "alert" : "status"} className={`border-t border-line px-3 py-2 text-xs ${note.error ? "text-danger" : "text-label-2"}`}>
+              {note.text}
+            </p>
+          )}
+          {actions.length > 0 && (
+            <div className="border-t border-line py-1">
+              {actions.map((action) => (
+                <button
+                  key={action.label}
+                  role="menuitem"
+                  onClick={() => {
+                    setAnchor(null);
+                    action.onClick();
+                  }}
+                  className="flex w-full items-center px-3 py-2 text-left text-sm text-accent transition hover:bg-white/10"
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="border-t border-line px-3 py-2.5">
             <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-label-2 uppercase">Text size</p>
             <div className="flex gap-1" role="group" aria-label="Subtitle text size">

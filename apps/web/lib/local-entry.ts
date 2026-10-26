@@ -2,6 +2,7 @@ import { computeCorrection, expectedPosition, median, type Playback } from "@nex
 import type Hls from "hls.js";
 import { isApple } from "./codecs";
 import { describeMediaError } from "./local-files";
+import { readSizePref, type SubtitleOption, type SubtitleSource } from "./subtitles";
 
 const RATES = [0.95, 1.05];
 
@@ -10,7 +11,7 @@ export type SyncStatus = "synced" | "syncing" | "waiting";
 // Where an open video comes from: a file on this computer, or an address (a torrent served by Stremio, or a link).
 export type EntrySource =
   | { kind: "file"; file: File }
-  | { kind: "url"; url: string; hls: boolean; torrent?: { base: string; infoHash: string; fileIdx: number } };
+  | { kind: "url"; url: string; hls: boolean; torrent?: { base: string; infoHash: string; fileIdx: number }; subs?: SubtitleSource };
 
 // One local file in this browser: its <video>, its audio graph and the loop that keeps it on the room clock.
 // The element stays at full volume and unmuted: a Web Audio source follows the element's volume, so everything
@@ -41,6 +42,13 @@ export class LocalEntry {
   hls: Hls | null = null;
   private hlsRetries = 0;
   private destroyed = false;
+  subtitles: SubtitleOption[] = [];
+  activeSubtitle: string | null = null;
+  subtitleBusy = false;
+  subtitleError: string | null = null;
+  subtitleSize = readSizePref();
+  private subtitleTracks = new Map<string, { element: HTMLTrackElement; url: string }>();
+  private subtitleAsk = 0;
 
   constructor(streamId: string, source: EntrySource) {
     this.streamId = streamId;
@@ -57,7 +65,61 @@ export class LocalEntry {
     video.addEventListener("error", () => {
       if (!this.hls) this.error = describeMediaError(video, source.kind === "url");
     });
+    video.dataset.subSize = String(this.subtitleSize);
     this.initAudio();
+  }
+
+  addSubtitles(options: SubtitleOption[]) {
+    const known = new Set(this.subtitles.map((option) => option.id));
+    this.subtitles = [...this.subtitles, ...options.filter((option) => !known.has(option.id))];
+  }
+
+  setSubtitleSize(size: number) {
+    this.subtitleSize = size;
+    this.video.dataset.subSize = String(size);
+  }
+
+  // Shows one subtitle track (loading it the first time) or none.
+  async selectSubtitle(id: string | null) {
+    const ask = ++this.subtitleAsk;
+    this.subtitleError = null;
+    const hideAll = () => {
+      for (const { element } of this.subtitleTracks.values()) element.track.mode = "disabled";
+    };
+    if (id === null) {
+      hideAll();
+      this.activeSubtitle = null;
+      this.subtitleBusy = false;
+      return;
+    }
+    const option = this.subtitles.find((item) => item.id === id);
+    if (!option) return;
+    try {
+      let loaded = this.subtitleTracks.get(id);
+      if (!loaded) {
+        this.subtitleBusy = true;
+        const vtt = await option.load();
+        if (this.destroyed) return;
+        const url = URL.createObjectURL(new Blob([vtt], { type: "text/vtt" }));
+        const element = document.createElement("track");
+        element.kind = "subtitles";
+        element.label = option.label;
+        if (option.lang) element.srclang = option.lang;
+        element.src = url;
+        this.video.appendChild(element);
+        element.track.mode = "disabled";
+        loaded = { element, url };
+        this.subtitleTracks.set(id, loaded);
+      }
+      if (ask !== this.subtitleAsk) return;
+      hideAll();
+      loaded.element.track.mode = "showing";
+      this.activeSubtitle = id;
+    } catch (error) {
+      if (ask === this.subtitleAsk) this.subtitleError = error instanceof Error ? error.message : "Couldn't load these subtitles.";
+    } finally {
+      if (ask === this.subtitleAsk) this.subtitleBusy = false;
+    }
   }
 
   // Playlists go through hls.js where the browser has no native HLS (Safari has it).
@@ -273,6 +335,8 @@ export class LocalEntry {
 
   destroy() {
     this.destroyed = true;
+    for (const { url } of this.subtitleTracks.values()) URL.revokeObjectURL(url);
+    this.subtitleTracks.clear();
     const { video } = this;
     video.pause();
     this.hls?.destroy();

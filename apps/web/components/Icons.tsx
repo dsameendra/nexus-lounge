@@ -204,6 +204,12 @@ export const CaptionsIcon = (p: P) => (
     <path d="M10.4 10.2a2.4 2.4 0 1 0 0 3.6M17.4 10.2a2.4 2.4 0 1 0 0 3.6" />
   </Icon>
 );
+export const SearchIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="m16 16 4.5 4.5" />
+  </Icon>
+);
 export const SidebarIcon = (p: P) => (
   <Icon {...p}>
     <rect x="3" y="4.5" width="18" height="15" rx="3.2" />
