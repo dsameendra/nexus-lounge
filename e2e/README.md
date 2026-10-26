@@ -36,6 +36,10 @@ The suites use real YouTube and Twitch embeds, so they need internet access. Scr
 
 `13-local-file.mjs` needs LiveKit on :7880 (`pnpm livekit`) and `ffmpeg` (it makes two small test videos in `e2e/.tmp-fixtures/`, which is ignored by git); it skips itself otherwise. It covers the live feed, playing your own copy, refusing a wrong file, on-demand publishing, the TV, remembered files, an iPhone-sized WebKit viewer and a Safari-engine owner.
 
+## TV output
+
+`09-tv-output.mjs` covers the here/tv/both choice, the paired TV, and the TV's fullscreen button and `F` key.
+
 ## Stremio, magnets and links
 
-`14-stremio.mjs` needs LiveKit and `ffmpeg`. It starts a mock Stremio server (:11571, and :11573 that reports a different file) and a mock link host (:11572), so it never touches a Stremio you have installed. It covers magnets and the file picker, friends with and without Stremio, mismatch refusal, the Safari-style fallback, the TV, every kind of link (direct, no CORS, HEVC, placeholder, expired, replaced, refreshed), token privacy (no WebSocket frame contains the link), and a phone layout. `STREMIO_REAL=1` also adds a real magnet (Sintel) through the Stremio app on :11470 and a real HEVC + E-AC3 conversion; it needs internet and ffmpeg with x265.
+`14-stremio.mjs` needs LiveKit and `ffmpeg`. It starts a mock Stremio server (:11571, and :11573 that reports a different file) and a mock link host (:11572), so it never touches a Stremio you have installed. It covers magnets and the file picker, friends with and without Stremio, mismatch refusal, the Safari-style fallback, the TV, every kind of link (direct, no CORS, HEVC, placeholder, expired, replaced, refreshed), token privacy (no WebSocket frame contains the link), a phone layout, Matroska direct play with the automatic fallback to Stremio's playlist when the file can't be decoded (the fallback check needs a browser with a Matroska demuxer and reads the `nexus-debug` console log), and subtitles (the file that came with a torrent, tracks inside the video, online search, a `.srt` from the computer, size and Off). One person can add only 5 device streams, so a suite that adds more needs a second owner. `STREMIO_REAL=1` also adds a real magnet (Sintel) through the Stremio app on :11470 and a real HEVC + E-AC3 conversion; it needs internet and ffmpeg with x265.

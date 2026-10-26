@@ -68,5 +68,10 @@ export function atLiveEdge(time: number, duration: number) {
 }
 
 export function liveJumpTarget(expected: number, duration: number) {
+  if (duration <= 0) return expected;
   return duration - expected <= LIVE_EDGE_TOLERANCE ? liveEdgeTarget(duration) : expected;
+}
+
+export function shouldLiveSeek(current: number, target: number) {
+  return Math.abs(current - target) > LIVE_SEEK_THRESHOLD;
 }

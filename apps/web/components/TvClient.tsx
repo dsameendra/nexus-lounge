@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LiveKitRoom } from "@livekit/components-react";
 import { tvCredentialsSchema, tvPairingSchema, tvPollSchema, type TvCredentials } from "@nexus/shared";
+import { enterFullscreen } from "@/lib/fullscreen";
 import { LocalFilesProvider } from "./LocalFilesProvider";
 import { RoomProvider } from "./RoomProvider";
 import { TvRoom } from "./TvRoom";
@@ -108,7 +109,7 @@ export function TvClient({ roomId, signedIn }: { roomId: string; signedIn: boole
         <button
           autoFocus
           onClick={() => {
-            void document.documentElement.requestFullscreen?.().catch(() => {});
+            void enterFullscreen();
             setPhase({ kind: "playing", credentials: phase.credentials });
           }}
           className="mt-10 h-24 cursor-pointer rounded-full bg-accent px-16 text-4xl font-semibold outline-offset-4 transition hover:scale-105 focus:scale-105 focus:outline-4 focus:outline-white"

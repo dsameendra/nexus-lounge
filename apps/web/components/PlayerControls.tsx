@@ -124,7 +124,7 @@ export function PlayerControls(props: PlayerControlsProps) {
               <button
                 onClick={onGoLive}
                 disabled={atEdge && !canControl}
-                title={atEdge ? "You're at the live edge" : canControl ? "Jump everyone to the live edge" : "Jump to where the room is"}
+                title={atEdge ? "You're at the live edge" : canControl ? "Jump everyone to the live edge" : "Jump to the live edge"}
                 className={`flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold tracking-wide uppercase transition active:scale-95 ${
                   atEdge ? "bg-danger text-white" : "bg-white/15 text-label-2 hover:bg-white/25 hover:text-white"
                 }`}

@@ -170,12 +170,20 @@ export async function resolveTorrentFile(base: string, infoHash: string, choice:
   const mediaUrl = torrentFileUrl(base, infoHash, fileIdx);
   step("Waiting for peers and reading the video…");
   const speed = (bytes: number) => (bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB/s` : `${Math.round(bytes / 1e3)} KB/s`);
+  let finished = false;
+  let pending = false;
   const watch = setInterval(() => {
+    if (pending) return;
+    pending = true;
     void torrentStats(base, infoHash, fileIdx).then((stats) => {
-      if (stats && stats.peers > 0) step(`Reading the video… ${stats.peers} ${stats.peers === 1 ? "peer" : "peers"} · ${speed(stats.speed)}`);
+      pending = false;
+      if (!finished && stats && stats.peers > 0) step(`Reading the video… ${stats.peers} ${stats.peers === 1 ? "peer" : "peers"} · ${speed(stats.speed)}`);
     });
   }, 1500);
-  const probe = await probeMedia(base, mediaUrl, 120_000).finally(() => clearInterval(watch));
+  const probe = await probeMedia(base, mediaUrl, 120_000).finally(() => {
+    finished = true;
+    clearInterval(watch);
+  });
   if (!probe) throw new ResolveError("Stremio couldn't read the video. The torrent may have no peers right now: try again in a moment.");
   const torrent = { base, infoHash, fileIdx };
   const direct = directPlayable(probe);

@@ -5,11 +5,11 @@ const TEXT_CODECS = new Set(["subrip", "srt", "ass", "ssa", "webvtt", "mov_text"
 // Picture-based subtitles (Blu-ray, DVD) can't be shown as text.
 export const isTextSubtitleCodec = (codec: string | null | undefined) => Boolean(codec && TEXT_CODECS.has(codec.toLowerCase()));
 
-const TIMING = /(\d{1,2}:)?(\d{1,2}):(\d{2})[,.](\d{1,3})\s*-->\s*(\d{1,2}:)?(\d{1,2}):(\d{2})[,.](\d{1,3})/;
+const TIMING = /(\d{1,2}:)?(\d{1,2}):(\d{2})[,.](\d+)\s*-->\s*(\d{1,2}:)?(\d{1,2}):(\d{2})[,.](\d+)/;
 
 function stamp(hours: string | undefined, minutes: string, seconds: string, millis: string) {
   const h = String(Number(hours?.replace(":", "") ?? 0)).padStart(2, "0");
-  return `${h}:${minutes.padStart(2, "0")}:${seconds}.${millis.padEnd(3, "0")}`;
+  return `${h}:${minutes.padStart(2, "0")}:${seconds}.${millis.slice(0, 3).padEnd(3, "0")}`;
 }
 
 // SubRip (or WebVTT) text to WebVTT. Style tags from ASS-in-SRT files are dropped; <i>, <b> and <u> stay.
@@ -17,7 +17,7 @@ export function srtToVtt(input: string) {
   const text = input.replace(/^﻿/, "").replace(/\r\n?/g, "\n").trim();
   if (!text) return "WEBVTT\n";
   const blocks: string[] = [];
-  for (const block of text.split(/\n{2,}/)) {
+  for (const block of text.split(/\n[ \t]*\n/)) {
     const lines = block.split("\n");
     const at = lines.findIndex((line) => TIMING.test(line));
     if (at === -1) continue;
@@ -26,7 +26,9 @@ export function srtToVtt(input: string) {
       .slice(at + 1)
       .join("\n")
       .replace(/\{\\[^}]*\}/g, "")
-      .replace(/<(?!\/?[ibu]>)[^>]*>/gi, "")
+      .replace(/<(?!\/?[ibu]>)(?=[a-z/])[^>]*>/gi, "")
+      .replace(/<(?!\/?[ibu]>)/gi, "&lt;")
+      .replace(/-->/g, "->")
       .replace(/&(?!(amp|lt|gt|nbsp|lrm|rlm);)/g, "&amp;")
       .trim();
     if (!body) continue;
@@ -40,7 +42,7 @@ export function mergeVtt(segments: string[]) {
   const seen = new Set<string>();
   const blocks: string[] = [];
   for (const segment of segments) {
-    for (const block of segment.replace(/\r\n?/g, "\n").split(/\n{2,}/)) {
+    for (const block of segment.replace(/\r\n?/g, "\n").split(/\n[ \t]*\n/)) {
       if (!TIMING.test(block) || seen.has(block.trim())) continue;
       seen.add(block.trim());
       blocks.push(block.trim());

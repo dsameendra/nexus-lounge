@@ -54,6 +54,16 @@ function sendFile(req, res, file, headers = {}, type = "video/webm") {
   res.end(req.method === "HEAD" ? undefined : data);
 }
 
+// What the probe reports for each link path; anything else is the VP8 + Opus film.
+const PROBES = {
+  "/unsupported.mkv": { video: "mpeg2video", audio: "dts" },
+  "/h264.mkv": { video: "h264", audio: "aac" },
+  "/broken.mkv": { video: "h264", audio: "aac" },
+  "/subs.webm": { subtitles: true },
+  "/short.webm": { duration: "short" },
+  "/placeholder.webm": { duration: "placeholder" },
+};
+
 // wrongSize makes this server report a different file, to prove a mismatch is refused.
 export function startStremioMock(port, fx, { wrongSize = false } = {}) {
   const state = { creates: [], streamed: 0, hlsServed: 0 };
@@ -89,7 +99,7 @@ export function startStremioMock(port, fx, { wrongSize = false } = {}) {
       return sendFile(req, res, file[2] === "2" ? fx.short.path : fx.film.path, CORS);
     }
     if (url.pathname === "/subtitles.vtt") return void res.writeHead(200, { ...CORS, "content-type": "text/vtt" }).end("WEBVTT\n\n00:00:00.000 --> 01:00:00.000\nTorrent subtitle line\n");
-    const subs = (url.searchParams.get("mediaURL") ?? "").includes("subs");
+    const subs = (url.searchParams.get("mediaURL") ?? "").includes("/subs.webm");
     const map = url.pathname.match(/^\/hlsv2\/[^/]+\/(master\.m3u8|video0\.m3u8|subtitle0\.m3u8|subtitle0\/segment(\d)\.vtt)$/);
     if (subs && map) {
       const query = `mediaURL=${encodeURIComponent(url.searchParams.get("mediaURL"))}`;
@@ -101,15 +111,18 @@ export function startStremioMock(port, fx, { wrongSize = false } = {}) {
     }
     if (url.pathname === "/hlsv2/probe") {
       const media = decodeURIComponent(url.searchParams.get("mediaURL") ?? "");
-      if (media.includes("expired")) return void res.writeHead(500, CORS).end("error");
-      const hevc = media.includes("hevc");
-      const duration = media.includes("placeholder") ? fx.placeholder.duration : media.endsWith("/2") || media.includes("short") ? fx.short.duration : fx.film.duration;
+      let path = "";
+      try { path = new URL(media).pathname; } catch {}
+      if (path === "/expired.webm") return void res.writeHead(500, CORS).end("error");
+      const probe = { ...(PROBES[path] ?? (path.endsWith("/2") ? PROBES["/short.webm"] : {})) };
+      const { duration = fx.film.duration, video = "vp8", audio = "opus", subtitles = false } = probe;
+      const lengths = { film: fx.film.duration, short: fx.short.duration, placeholder: fx.placeholder.duration };
       return json({
-        format: { name: "matroska,webm", duration },
+        format: { name: "matroska,webm", duration: lengths[duration] ?? duration },
         streams: [
-          { track: "video", codec: hevc ? "mpeg2video" : media.includes(".mkv") && !hevc ? "h264" : "vp8", width: 640, height: 360 },
-          { track: "audio", codec: hevc ? "dts" : media.includes(".mkv") ? "aac" : "opus", channels: 2 },
-          ...(media.includes("subs") ? [{ track: "subtitle", codec: "subrip", title: "Fran\u00e7ais", language: "fra" }] : []),
+          { track: "video", codec: video, width: 640, height: 360 },
+          { track: "audio", codec: audio, channels: 2 },
+          ...(subtitles ? [{ track: "subtitle", codec: "subrip", title: "Fran\u00e7ais", language: "fra" }] : []),
         ],
       });
     }
@@ -139,7 +152,7 @@ export function startLinkHost(port, fx) {
     const path = url.pathname;
     if (req.method === "OPTIONS") return void res.writeHead(204, CORS).end();
     if (path === "/ok.webm" || path === "/alt/ok.webm") return sendFile(req, res, fx.film.path, CORS);
-    if (path === "/hevc.mkv") return sendFile(req, res, fx.film.path, CORS);
+    if (path === "/unsupported.mkv") return sendFile(req, res, fx.film.path, CORS);
     if (path === "/real-hevc.mkv" && fx.realHevc) return sendFile(req, res, fx.realHevc, CORS, "application/octet-stream");
     if (path === "/h264.mkv") return sendFile(req, res, fx.film.path, CORS, "video/x-matroska");
     if (path === "/broken.mkv") return void res.writeHead(200, { ...CORS, "content-type": "video/x-matroska", "content-length": 4096 }).end(Buffer.alloc(4096, 7));

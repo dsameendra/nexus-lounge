@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { languageCode } from "@nexus/shared";
 import { onlineSubtitles, searchTitles, type SubtitleOption, type TitleResult } from "@/lib/subtitles";
 import { SearchIcon } from "./Icons";
@@ -16,6 +16,7 @@ export function SubtitleSearchSheet({ onPick, onClose }: { onPick: (option: Subt
   const [options, setOptions] = useState<SubtitleOption[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const request = useRef(0);
 
   async function search() {
     if (busy || !query.trim()) return;
@@ -38,17 +39,20 @@ export function SubtitleSearchSheet({ onPick, onClose }: { onPick: (option: Subt
     const s = Number(season);
     const e = Number(episode);
     if (chosen.type === "series" && (!Number.isInteger(s) || !Number.isInteger(e) || s < 0 || e < 1)) return setError("Enter the season and episode numbers.");
+    const mineRequest = ++request.current;
     setBusy("Finding subtitles…");
     setError(null);
     try {
       const found = await onlineSubtitles(chosen, chosen.type === "series" ? { season: s, episode: e } : null);
+      if (mineRequest !== request.current) return;
       const mine = languageCode(navigator.language);
       setOptions([...found].sort((a, b) => Number(b.lang === mine) - Number(a.lang === mine) || (a.label < b.label ? -1 : 1)));
       if (found.length === 0) setError("No subtitles for that title yet.");
     } catch (problem) {
+      if (mineRequest !== request.current) return;
       setError(problem instanceof Error ? problem.message : "Couldn't get subtitles.");
     } finally {
-      setBusy(null);
+      if (mineRequest === request.current) setBusy(null);
     }
   }
 
@@ -90,7 +94,7 @@ export function SubtitleSearchSheet({ onPick, onClose }: { onPick: (option: Subt
             className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-label-3"
           />
         </label>
-        <p className="text-xs leading-relaxed text-label-3">Only what you type here and the title you pick are sent to Stremio and OpenSubtitles, from your browser. Nothing goes to the room.</p>
+        <p className="text-xs leading-relaxed text-label-3">Only what you type here, the title you pick and the season and episode are sent, from your browser, to Stremio and OpenSubtitles; the subtitle file comes from the host they name. Nothing goes to the room.</p>
         <div className="min-h-5 text-sm" aria-live="polite">
           {busy && <p className="text-label-2">{busy}</p>}
           {error && (
@@ -129,6 +133,8 @@ export function SubtitleSearchSheet({ onPick, onClose }: { onPick: (option: Subt
               <button
                 type="button"
                 onClick={() => {
+                  request.current++;
+                  setBusy((current) => (current === "Finding subtitles…" ? null : current));
                   setTitle(null);
                   setOptions(null);
                   setError(null);
