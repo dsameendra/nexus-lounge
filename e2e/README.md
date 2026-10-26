@@ -1,6 +1,6 @@
 # End-to-end suites
 
-Browser tests that drive real Chrome (and WebKit for the iPhone checks) against a running stack: rooms, guests, voice states, push to talk, fullscreen, sound cues, Twitch switching, join by code, the playlist queue, gestures and phone layouts.
+Browser tests that drive real Chrome (and WebKit for the iPhone checks) against a running stack: rooms, guests, voice states, push to talk, fullscreen, sound cues, Twitch switching, Kick channels (`15-kick.mjs`, with a stubbed Kick player so it needs no internet), join by code, the playlist queue, gestures and phone layouts.
 
 They sign in by minting an Auth.js session cookie, so no Discord account is needed. The web app and the server must share the same `AUTH_SECRET`.
 

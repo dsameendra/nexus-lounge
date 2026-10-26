@@ -67,10 +67,31 @@ button,
   backdrop-filter: saturate(180%) blur(24px);
 }
 
+/* TV browsers: no blur, fades or animation above the video, which they draw on a hardware layer. */
 .tv-browser .material {
-  background: rgba(0, 0, 0, 0.78);
+  background: #1c1c1e;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+}
+
+.tv-browser [class*="animate-fade"] {
+  animation: none !important;
+}
+
+.tv-browser [class*="blur"] {
+  filter: none !important;
+}
+
+/* The idle button stays in the page so the remote can still focus it; it just stops being drawn. */
+.tv-browser [data-idle="true"] {
+  background: transparent !important;
+  color: transparent !important;
+  box-shadow: none !important;
+}
+
+.tv-browser button:focus {
+  outline: 4px solid #0a84ff;
+  outline-offset: 4px;
 }
 
 .scroll-thin {

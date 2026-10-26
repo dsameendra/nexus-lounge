@@ -104,6 +104,8 @@ export function LocalFilesProvider({ children }: { children: React.ReactNode }) 
         throw error;
       }
       entries.current.get(streamId)?.destroy();
+      created.createdAt = Date.now();
+      if (!latest.current.state.streams.some((item) => item.id === streamId)) seen.current.delete(streamId);
       entries.current.set(streamId, created);
       setRememberedNames(({ [streamId]: _gone, ...rest }) => rest);
       if (picked) void rememberFile(streamId.slice("local:".length), picked.file, picked.handle);
@@ -145,6 +147,7 @@ export function LocalFilesProvider({ children }: { children: React.ReactNode }) 
     (streamId: string) => {
       entries.current.get(streamId)?.destroy();
       entries.current.delete(streamId);
+      seen.current.delete(streamId);
       writeFlag(streamId, null);
       bump();
     },

@@ -5,7 +5,7 @@ export const metadata: Metadata = { title: "Terms of Service · Nexus Lounge" };
 
 export default function TermsPage() {
   return (
-    <LegalPage title="Terms of Service" updated="25 October 2026">
+    <LegalPage title="Terms of Service" updated="26 October 2026">
       <p>
         Nexus Lounge is a free, general-purpose virtual watch-party app: you create or join a room, watch YouTube, Twitch and Kick together, talk by voice, chat and share your screen. By using it you agree to these terms.
       </p>

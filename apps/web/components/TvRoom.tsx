@@ -74,8 +74,7 @@ export function TvRoom() {
   const fullscreen = useTvFullscreen();
   const [focused, setFocused] = useState(false);
   const idleCursor = useIdleCursor();
-  const [tvBrowser, setTvBrowser] = useState(false);
-  useEffect(() => setTvBrowser(isTvBrowser()), []);
+  const [tvBrowser] = useState(isTvBrowser);
   const { send, status, state, self } = useRoom();
   const mode = state.members.find((member) => member.id === self.id)?.tvMode ?? "both";
   const playing = mode !== "here";
@@ -159,13 +158,21 @@ export function TvRoom() {
             fullscreen.toggle();
             if (event.detail > 0) event.currentTarget.blur();
           }}
-          onFocus={(event) => setFocused(event.currentTarget.matches(":focus-visible"))}
+          onFocus={(event) => {
+            // Browsers without :focus-visible (older TV engines) throw here: treat any focus as keyboard focus.
+            let keyboard = true;
+            try {
+              keyboard = event.currentTarget.matches(":focus-visible");
+            } catch {}
+            setFocused(keyboard);
+          }}
           onBlur={() => setFocused(false)}
           aria-label={fullscreen.active ? "Exit fullscreen" : "Enter fullscreen"}
           title={fullscreen.active ? "Exit fullscreen (F)" : "Enter fullscreen (F)"}
           className={`material absolute top-10 right-10 z-30 flex size-20 items-center justify-center rounded-full text-4xl text-white focus-visible:ring-4 focus-visible:ring-accent focus-visible:outline-none ${
             tvBrowser ? "" : "transition duration-300 hover:brightness-125 active:scale-95"
-          } ${idleCursor && !focused ? (tvBrowser ? "invisible" : "pointer-events-none opacity-0") : "opacity-100"}`}
+          } ${idleCursor && !focused ? (tvBrowser ? "pointer-events-none" : "pointer-events-none opacity-0") : "opacity-100"}`}
+          data-idle={tvBrowser && idleCursor && !focused ? "true" : undefined}
         >
           {fullscreen.active ? <ExitFullscreenIcon /> : <FullscreenIcon />}
         </button>

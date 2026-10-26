@@ -8,7 +8,7 @@ export function thumbnailUrl(stream: Stream) {
   const { source } = stream;
   if (source.type === "youtube") return `https://i.ytimg.com/vi/${source.id}/hqdefault.jpg`;
   if (isDeviceSource(source)) return null;
-  if (source.isLive) return `https://static-cdn.jtvnw.net/previews-ttv/live_user_${source.id.toLowerCase()}-440x248.jpg`;
+  if (source.type === "twitch" && source.isLive) return `https://static-cdn.jtvnw.net/previews-ttv/live_user_${source.id.toLowerCase()}-440x248.jpg`;
   return null;
 }
 

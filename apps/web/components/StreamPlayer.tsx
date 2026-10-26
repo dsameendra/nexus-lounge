@@ -112,6 +112,7 @@ export function StreamPlayer({
   const adapters = useRef<Partial<Record<Provider, PlayerAdapter>>>({});
   const mem = useRef({
     loadedId: null as string | null,
+    loadedType: null as string | null,
     loadedAt: 0,
     graceUntil: 0,
     lastPlayCmd: 0,
@@ -177,10 +178,6 @@ export function StreamPlayer({
     existing.destroy();
     delete adapters.current[type];
   }, []);
-  const resetTwitch = useCallback(() => {
-    resetEmbed("twitch");
-    resetEmbed("kick");
-  }, [resetEmbed]);
 
   const tick = useCallback(() => {
     const { stream, visible, volume, muted } = latest.current;
@@ -191,6 +188,8 @@ export function StreamPlayer({
       const inactive = !stream || !visible || stream.source.type !== type;
       if (type !== "youtube" && other && inactive) {
         resetEmbed(type);
+        // Showing the same stream again has to build a new player, so it must load again.
+        if (m.loadedType === type) m.loadedId = null;
         continue;
       }
       if (other?.ready && inactive && other.getState() === "playing") other.pause();
@@ -215,6 +214,7 @@ export function StreamPlayer({
       const lead = playback.playing && !stream.source.isLive ? m.lead[stream.source.type] : 0;
       Object.assign(m, {
         loadedId: stream.id,
+        loadedType: stream.source.type,
         loadedAt: now,
         graceUntil: now + 4000,
         rate: 1,

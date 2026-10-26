@@ -453,6 +453,8 @@ test("kick urls", () => {
   assert.deepEqual(parseMediaUrl("https://kick.com/Trainwreckstv"), { ok: true, source: { type: "kick", id: "trainwreckstv", isLive: true } });
   assert.deepEqual(parseMediaUrl("kick.com/some-channel/"), { ok: true, source: { type: "kick", id: "some-channel", isLive: true } });
   assert.deepEqual(parseMediaUrl("https://player.kick.com/xqc?autoplay=true"), { ok: true, source: { type: "kick", id: "xqc", isLive: true } });
+  assert.deepEqual(parseMediaUrl("https://kick.com/some_user"), { ok: true, source: { type: "kick", id: "some-user", isLive: true } });
+  assert.match((parseMediaUrl("https://kick.com/video/0a1b2c3d") as { reason: string }).reason, /videos and clips/);
   assert.equal(parseMediaUrl("https://kick.com/categories/gaming").ok, false);
   assert.equal(parseMediaUrl("https://kick.com/").ok, false);
   assert.equal(parseMediaUrl("https://kick.com/xqc/videos/abc").ok, false);

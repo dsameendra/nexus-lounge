@@ -13,6 +13,7 @@ export class KickAdapter extends Emitter implements PlayerAdapter {
   private shownMuted: boolean | null = null;
   private muted: boolean;
   private destroyed = false;
+  private muteTimer: ReturnType<typeof setTimeout> | undefined;
   private host: HTMLElement;
 
   constructor(host: HTMLElement, muted: boolean) {
@@ -85,13 +86,16 @@ export class KickAdapter extends Emitter implements PlayerAdapter {
   // The embed only learns about sound from its address, so a change reloads it (a short rebuffer, but the viewer asked).
   setMuted(muted: boolean) {
     this.muted = muted;
-    if (this.frame && this.shownMuted !== muted) this.show(true);
+    clearTimeout(this.muteTimer);
+    // Dragging the volume slider across the silent mark would otherwise reload it on every crossing.
+    if (this.frame && this.shownMuted !== muted) this.muteTimer = setTimeout(() => this.shownMuted !== this.muted && this.show(true), 500);
   }
 
   setVolume() {}
 
   destroy() {
     this.destroyed = true;
+    clearTimeout(this.muteTimer);
     this.frame?.remove();
     this.frame = null;
   }

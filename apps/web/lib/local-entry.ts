@@ -51,7 +51,7 @@ export interface StreamPerf {
 export class LocalEntry {
   readonly video = document.createElement("video");
   readonly url: string;
-  readonly createdAt = Date.now();
+  createdAt = Date.now();
   error: string | null = null;
   blocked = false;
   status: SyncStatus = "syncing";
