@@ -75,11 +75,29 @@ await closed(p);
 check(await until(async () => { const v = await playing(p, GOOD); return v && !v.paused && v.t > 1; }, 30000), "the owner's Stremio plays it");
 check((await p.getByText("Stremio", { exact: true }).count()) > 0, "the stream is badged Stremio");
 
+console.log("Subtitles");
+const shown = (page) => page.evaluate(() => { const v = [...document.querySelectorAll("video")].find((el) => !el.srcObject && el.textTracks.length && !el.closest("[aria-hidden=true]")); const t = v && [...v.textTracks].find((x) => x.mode === "showing"); return t ? { label: t.label, cues: t.cues?.length ?? 0, text: t.cues?.[0]?.text ?? "" } : null; });
+check(await until(async () => { const s = await shown(p); return s && s.cues > 0 && s.text.includes("Torrent subtitle"); }, 20000), "a subtitle file that came with the torrent shows by itself in the viewer's language");
+await p.getByRole("button", { name: "Subtitles" }).click();
+check((await p.getByRole("menuitemradio").allTextContents()).some((text) => /English/.test(text)), "the Subtitles menu lists it");
+check((await p.getByRole("menuitem", { name: "Find subtitles online…" }).count()) === 1 && (await p.getByRole("menuitem", { name: "Add a subtitle file…" }).count()) === 1, "and offers a file and an online search");
+await p.getByRole("menuitemradio", { name: "Off" }).click();
+check(await until(async () => (await shown(p)) === null), "Off hides the subtitles");
+check((await p.evaluate(() => localStorage.getItem("nexus-subtitles"))) === "off", "and remembers that choice on this device");
+await p.getByRole("button", { name: "Subtitles" }).click();
+await p.getByRole("menuitemradio", { name: /English/ }).click();
+check(await until(async () => ((await shown(p))?.cues ?? 0) > 0), "picking a track shows it again");
+await p.getByRole("button", { name: "Subtitles" }).click();
+await p.getByRole("button", { name: "Large", exact: true }).click();
+check(await p.evaluate(() => [...document.querySelectorAll("video")].some((v) => v.dataset.subSize === "1")), "the text size can be changed");
+await p.keyboard.press("Escape");
+
 console.log("A friend without Stremio watches the live feed");
 const bob = await person("discord-sm-bob", "Bob", NONE, room);
 check(await until(async () => { const v = await feedVideo(bob.page); return v && v.w > 0; }, 30000), "the picture arrives from the owner's browser");
 check(await inList(bob.page).getByRole("button", { name: /Play with my Stremio/ }).isVisible(), "the list offers Play with my Stremio");
 check(await bob.page.getByText("Watching Owner's live feed").isVisible(), "and says whose live feed is being watched");
+check((await bob.page.getByRole("button", { name: "Subtitles" }).count()) === 0, "live feed viewers have no subtitle menu (the feed is picture and sound only)");
 await inList(bob.page).getByRole("button", { name: /Play with my Stremio/ }).click();
 check(await until(async () => (await inList(bob.page).getByText(/Stremio|reach|connect/i).filter({ hasText: /Couldn't reach|Open the Stremio app/ }).count()) > 0, 20000), "without Stremio running it explains how to fix that");
 check((await playing(bob.page, GOOD)) === null && (await feedVideo(bob.page))?.w > 0, "and the live feed keeps playing");
@@ -138,6 +156,40 @@ check(await p.getByText(/converted so every browser can play it/i).isVisible(), 
 await p.getByRole("button", { name: "Play for everyone" }).click();
 await closed(p);
 check(await until(async () => { const v = await playing(p, "converted"); return v && v.w > 0 && !v.paused && v.t > 1; }, 45000), "and plays through the converted stream");
+
+console.log("Subtitles inside a video");
+await addLink("/subs.webm");
+await p.getByRole("button", { name: "Play for everyone" }).click();
+await closed(p);
+await p.getByRole("button", { name: "Subtitles" }).click();
+check(await until(async () => (await p.getByRole("menuitemradio", { name: /Fran/ }).count()) > 0, 20000), "tracks inside the video are listed through Stremio");
+await p.getByRole("menuitemradio", { name: /Fran/ }).click();
+check(await until(async () => { const s = await shown(p); return s && s.cues >= 2 && s.text.includes("Embedded first"); }, 20000), "and shown, with every segment of the track joined");
+
+console.log("Finding subtitles online");
+const cors = { "access-control-allow-origin": "*" };
+await p.route("https://v3-cinemeta.strem.io/**", (route) => route.fulfill({ headers: cors, json: route.request().url().includes("/movie/") ? { metas: [{ id: "tt1727587", imdb_id: "tt1727587", name: "Sintel", releaseInfo: "2010" }] } : { metas: [] } }));
+await p.route("https://opensubtitles-v3.strem.io/**", (route) => route.fulfill({ headers: cors, json: { subtitles: [{ id: "1", url: "https://subs.test/1.srt", lang: "eng" }, { id: "2", url: "http://insecure.test/2.srt", lang: "eng" }] } }));
+await p.route("https://subs.test/**", (route) => route.fulfill({ headers: { ...cors, "content-type": "application/x-subrip" }, body: "1\n00:00:00,500 --> 00:59:00,000\nOnline subtitle line\n" }));
+await p.getByRole("button", { name: "Subtitles" }).click();
+await p.getByRole("menuitem", { name: "Find subtitles online…" }).click();
+const sheet = p.getByRole("dialog", { name: "Find subtitles" });
+await sheet.getByLabel("Movie or series title").fill("Sintel");
+await sheet.getByRole("button", { name: "Search" }).click();
+await sheet.getByRole("button", { name: /Sintel \(2010\)/ }).click();
+await sheet.getByRole("button", { name: "English" }).click();
+check(await until(async () => { const s = await shown(p); return s && s.text.includes("Online subtitle line"); }, 15000), "a subtitle found by title shows for this viewer");
+check((await sheet.count()) === 0, "and the search closes");
+check(!owner.sent.some((frame) => frame.includes("Online subtitle") || frame.includes("subs.test")), "nothing about subtitles is sent to the room");
+
+console.log("A subtitle file from the computer");
+await p.getByRole("button", { name: "Subtitles" }).click();
+const [chooser] = await Promise.all([p.waitForEvent("filechooser"), p.getByRole("menuitem", { name: "Add a subtitle file…" }).click()]);
+await chooser.setFiles({ name: "Movie.fr.srt", mimeType: "application/x-subrip", buffer: Buffer.from("\ufeff1\r\n00:00:00,200 --> 00:50:00,000\r\n<i>Fichier de sous-titres</i>\r\n") });
+check(await until(async () => { const s = await shown(p); return s && s.text.includes("Fichier de sous-titres") && !s.text.includes("<font"); }, 10000), "a .srt from the computer shows");
+await p.getByRole("button", { name: "Subtitles" }).click();
+check((await p.getByRole("menuitemradio", { name: "French" }).count()) === 1, "and is listed by its language");
+await p.keyboard.press("Escape");
 check(stremio.state.hlsServed > 0, "the playlist came from Stremio");
 
 console.log("Links that look wrong");

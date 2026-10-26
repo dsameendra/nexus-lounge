@@ -6,9 +6,12 @@ import { useRoomContext } from "@livekit/components-react";
 import { RoomEvent, type RemoteTrack } from "livekit-client";
 import { SILENT_BELOW, expectedPosition, isSilent, isTypingTarget, sliderToGain, type Stream } from "@nexus/shared";
 import { fileFromDrop } from "@/lib/local-files";
+import { languageCode } from "@nexus/shared";
+import { subtitleFromFile, writeLanguagePref, writeSizePref, type SubtitleOption } from "@/lib/subtitles";
 import { FilmIcon, PlayIcon } from "./Icons";
 import { FEED_AUDIO, FEED_VIDEO, useLocalFiles } from "./LocalFilesProvider";
 import { PlayerControls, type SyncStatus } from "./PlayerControls";
+import { SubtitleSearchSheet } from "./SubtitleSearchSheet";
 import { useRoom } from "./RoomProvider";
 import { loadVolume, VOLUME_KEY } from "./StreamPlayer";
 import { useAppleAirPlaySupport, openTvSheet } from "./useAirPlay";
@@ -173,7 +176,8 @@ export function LocalPlayer({
   const [muted, setMuted] = useState(initialVolume.muted);
   const [controlsShown, setControlsShown] = useState(true);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const [ui, setUi] = useState({ time: 0, playing: false, status: "syncing" as SyncStatus, blocked: false, ended: false, error: null as string | null });
+  const [ui, setUi] = useState({ time: 0, playing: false, status: "syncing" as SyncStatus, blocked: false, ended: false, error: null as string | null, subs: "" });
+  const [searching, setSearching] = useState(false);
 
   const { kind, entry, owner, remembered, busy, problem, attach, choose, resume, release, ownLabel } = useDeviceStream(stream);
   const shown = Boolean(stream && visible);
@@ -211,12 +215,12 @@ export function LocalPlayer({
     const read = () => {
       let next: typeof ui;
       if (entry) {
-        next = { time: Math.floor(entry.video.currentTime * 2) / 2, playing: !entry.video.paused, status: entry.status, blocked: entry.blocked || !entry.audioRunning, ended: entry.ended, error: entry.error };
+        next = { time: Math.floor(entry.video.currentTime * 2) / 2, playing: !entry.video.paused, status: entry.status, blocked: entry.blocked || !entry.audioRunning, ended: entry.ended, error: entry.error, subs: `${entry.subtitles.map((item) => item.id).join(",")}|${entry.activeSubtitle ?? ""}|${entry.subtitleBusy}|${entry.subtitleError ?? ""}|${entry.subtitleSize}` };
       } else {
         const length = stream.file?.duration ?? 0;
         const expected = expectedPosition(stream.playback, clock.now());
         const ended = length > 0 && expected !== null && expected >= length - 0.5;
-        next = { time: Math.floor(Math.min(expected ?? 0, length || Infinity) * 2) / 2, playing: stream.playback.playing && !ended, status: "synced", blocked: false, ended, error: null };
+        next = { time: Math.floor(Math.min(expected ?? 0, length || Infinity) * 2) / 2, playing: stream.playback.playing && !ended, status: "synced", blocked: false, ended, error: null, subs: "" };
       }
       setUi((prev) => (Object.keys(next).every((key) => prev[key as keyof typeof prev] === next[key as keyof typeof next]) ? prev : next));
     };
@@ -261,6 +265,36 @@ export function LocalPlayer({
     if (!stream || !canControl || stream.playback.position === null) return;
     const base = expectedPosition(stream.playback, clock.now()) ?? ui.time;
     send({ type: "stream.control", streamId: stream.id, action: "seek", position: Math.min(duration || Infinity, Math.max(0, base + delta)) });
+  }
+
+  // Subtitles are personal: each viewer picks their own and nothing about them goes to the room.
+  const subtitleActions = entry
+    ? [
+        { label: "Add a subtitle file…", onClick: () => void pickSubtitleFile() },
+        { label: "Find subtitles online…", onClick: () => setSearching(true) },
+      ]
+    : [];
+
+  async function showSubtitle(option: SubtitleOption) {
+    if (!entry) return;
+    entry.addSubtitles([option]);
+    await entry.selectSubtitle(option.id);
+    if (entry.subtitleError) throw new Error(entry.subtitleError);
+    if (option.lang) writeLanguagePref(option.lang);
+  }
+
+  async function pickSubtitleFile() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".srt,.vtt,text/vtt";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file || !entry) return;
+      void subtitleFromFile(file).then(showSubtitle).catch((error) => {
+        entry.subtitleError = error instanceof Error ? error.message : "Couldn't open that subtitle file.";
+      });
+    };
+    input.click();
   }
 
   function toggleMute() {
@@ -327,6 +361,22 @@ export function LocalPlayer({
       hideVolume={!hasElementFullscreen()}
       fit={fillable ? fit : undefined}
       onFit={fillable ? toggleFit : undefined}
+      captions={
+        entry
+          ? { tracks: entry.subtitles.map((item) => ({ id: item.id, label: item.label })), active: entry.activeSubtitle, size: entry.subtitleSize }
+          : null
+      }
+      onCaptionTrack={(id) => {
+        if (!entry) return;
+        void entry.selectSubtitle(id);
+        writeLanguagePref(id ? (languageCode(entry.subtitles.find((item) => item.id === id)?.lang) ?? "on") : "off");
+      }}
+      onCaptionSize={(size) => {
+        entry?.setSubtitleSize(size);
+        writeSizePref(size);
+      }}
+      captionActions={subtitleActions}
+      captionNote={entry?.subtitleBusy ? { text: "Loading the subtitles…", error: false } : entry?.subtitleError ? { text: entry.subtitleError, error: true } : null}
       onResync={() => entry?.resync()}
       onGoLive={() => {}}
       canFullscreen
@@ -452,6 +502,7 @@ export function LocalPlayer({
         </div>
       )}
 
+      {searching && <SubtitleSearchSheet onPick={showSubtitle} onClose={() => setSearching(false)} />}
       {!bare &&
         (overlayControls ? controls : controlsSlot ? createPortal(controls, controlsSlot) : null)}
     </div>

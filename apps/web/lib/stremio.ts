@@ -185,6 +185,7 @@ export interface Probe {
   duration: number;
   video: string | null;
   audio: string | null;
+  subtitleTracks: number;
 }
 
 // Stremio fetches the address itself, so this also works for links this browser can't read.
@@ -201,6 +202,7 @@ export async function probeMedia(base: string, mediaUrl: string, timeoutMs = 90_
       duration,
       video: streams.find((stream) => stream.track === "video")?.codec ?? null,
       audio: streams.find((stream) => stream.track === "audio")?.codec ?? null,
+      subtitleTracks: streams.filter((stream) => stream.track === "subtitle").length,
     };
   } catch {
     return null;

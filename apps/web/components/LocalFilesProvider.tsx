@@ -3,10 +3,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRoomContext } from "@livekit/components-react";
 import { AudioPresets, RoomEvent, Track } from "livekit-client";
-import { streamKey, type Stream } from "@nexus/shared";
+import { languageCode, streamKey, type Stream } from "@nexus/shared";
 import { LocalEntry, registry, type EntrySource } from "@/lib/local-entry";
 import { canHostFeed, openRemembered, readFingerprint, recallFile, rememberFile, type PickedFile } from "@/lib/local-files";
 import { blindTorrentSource, friendlyError, requireStremio, resolveLinkForStream, resolveTorrentForStream, type Resolved } from "@/lib/remote-media";
+import { discoverSubtitles, readLanguagePref } from "@/lib/subtitles";
 import { checkStremio, getStremioBase, getStremioStatus, torrentStats, type TorrentStats } from "@/lib/stremio";
 import { useRoom } from "./RoomProvider";
 import { StreamLinkSheet } from "./StreamLinkSheet";
@@ -139,6 +140,15 @@ export function LocalFilesProvider({ children }: { children: React.ReactNode }) 
       setRememberedNames(({ [streamId]: _gone, ...rest }) => rest);
       if (picked) void rememberFile(streamId.slice("local:".length), picked.file, picked.handle);
       bump();
+      if (source.kind === "url" && source.subs) {
+        void discoverSubtitles(source.subs).then((found) => {
+          created.addSubtitles(found);
+          const saved = readLanguagePref();
+          const wanted = saved === "off" ? null : (saved ?? languageCode(navigator.language));
+          const match = wanted ? found.find((option) => option.lang === wanted) : undefined;
+          if (match && created.activeSubtitle === null && !created.subtitleBusy) void created.selectSubtitle(match.id);
+        });
+      }
     },
     [bump],
   );

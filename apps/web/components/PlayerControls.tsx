@@ -62,12 +62,14 @@ export interface PlayerControlsProps {
   captions?: CaptionState | null;
   onCaptionTrack?: (id: string | null) => void;
   onCaptionSize?: (size: number) => void;
+  captionActions?: { label: string; onClick: () => void }[];
+  captionNote?: { text: string; error: boolean } | null;
 }
 
 export function PlayerControls(props: PlayerControlsProps) {
   const {
     variant, visible, minimal = false, playing, time, duration, live, atEdge, canControl, canSeek, status, volume, muted, canFullscreen, fullscreen = false, hideVolume = false, fit, onFit,
-    qualityOptions, quality, qualityNote, qualityLink, onPlayPause, onSeek, onVolume, onMute, onFullscreen, onResync, onGoLive, onQuality, onAirPlay, captions, onCaptionTrack, onCaptionSize,
+    qualityOptions, quality, qualityNote, qualityLink, onPlayPause, onSeek, onVolume, onMute, onFullscreen, onResync, onGoLive, onQuality, onAirPlay, captions, onCaptionTrack, onCaptionSize, captionActions, captionNote,
   } = props;
   const [scrub, setScrub] = useState<number | null>(null);
   const dot = status === "synced" ? "bg-live" : status === "unsynced" ? "bg-warn" : "bg-label-3 animate-pulse";
@@ -146,7 +148,7 @@ export function PlayerControls(props: PlayerControlsProps) {
 
         {minimal && <span className="flex-1 truncate px-1 text-sm text-label-2">Live on Twitch</span>}
 
-        {captions && onCaptionTrack && onCaptionSize && <CaptionsMenu captions={captions} onTrack={onCaptionTrack} onSize={onCaptionSize} />}
+        {captions && onCaptionTrack && onCaptionSize && <CaptionsMenu captions={captions} onTrack={onCaptionTrack} onSize={onCaptionSize} actions={captionActions} note={captionNote} />}
 
         <div className="hidden @md:contents">
           <QualityMenu options={qualityOptions} value={quality} note={qualityNote} link={qualityLink} fullscreen={fullscreen} onFullscreen={canFullscreen ? onFullscreen : undefined} onSelect={onQuality} />

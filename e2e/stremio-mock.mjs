@@ -88,6 +88,17 @@ export function startStremioMock(port, fx, { wrongSize = false } = {}) {
       state.streamed++;
       return sendFile(req, res, file[2] === "2" ? fx.short.path : fx.film.path, CORS);
     }
+    if (url.pathname === "/subtitles.vtt") return void res.writeHead(200, { ...CORS, "content-type": "text/vtt" }).end("WEBVTT\n\n00:00:00.000 --> 01:00:00.000\nTorrent subtitle line\n");
+    const subs = (url.searchParams.get("mediaURL") ?? "").includes("subs");
+    const map = url.pathname.match(/^\/hlsv2\/[^/]+\/(master\.m3u8|video0\.m3u8|subtitle0\.m3u8|subtitle0\/segment(\d)\.vtt)$/);
+    if (subs && map) {
+      const query = `mediaURL=${encodeURIComponent(url.searchParams.get("mediaURL"))}`;
+      const type = { ...CORS, "content-type": map[1].endsWith("vtt") ? "text/vtt" : "application/vnd.apple.mpegurl" };
+      if (map[1] === "master.m3u8") return void res.writeHead(200, type).end(`#EXTM3U\n#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subtitles",NAME="Fran\u00e7ais",LANGUAGE="fra",AUTOSELECT=NO,DEFAULT=NO,URI="subtitle0.m3u8?${query}"\n#EXT-X-STREAM-INF:BANDWIDTH=800000,SUBTITLES="subtitles"\nvideo0.m3u8?${query}\n`);
+      if (map[1] === "video0.m3u8") return sendFile(req, res, join(fx.hls, "index.m3u8"), CORS, "application/vnd.apple.mpegurl");
+      if (map[1] === "subtitle0.m3u8") return void res.writeHead(200, type).end(`#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:10.0,\nsubtitle0/segment1.vtt?${query}\n#EXTINF:10.0,\nsubtitle0/segment2.vtt?${query}\n#EXT-X-ENDLIST\n`);
+      return void res.writeHead(200, type).end(map[2] === "1" ? "WEBVTT\n\n00:00:01.000 --> 00:00:09.000\nEmbedded first line\n" : "WEBVTT\n\n00:00:01.000 --> 00:00:09.000\nEmbedded first line\n\n00:00:10.000 --> 01:00:00.000\nEmbedded second line\n");
+    }
     if (url.pathname === "/hlsv2/probe") {
       const media = decodeURIComponent(url.searchParams.get("mediaURL") ?? "");
       if (media.includes("expired")) return void res.writeHead(500, CORS).end("error");
@@ -98,6 +109,7 @@ export function startStremioMock(port, fx, { wrongSize = false } = {}) {
         streams: [
           { track: "video", codec: hevc ? "hevc" : "vp8", width: 640, height: 360 },
           { track: "audio", codec: hevc ? "eac3" : "opus", channels: 2 },
+          ...(media.includes("subs") ? [{ track: "subtitle", codec: "subrip", title: "Fran\u00e7ais", language: "fra" }] : []),
         ],
       });
     }
@@ -129,6 +141,7 @@ export function startLinkHost(port, fx) {
     if (path === "/ok.webm" || path === "/alt/ok.webm") return sendFile(req, res, fx.film.path, CORS);
     if (path === "/hevc.mkv") return sendFile(req, res, fx.film.path, CORS);
     if (path === "/real-hevc.mkv" && fx.realHevc) return sendFile(req, res, fx.realHevc, CORS, "application/octet-stream");
+    if (path === "/subs.webm") return sendFile(req, res, fx.film.path, {});
     if (path === "/nocors.webm") return sendFile(req, res, fx.film.path, {});
     if (path === "/short.webm") return sendFile(req, res, fx.short.path, CORS);
     if (path === "/placeholder.webm") return sendFile(req, res, fx.placeholder.path, CORS);

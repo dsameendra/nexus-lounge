@@ -97,3 +97,14 @@ button,
 }
 .animate-reaction { animation: reaction-rise 3.2s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
 .animate-pop { animation: pop-in 0.18s cubic-bezier(0.32, 0.72, 0, 1); }
+
+/* Subtitles drawn by the browser inside local, torrent and link videos; data-sub-size is the viewer's text size. */
+video::cue {
+  color: #fff;
+  background: rgb(0 0 0 / 0.7);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: max(15px, 2.4vmin);
+}
+video[data-sub-size="-1"]::cue { font-size: max(12px, 1.9vmin); }
+video[data-sub-size="1"]::cue { font-size: max(18px, 3.1vmin); }
+video[data-sub-size="2"]::cue { font-size: max(22px, 4vmin); }
