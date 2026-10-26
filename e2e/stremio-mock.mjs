@@ -107,8 +107,8 @@ export function startStremioMock(port, fx, { wrongSize = false } = {}) {
       return json({
         format: { name: "matroska,webm", duration },
         streams: [
-          { track: "video", codec: hevc ? "hevc" : "vp8", width: 640, height: 360 },
-          { track: "audio", codec: hevc ? "eac3" : "opus", channels: 2 },
+          { track: "video", codec: hevc ? "mpeg2video" : media.includes(".mkv") && !hevc ? "h264" : "vp8", width: 640, height: 360 },
+          { track: "audio", codec: hevc ? "dts" : media.includes(".mkv") ? "aac" : "opus", channels: 2 },
           ...(media.includes("subs") ? [{ track: "subtitle", codec: "subrip", title: "Fran\u00e7ais", language: "fra" }] : []),
         ],
       });
@@ -141,6 +141,8 @@ export function startLinkHost(port, fx) {
     if (path === "/ok.webm" || path === "/alt/ok.webm") return sendFile(req, res, fx.film.path, CORS);
     if (path === "/hevc.mkv") return sendFile(req, res, fx.film.path, CORS);
     if (path === "/real-hevc.mkv" && fx.realHevc) return sendFile(req, res, fx.realHevc, CORS, "application/octet-stream");
+    if (path === "/h264.mkv") return sendFile(req, res, fx.film.path, CORS, "video/x-matroska");
+    if (path === "/broken.mkv") return void res.writeHead(200, { ...CORS, "content-type": "video/x-matroska", "content-length": 4096 }).end(Buffer.alloc(4096, 7));
     if (path === "/subs.webm") return sendFile(req, res, fx.film.path, {});
     if (path === "/nocors.webm") return sendFile(req, res, fx.film.path, {});
     if (path === "/short.webm") return sendFile(req, res, fx.short.path, CORS);

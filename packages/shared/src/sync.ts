@@ -52,8 +52,13 @@ export function median(values: number[]) {
   return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
-export const LIVE_EDGE_MARGIN = 3;
-export const LIVE_EDGE_TOLERANCE = 8;
+// A live stream can only be played up to what its player has buffered, and every viewer's edge is a little different.
+// The room is put LIVE_EDGE_MARGIN behind the controller's edge; nobody is ever asked to sit closer than
+// LIVE_PLAYABLE_MARGIN to their own edge, so a viewer whose edge is a few seconds behind stays put instead of seeking forever.
+export const LIVE_EDGE_MARGIN = 8;
+export const LIVE_PLAYABLE_MARGIN = 4;
+export const LIVE_EDGE_TOLERANCE = 14;
+export const LIVE_SEEK_THRESHOLD = 5;
 
 export function liveEdgeTarget(duration: number) {
   return Math.max(0, duration - LIVE_EDGE_MARGIN);
@@ -61,4 +66,17 @@ export function liveEdgeTarget(duration: number) {
 
 export function atLiveEdge(time: number, duration: number) {
   return duration > 0 && duration - time <= LIVE_EDGE_TOLERANCE;
+}
+
+export function livePlayableTarget(expected: number, duration: number) {
+  return Math.min(expected, Math.max(0, duration - LIVE_PLAYABLE_MARGIN));
+}
+
+// Speeding up near the edge empties the buffer (that is the stutter), and small seeks look like skips: a live stream
+// only ever gets a seek, and only when it is clearly off.
+export function computeLiveCorrection(drift: number, options: { playing: boolean; currentRate: number }): Correction {
+  const size = Math.abs(drift);
+  if (!options.playing) return size > PAUSED_SEEK_THRESHOLD ? { kind: "seek" } : { kind: "none" };
+  if (size > LIVE_SEEK_THRESHOLD) return { kind: "seek" };
+  return options.currentRate !== 1 ? { kind: "reset-rate" } : { kind: "none" };
 }

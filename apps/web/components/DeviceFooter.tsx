@@ -3,7 +3,8 @@
 import type { Stream } from "@nexus/shared";
 import { CheckIcon, FilmIcon, LinkIcon, SyncIcon } from "./Icons";
 import { useLocalFiles } from "./LocalFilesProvider";
-import { useStremio } from "@/lib/stremio";
+import { getStremioLimits, useStremio } from "@/lib/stremio";
+import { streamHint } from "@/lib/stream-hint";
 import { StremioConnection } from "./StremioConnection";
 import { useDeviceStream } from "./useDeviceStream";
 
@@ -26,18 +27,27 @@ export function DeviceFooter({ stream }: { stream: Stream }) {
   const icon = d.kind === "link" ? <LinkIcon /> : <FilmIcon />;
   const progress = d.stats && d.entry ? `${Math.round(d.stats.progress * 100)}% downloaded · ${speed(d.stats.speed)} · ${d.stats.peers} ${d.stats.peers === 1 ? "peer" : "peers"}` : null;
 
+  const hint = streamHint(d.entry ?? null, d.stats, getStremioLimits());
+
   let status: React.ReactNode;
   let buttons: React.ReactNode = null;
 
   if (d.owner && d.entry) {
-    status = live ? (
-      <>
-        <span className="size-2 shrink-0 animate-pulse rounded-full bg-live" /> Sharing live from your device. Keep this tab open.
-      </>
-    ) : (
-      <>
-        <CheckIcon className="shrink-0 text-live" /> {d.kind === "local" ? "Playing from your device." : d.kind === "torrent" ? "Playing through your Stremio." : "Playing your link."} Friends can watch a live feed.
-      </>
+    status = (
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="flex items-center gap-1.5">
+          {live ? (
+            <>
+              <span className="size-2 shrink-0 animate-pulse rounded-full bg-live" /> Sharing live from your device. Keep this tab open.
+            </>
+          ) : (
+            <>
+              <CheckIcon className="shrink-0 text-live" /> {d.kind === "local" ? "Playing from your device." : d.kind === "torrent" ? "Playing through your Stremio." : "Playing your link."} Friends can watch a live feed.
+            </>
+          )}
+        </span>
+        {hint && <span className="text-warn">{hint}</span>}
+      </span>
     );
     if (d.replaceLink) {
       buttons = (
@@ -67,6 +77,7 @@ export function DeviceFooter({ stream }: { stream: Stream }) {
           <CheckIcon className="shrink-0 text-live" /> Playing your copy
         </span>
         {progress && <span className="text-label-3">{progress}</span>}
+        {hint && <span className="text-warn">{hint}</span>}
       </span>
     );
     buttons = (
