@@ -84,7 +84,7 @@ const room = p.url().split("/room/")[1];
 await p.getByRole("button", { name: "Join room" }).click();
 
 console.log("Adding a file");
-await p.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
+await p.getByRole("button", { name: /(?:Add a stream|Add)$/ }).first().click();
 await p.getByRole("tab", { name: "Video file" }).click();
 await p.getByRole("button", { name: /Choose a video file/ }).click();
 check(await until(async () => (await p.getByText("Ready").count()) > 0), "a picked file is checked and marked ready");
@@ -194,7 +194,7 @@ await q.waitForURL(/\/room\//);
 const room3 = q.url().split("/room/")[1];
 await q.getByRole("button", { name: "Join room" }).click();
 await q.evaluate(() => { window.__which = "s"; });
-await q.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
+await q.getByRole("button", { name: /(?:Add a stream|Add)$/ }).first().click();
 await q.getByRole("tab", { name: "Video file" }).click();
 await q.getByRole("button", { name: /Choose a video file/ }).click();
 await q.getByText("Ready").waitFor({ timeout: 20000 });
@@ -248,7 +248,7 @@ if (existsSync(mp4)) {
   await sp.waitForURL(/\/room\//);
   const room2 = sp.url().split("/room/")[1];
   await sp.getByRole("button", { name: "Join room" }).click();
-  await sp.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
+  await sp.getByRole("button", { name: /(?:Add a stream|Add)$/ }).first().click();
   await sp.getByRole("tab", { name: "Video file" }).click();
   const [chooser] = await Promise.all([sp.waitForEvent("filechooser"), sp.getByRole("button", { name: /Choose a video file/ }).click()]);
   await chooser.setFiles(mp4);

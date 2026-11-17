@@ -5,8 +5,11 @@ import { VoiceToolbar } from "./Dock";
 import { CheckIcon, GearIcon, LinkIcon, SidebarIcon, TvIcon } from "./Icons";
 import { Logo } from "./Logo";
 import { RoomSettingsSheet } from "./RoomSettingsSheet";
+import { StartsAt } from "./StartsAt";
 import { TvSheet } from "./TvSheet";
 import { useRoom } from "./RoomProvider";
+import { useRecentVisit } from "./useRecentVisit";
+import { inviteText } from "@/lib/schedule";
 
 export function RoomHeader({
   panelOpen,
@@ -23,12 +26,13 @@ export function RoomHeader({
   onDeafenedChange: (value: boolean) => void;
   onLeave: () => void;
 }) {
-  const { state, status, isHost } = useRoom();
+  const { state, status, isHost, restarting, self } = useRoom();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [tvOpen, setTvOpen] = useState(false);
   const roomId = state.room.id;
   const title = state.room.name || "Nexus Lounge";
+  useRecentVisit(self.id, roomId, state.room.name, state.room.startsAt);
 
   useEffect(() => {
     document.title = state.room.name ? `${state.room.name} · Nexus Lounge` : "Nexus Lounge";
@@ -42,7 +46,7 @@ export function RoomHeader({
 
   async function copyInvite() {
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/room/${roomId}`);
+      await navigator.clipboard.writeText(inviteText(`${window.location.origin}/room/${roomId}`, state.room.startsAt));
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {}
@@ -53,9 +57,18 @@ export function RoomHeader({
       <div className="flex h-14 items-center justify-between pl:h-11">
       <div className="flex min-w-0 items-center gap-3">
         <Logo size={28} />
-        <span className="max-w-[40vw] truncate text-[15px] font-semibold tracking-tight">{title}</span>
+        <div className="flex min-w-0 max-w-[40vw] flex-col leading-tight">
+          <span className="truncate text-[15px] font-semibold tracking-tight">{title}</span>
+          <StartsAt startsAt={state.room.startsAt} toggle className="truncate text-[11px] text-label-2" />
+        </div>
         <span className="hidden rounded-md bg-white/10 px-2 py-0.5 font-mono text-xs text-label-2 sm:inline-block pl:hidden">{roomId}</span>
-        {status === "reconnecting" && <span className="text-xs text-warn">Reconnecting…</span>}
+        {restarting ? (
+          <span role="status" className="min-w-0 truncate text-xs text-label-2">
+            Server restarting, reconnecting…
+          </span>
+        ) : (
+          status === "reconnecting" && <span className="text-xs text-warn">Reconnecting…</span>
+        )}
       </div>
       <div className="flex items-center gap-2">
         {!panelOpen && (
@@ -81,6 +94,8 @@ export function RoomHeader({
         </button>
         <button
           onClick={copyInvite}
+          aria-label={copied ? "Invite copied" : "Copy invite"}
+          title="Copy invite"
           className="flex h-9 items-center gap-2 rounded-full bg-white/10 px-4 text-sm pl:h-8 pl:px-3 font-medium transition hover:bg-white/15 active:scale-95"
         >
           {copied ? <CheckIcon className="text-live" /> : <LinkIcon />}

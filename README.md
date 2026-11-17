@@ -156,7 +156,7 @@ docs/            Railway notes and screenshots
 - Permissions are enforced on the server and in the LiveKit token, not just hidden in the UI: guests can't add streams, share, or create rooms; only the owner can mute, deafen, remove people, let guests in or change room settings; sharing can be limited to controllers.
 - Twitch embeds must not be covered by anything on the page (Twitch disables playback if they are), so nothing is ever drawn over a Twitch or Kick player: its own controls are used and our status lines sit below it.
 - YouTube titles are fetched server-side from YouTube's public oEmbed endpoint (no key needed).
-- Rooms live in server memory and vanish on restart. Redis is the natural next step for persistence and running more than one server instance.
+- Rooms live in server memory. With `ROOMS_SNAPSHOT_PATH` set, the server also saves them to that file (every 30 seconds and on shutdown) and restores them at boot, so a restart keeps rooms, streams, the queue, roles and settings; people reconnect on their own. Without it, rooms vanish on restart. Running more than one server instance would need shared storage such as Redis.
 
 ## Tests
 
@@ -175,7 +175,7 @@ Browser end-to-end suites (Chrome plus WebKit for the iPhone-style checks) live 
 
 Two services built from the Dockerfiles in `apps/server` and `apps/web`, auto-deployed from `main`. LiveKit must be [LiveKit Cloud](https://cloud.livekit.io), since Railway doesn't support UDP. Step-by-step instructions and config templates are in [docs/railway-deploy.md](docs/railway-deploy.md).
 
-Every server deploy or restart ends all rooms, because they live in memory. Keep the server at a single instance.
+Rooms live in the server's memory. Without a snapshot every server deploy or restart ends all rooms; with `ROOMS_SNAPSHOT_PATH` on a persistent volume they come back after the restart (see the deploy guide). Either way, keep the server at a single instance.
 
 ## Contributing
 

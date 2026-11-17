@@ -10,6 +10,7 @@ const schema = z.object({
   ADMIN_SECRET: z.string().optional(),
   ADMIN_DISCORD_IDS: z.string().optional(),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(2),
+  ROOMS_SNAPSHOT_PATH: z.string().optional().transform((value) => value?.trim() || undefined),
 });
 
 const parsed = schema.safeParse(process.env);

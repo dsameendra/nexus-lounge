@@ -60,7 +60,7 @@ await op.screenshot({ path: "e2e-profile.png" });
 await op.keyboard.press("Escape");
 
 console.log("Streams, reactions");
-await op.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
+await op.getByRole("button", { name: /(?:Add a stream|Add)$/ }).first().click();
 await op.fill("input[placeholder='Paste a YouTube, Twitch or Kick link']", "https://www.youtube.com/watch?v=jNQXAC9IVRw");
 await op.getByRole("button", { name: "Play for everyone" }).click();
 check(await visible(gp.locator("iframe[src*='youtube']"), 30000), "guest gets the featured YouTube player");

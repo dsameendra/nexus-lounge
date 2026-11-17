@@ -28,14 +28,24 @@ Applied service settings (verified via API): watch patterns as above; healthchec
 
 ## Required variables (names only)
 
-- server: `AUTH_SECRET`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `RAILWAY_DOCKERFILE_PATH`
+- server: `AUTH_SECRET`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `RAILWAY_DOCKERFILE_PATH` (optional: `ROOMS_SNAPSHOT_PATH`, see below)
 - web: `AUTH_SECRET`, `AUTH_URL`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `NEXT_PUBLIC_SERVER_WS_URL`, `RAILWAY_DOCKERFILE_PATH`
 
 `NEXT_PUBLIC_*` values are inlined at build time. Secrets live only in Railway variables and git-ignored files (`.env*`, excluded by `.gitignore` and `.dockerignore`).
 
-## Single replica
+## Single replica and keeping rooms across deploys
 
-The server keeps all rooms in memory, so it must run exactly one replica (`numReplicas` 1; never scale or add regions). Every redeploy or restart ends active rooms, which is accepted. Because of that, pushes to `main` that touch server code or shared code interrupt live rooms.
+The server keeps all rooms in memory, so it must run exactly one replica (`numReplicas` 1; never scale or add regions), with or without a snapshot.
+
+Without `ROOMS_SNAPSHOT_PATH`, every redeploy or restart ends active rooms, so pushes to `main` that touch server code or shared code interrupt live rooms.
+
+With it, the server writes all rooms to that file every 30 seconds and when it is stopped (SIGTERM), and reads it back at boot before it accepts connections. Clients see "Server restarting, reconnecting…", reconnect on their own and land in the same room with the same streams, queue, roles, settings, password and moderation; voice is LiveKit's own service and is not interrupted. A crash (no SIGTERM) loses at most the last 30 seconds. To set it up:
+
+1. Add a volume to the `server` service (service > Settings > Volumes, or right-click the service on the canvas), mounted at for example `/data`.
+2. Set the server variable `ROOMS_SNAPSHOT_PATH=/data/rooms.json`. The directory must exist and be writable; the file is created with mode 0600 because it contains room password hashes and salts. Never copy it anywhere public.
+3. The image runs as the non-root `node` user, and Railway mounts volumes owned by root, so the volume must be made writable by that user. Railway documents a `RAILWAY_RUN_UID=0` service variable that runs the container as root for this purpose; confirm against Railway's current volume docs before relying on it (it gives up the non-root user), or use whatever ownership option they document now. If the server can't write, it logs "Couldn't write the rooms snapshot" every 30 seconds and otherwise works as before.
+
+Railway's docs also say a service with a volume has a short downtime on redeploy (the old deployment stops before the new one mounts the volume) rather than an overlap; that is what the snapshot needs, since the old process writes the file on SIGTERM and the new one reads it. Confirm this too. A corrupt or old-format file is ignored with a warning at boot.
 
 ## Manual deploy
 
@@ -48,7 +58,7 @@ Run from the repo root. This uploads the local working tree, including uncommitt
 
 ## Roll back
 
-Dashboard: service > Deployments > pick an earlier successful deployment > Rollback (or `railway deployment list --service <name>` and `railway deployment redeploy`, which redeploys the latest). Rollback of a server deployment also ends rooms. Note a later push to `main` will deploy forward again; revert the commit to make it stick.
+Dashboard: service > Deployments > pick an earlier successful deployment > Rollback (or `railway deployment list --service <name>` and `railway deployment redeploy`, which redeploys the latest). Rollback of a server deployment also ends rooms unless the snapshot is set up. Note a later push to `main` will deploy forward again; revert the commit to make it stick.
 
 ## User-only steps
 

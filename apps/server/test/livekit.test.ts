@@ -15,7 +15,7 @@ const none = { guest: false, micBlocked: false, canShare: false, canFeed: false 
 const sources = async (inputs: typeof none, who = user) => {
   const jwt = await createLivekitToken("room1234", who, inputs);
   const claims = await new TokenVerifier("key", "livekit-secret-livekit-secret-1234").verify(jwt);
-  return { jwt, publish: claims.video?.canPublish, sources: claims.video?.canPublishSources as unknown as string[] };
+  return { jwt, publish: claims.video?.canPublish, data: claims.video?.canPublishData, sources: claims.video?.canPublishSources as unknown as string[] };
 };
 
 test("feed tracks are a separate grant that only owners of a local file get", async () => {
@@ -29,6 +29,7 @@ test("feed tracks are a separate grant that only owners of a local file get", as
 
 test("the signed LiveKit token carries the feed source only when granted", async () => {
   assert.deepEqual((await sources(none)).sources, ["microphone"]);
+  assert.equal((await sources(none)).data, false, "chat goes through the room socket, so nobody publishes LiveKit data");
   const fed = await sources({ ...none, canShare: true, canFeed: true });
   assert.deepEqual(fed.sources, ["microphone", "screen_share", "screen_share_audio", "unknown"]);
   assert.equal(fed.publish, true);

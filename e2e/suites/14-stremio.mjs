@@ -47,7 +47,7 @@ const inList = (page) => page.locator('section[aria-label="Streams"]');
 const playing = (page, src) => page.evaluate((prefix) => { const v = [...document.querySelectorAll("video")].find((el) => { const s = el.currentSrc || el.src || ""; return !el.srcObject && (prefix === "converted" ? s.startsWith("blob:") || s.includes("/hlsv2/") : s.startsWith(prefix)); }); return v ? { t: v.currentTime, paused: v.paused, w: v.videoWidth } : null; }, src);
 const feedVideo = (page) => page.evaluate(() => { const v = [...document.querySelectorAll("video")].find((el) => el.srcObject); return v ? { w: v.videoWidth, t: v.currentTime } : null; });
 const closed = (p) => p.getByRole("tab", { name: "Stremio / link" }).waitFor({ state: "detached", timeout: 60000 });
-const openAdd = async (p) => { await p.getByRole("button", { name: /Add a stream|Add$/ }).first().click(); await p.getByRole("tab", { name: "Stremio / link" }).click(); };
+const openAdd = async (p) => { await p.getByRole("button", { name: /(?:Add a stream|Add)$/ }).first().click(); await p.getByRole("tab", { name: "Stremio / link" }).click(); };
 const paste = async (p, text) => { const input = p.getByLabel("Magnet, Stremio stream link or video link"); await input.fill(text); await input.press("Enter"); };
 
 const owner = await person("discord-sm-owner", "Owner", GOOD);
@@ -58,7 +58,7 @@ await p.getByRole("button", { name: "Join room" }).click();
 
 console.log("Who sees the tab");
 const member = await person("discord-sm-member", "Member", GOOD, room);
-await member.page.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
+await member.page.getByRole("button", { name: /(?:Add a stream|Add)$/ }).first().click();
 check((await member.page.getByRole("tab", { name: "Stremio / link" }).count()) === 0, "members who aren't controllers don't get the Stremio tab");
 await member.page.keyboard.press("Escape");
 

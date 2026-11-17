@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { isTypingTarget } from "@nexus/shared";
-import { useChat, useParticipants } from "@livekit/components-react";
+import { useParticipants } from "@livekit/components-react";
 import { AddStreamSheet } from "./AddStreamSheet";
 import { Chat } from "./Chat";
 import { ChatIcon, FilmIcon, PeopleIcon } from "./Icons";
@@ -67,7 +67,7 @@ export function RoomView({
   voiceLost: boolean;
   onReconnectVoice: () => void;
 }) {
-  const { send, status, lastError } = useRoom();
+  const { send, status, lastError, chat, self } = useRoom();
   const { effectiveId } = useEffectiveSource();
   const desktop = useMediaQuery("(min-width: 1024px)");
   const [tab, setTab] = useState<Tab>("chat");
@@ -76,9 +76,8 @@ export function RoomView({
   const [landOpen, setLandOpen] = useState(() => loadPanelOpen(LAND_PANEL_KEY, false));
   const panelOpen = landscapePhone ? landOpen : deskOpen;
   const [adding, setAdding] = useState(false);
-  const { chatMessages } = useChat();
   const participantCount = useParticipants().length;
-  const [seenChat, setSeenChat] = useState(0);
+  const [seenChatAt, setSeenChatAt] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   useVisualViewportHeight();
   useWakeLock();
@@ -124,11 +123,12 @@ export function RoomView({
   const sideTab = tab === "people" ? "people" : "chat";
   const collapsed = (desktop || landscapePhone) && !panelOpen;
   const chatVisible = tab === "chat" && !collapsed;
-  const unread = chatVisible ? 0 : chatMessages.slice(seenChat).filter((message) => !message.from?.isLocal).length;
+  const lastChatAt = chat.at(-1)?.at ?? 0;
+  const unread = chatVisible ? 0 : chat.filter((line) => line.live && line.at > seenChatAt && line.from.id !== self.id).length;
 
   useEffect(() => {
-    if (chatVisible) setSeenChat(chatMessages.length);
-  }, [chatVisible, chatMessages.length]);
+    if (chatVisible) setSeenChatAt(lastChatAt);
+  }, [chatVisible, lastChatAt]);
   const openAdd = () => setAdding(true);
 
   return (

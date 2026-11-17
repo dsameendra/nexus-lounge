@@ -12,7 +12,7 @@ const p = owner.page;
 await p.goto(BASE); await p.click("text=Create room"); await p.waitForURL(/\/room\//);
 const room = p.url().split("/room/")[1];
 await p.getByRole("button", { name: "Join room" }).click();
-await p.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
+await p.getByRole("button", { name: /(?:Add a stream|Add)$/ }).first().click();
 await p.fill("input[placeholder='Paste a YouTube, Twitch or Kick link']", "https://www.youtube.com/watch?v=jNQXAC9IVRw");
 await p.getByRole("button", { name: "Play for everyone" }).click();
 await p.waitForSelector("iframe[src*=youtube]");

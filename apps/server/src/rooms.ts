@@ -3,11 +3,14 @@ import type { WebSocket } from "ws";
 import {
   LIMITS,
   MAX_LOCAL_STREAMS_PER_USER,
+  MAX_SCHEDULED_ROOMS_PER_HOST,
+  SCHEDULE_MAX_AHEAD_MS,
   defaultRoomSettings,
   isDeviceSource,
   isScreenId,
   isUnsyncedSource,
   isQueueable,
+  type ChatLine,
   type PlaylistItem,
   type PlaylistSummary,
   type QueueItem,
@@ -47,6 +50,7 @@ interface StoredRoom {
   queue: QueueItem[];
   playlists: { summary: PlaylistSummary; items: PlaylistItem[] }[];
   featuredId: string | null;
+  chat: ChatLine[];
   connections: Map<string, Connection>;
   restrictions: Map<string, Restriction>;
   pending: Map<string, PendingRequest & { lastSeen: number }>;
@@ -78,6 +82,7 @@ export function createRoom(hostId: string, password?: string, name = ""): RoomIn
     controllerIds: [],
     createdAt: Date.now(),
     hasPassword: Boolean(password),
+    startsAt: null,
   };
   const salt = randomBytes(16);
   rooms.set(id, {
@@ -87,6 +92,7 @@ export function createRoom(hostId: string, password?: string, name = ""): RoomIn
     queue: [],
     playlists: [],
     featuredId: null,
+    chat: [],
     connections: new Map(),
     restrictions: new Map(),
     pending: new Map(),
@@ -213,11 +219,47 @@ export function disconnect(roomId: string, userId: string, socket: WebSocket) {
   broadcast(roomId);
 }
 
-export function sweepEmptyRooms() {
-  const now = Date.now();
+// A scheduled room stays until its start time plus the usual grace, then the start time is dropped.
+const scheduledAt = (room: StoredRoom) => (typeof room.info.startsAt === "number" ? room.info.startsAt : null);
+
+export function sweepEmptyRooms(now = Date.now()) {
   for (const [id, room] of rooms) {
-    if (room.emptySince !== null && now - room.emptySince > EMPTY_ROOM_TTL_MS) rooms.delete(id);
+    const startsAt = scheduledAt(room);
+    if (room.emptySince !== null && now - Math.max(room.emptySince, startsAt ?? 0) > EMPTY_ROOM_TTL_MS) rooms.delete(id);
+    else if (startsAt !== null && now - startsAt > EMPTY_ROOM_TTL_MS) {
+      room.info = { ...room.info, startsAt: null };
+      broadcast(id);
+    }
   }
+}
+
+// Who is connected right now (and what they watch, hear or ask for) is rebuilt as people reconnect, so it is never saved.
+const RUNTIME_ONLY = new Set(["connections", "pending", "emptySince"]);
+export type SavedRoom = Omit<StoredRoom, "connections" | "pending" | "emptySince">;
+
+// Every other field, including ones added to StoredRoom later, goes into the snapshot unchanged.
+export function exportRooms(): SavedRoom[] {
+  return Array.from(rooms.values(), (room) => Object.fromEntries(Object.entries(room).filter(([key]) => !RUNTIME_ONLY.has(key))) as SavedRoom);
+}
+
+// Restored rooms start empty and get the full empty-room grace from `now`, so people have time to reconnect.
+export function importRooms(saved: SavedRoom[], now = Date.now()) {
+  let count = 0;
+  for (const room of saved) {
+    if (rooms.has(room.info.id)) continue;
+    rooms.set(room.info.id, { ...room, connections: new Map(), pending: new Map(), emptySince: now });
+    count++;
+  }
+  return count;
+}
+
+function scheduledRoomsOf(hostId: string, except: string, now: number) {
+  let count = 0;
+  for (const room of rooms.values()) {
+    const startsAt = scheduledAt(room);
+    if (room.info.hostId === hostId && room.info.id !== except && startsAt !== null && now - startsAt <= EMPTY_ROOM_TTL_MS) count++;
+  }
+  return count;
 }
 
 type Result = { ok: true } | { ok: false; message: string };
@@ -400,6 +442,7 @@ export function forgetUser(userId: string) {
     room.admitted.delete(userId);
     room.pending.delete(userId);
     room.restrictions.delete(userId);
+    room.chat = room.chat.filter((line) => line.from.id !== userId);
   }
 }
 
@@ -572,15 +615,23 @@ export function pruneStalePending() {
   }
 }
 
-export function updateSettings(roomId: string, user: SessionPayload, patch: Partial<RoomSettings> & { name?: string }): Result {
+export function updateSettings(roomId: string, user: SessionPayload, patch: Partial<RoomSettings> & { name?: string; startsAt?: number | null }): Result {
   const room = rooms.get(roomId);
   if (!room) return fail("Room not found");
   if (room.info.hostId !== user.sub) return fail("Only the room owner can change room settings");
 
-  const { name, ...settingsPatch } = patch;
+  const { name, startsAt, ...settingsPatch } = patch;
+  if (typeof startsAt === "number") {
+    const now = Date.now();
+    if (startsAt <= now) return fail("Pick a start time in the future");
+    if (startsAt > now + SCHEDULE_MAX_AHEAD_MS) return fail("Pick a start time within the next 30 days");
+    if (scheduledRoomsOf(user.sub, roomId, now) >= MAX_SCHEDULED_ROOMS_PER_HOST) {
+      return fail(`You can schedule up to ${MAX_SCHEDULED_ROOMS_PER_HOST} rooms at a time. Clear the start time of another room first.`);
+    }
+  }
   const defined = Object.fromEntries(Object.entries(settingsPatch).filter(([, value]) => value !== undefined));
   const settings = { ...room.info.settings, ...defined } as RoomSettings;
-  room.info = { ...room.info, settings, name: name ?? room.info.name };
+  room.info = { ...room.info, settings, name: name ?? room.info.name, startsAt: startsAt === undefined ? room.info.startsAt : startsAt };
 
   if (settings.guests === "open") {
     for (const id of room.pending.keys()) room.admitted.add(id);
@@ -670,6 +721,11 @@ export function pruneReactionHistory() {
     if (recent.length === 0) reactionHistory.delete(key);
     else reactionHistory.set(key, recent);
   }
+}
+
+// The stored room, for chat.ts.
+export function chatRoom(roomId: string) {
+  return rooms.get(roomId);
 }
 
 export function setVoiceState(roomId: string, userId: string, deafened: boolean): Result {

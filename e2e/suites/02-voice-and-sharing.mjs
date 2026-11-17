@@ -79,7 +79,7 @@ await owner.keyboard.press("Escape");
 check(await gone(row(guest, "Other Two").locator("[title='Muted by the room owner']")), "clearing the restriction clears the icon");
 
 console.log("Volume: the bottom of the slider is silent and settings are remembered");
-await owner.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
+await owner.getByRole("button", { name: /(?:Add a stream|Add)$/ }).first().click();
 await owner.fill("input[placeholder='Paste a YouTube, Twitch or Kick link']", "https://www.youtube.com/watch?v=jNQXAC9IVRw");
 await owner.getByRole("button", { name: "Play for everyone" }).click();
 await guest.getByRole("tab", { name: "Chat" }).click();
