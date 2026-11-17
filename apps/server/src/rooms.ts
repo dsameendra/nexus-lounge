@@ -213,11 +213,30 @@ export function disconnect(roomId: string, userId: string, socket: WebSocket) {
   broadcast(roomId);
 }
 
-export function sweepEmptyRooms() {
-  const now = Date.now();
+export function sweepEmptyRooms(now = Date.now()) {
   for (const [id, room] of rooms) {
     if (room.emptySince !== null && now - room.emptySince > EMPTY_ROOM_TTL_MS) rooms.delete(id);
   }
+}
+
+// Who is connected right now (and what they watch, hear or ask for) is rebuilt as people reconnect, so it is never saved.
+const RUNTIME_ONLY = new Set(["connections", "pending", "emptySince"]);
+export type SavedRoom = Omit<StoredRoom, "connections" | "pending" | "emptySince">;
+
+// Every other field, including ones added to StoredRoom later, goes into the snapshot unchanged.
+export function exportRooms(): SavedRoom[] {
+  return Array.from(rooms.values(), (room) => Object.fromEntries(Object.entries(room).filter(([key]) => !RUNTIME_ONLY.has(key))) as SavedRoom);
+}
+
+// Restored rooms start empty and get the full empty-room grace from `now`, so people have time to reconnect.
+export function importRooms(saved: SavedRoom[], now = Date.now()) {
+  let count = 0;
+  for (const room of saved) {
+    if (rooms.has(room.info.id)) continue;
+    rooms.set(room.info.id, { ...room, connections: new Map(), pending: new Map(), emptySince: now });
+    count++;
+  }
+  return count;
 }
 
 type Result = { ok: true } | { ok: false; message: string };

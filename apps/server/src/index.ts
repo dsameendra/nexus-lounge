@@ -10,7 +10,8 @@ import { approvePairing, dropPairings, createPairing, mintCredentials, pollPairi
 import { allowAttempt } from "./rate-limit.ts";
 import { clientIp } from "./client-ip.ts";
 import { guard, setLogger } from "./log.ts";
-import { runShutdownHooks } from "./shutdown.ts";
+import { onShutdown, runShutdownHooks } from "./shutdown.ts";
+import { startSnapshots } from "./snapshot.ts";
 import { attachWebSocket } from "./ws.ts";
 
 const app = Fastify({ logger: true, trustProxy: (_address: string, hop: number) => hop < config.TRUST_PROXY_HOPS });
@@ -185,6 +186,8 @@ app.post<{ Params: { id: string } }>("/rooms/:id/tv/session", async (request, re
 });
 
 const sockets = attachWebSocket(app.server);
+onShutdown(() => sockets.notifyAll({ type: "restarting" }));
+if (config.ROOMS_SNAPSHOT_PATH) app.log.info({ rooms: startSnapshots(config.ROOMS_SNAPSHOT_PATH) }, "rooms snapshot restored");
 setInterval(() => guard("sweepEmptyRooms", sweepEmptyRooms), 5 * 60 * 1000).unref();
 setInterval(() => guard("pruneStalePending", pruneStalePending), 5000).unref();
 setInterval(() => guard("pruneReactionHistory", pruneReactionHistory), 30_000).unref();

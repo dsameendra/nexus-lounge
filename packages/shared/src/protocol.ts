@@ -50,6 +50,7 @@ export type ClientMessage = z.infer<typeof clientMessageSchema>;
 export const serverMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("state"), state: roomStateSchema }),
   z.object({ type: z.literal("kicked") }),
+  z.object({ type: z.literal("restarting") }),
   z.object({ type: z.literal("playlist.items"), listId, items: z.array(playlistItemSchema) }),
   z.object({ type: z.literal("reaction"), id: z.string(), emoji: reactionEmojiSchema, from: z.object({ id: z.string(), name: z.string() }) }),
   z.object({ type: z.literal("pong"), clientTime: z.number(), serverTime: z.number() }),

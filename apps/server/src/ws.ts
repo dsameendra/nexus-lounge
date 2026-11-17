@@ -205,6 +205,11 @@ export function attachWebSocket(server: Server, { heartbeatMs = 30_000, handler 
     stopAccepting(code: number, reason: string) {
       closing = { code, reason };
     },
+    // Sends `message` to every open socket, joined to a room or not.
+    notifyAll(message: ServerMessage) {
+      const payload = JSON.stringify(message);
+      for (const socket of wss.clients) if (socket.readyState === socket.OPEN) socket.send(payload);
+    },
     // Closes every socket with `code` and terminates any that have not finished closing after `graceMs`.
     closeAll(code: number, reason: string, graceMs = 1000) {
       closing = { code, reason };
