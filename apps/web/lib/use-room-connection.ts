@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { serverMessageSchema, type ClientMessage, type PlaylistItem, type ReactionEmoji, type RoomState } from "@nexus/shared";
+import { reconnectDelay } from "./backoff";
 import { ClockSync } from "./clock";
 
 export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "failed" | "kicked";
@@ -25,6 +26,8 @@ export interface RoomConnection {
 
 const INITIAL_PINGS = 8;
 const PING_INTERVAL_MS = 15000;
+// Sent by the server when it closes sockets for a planned restart.
+const CLOSE_SERVICE_RESTART = 1012;
 
 export function useRoomConnection(roomId: string, ticket: string, wsUrl: string): RoomConnection {
   const [state, setState] = useState<RoomState | null>(null);
@@ -62,6 +65,7 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
     const clock = clockRef.current;
 
     const connect = () => {
+      retryTimer = undefined;
       const socket = new WebSocket(wsUrl);
       socketRef.current = socket;
 
@@ -109,17 +113,30 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
         }
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         clearInterval(pingTimer);
         if (closed) return;
+        // A planned restart reconnects like any other close; a "server restarting" notice would branch here.
+        if (event.code === CLOSE_SERVICE_RESTART) attempt = 0;
         setStatus("reconnecting");
-        retryTimer = setTimeout(connect, Math.min(5000, 400 * 2 ** attempt++));
+        retryTimer = setTimeout(connect, reconnectDelay(attempt++));
       };
     };
 
+    // Coming back online or to the tab: skip the rest of the wait. Only while a retry is pending, so never two sockets.
+    const retryNow = () => {
+      if (closed || retryTimer === undefined || document.visibilityState === "hidden") return;
+      clearTimeout(retryTimer);
+      connect();
+    };
+
     connect();
+    window.addEventListener("online", retryNow);
+    document.addEventListener("visibilitychange", retryNow);
     return () => {
       closed = true;
+      window.removeEventListener("online", retryNow);
+      document.removeEventListener("visibilitychange", retryNow);
       clearTimeout(retryTimer);
       clearInterval(pingTimer);
       socketRef.current?.close();
