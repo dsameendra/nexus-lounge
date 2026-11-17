@@ -39,13 +39,15 @@ The server keeps all rooms in memory, so it must run exactly one replica (`numRe
 
 Without `ROOMS_SNAPSHOT_PATH`, every redeploy or restart ends active rooms, so pushes to `main` that touch server code or shared code interrupt live rooms.
 
-With it, the server writes all rooms to that file every 30 seconds and when it is stopped (SIGTERM), and reads it back at boot before it accepts connections. Clients see "Server restarting, reconnecting…", reconnect on their own and land in the same room with the same streams, queue, roles, settings, password and moderation; voice is LiveKit's own service and is not interrupted. A crash (no SIGTERM) loses at most the last 30 seconds. To set it up:
+With it, the server writes all rooms to that file every 30 seconds and when it is stopped (SIGTERM), and reads it back at boot before it accepts connections. Clients see "Server restarting, reconnecting…", reconnect on their own and land in the same room with the same streams, queue, roles, settings, password and moderation; voice is LiveKit's own service and is not interrupted. A crash (no SIGTERM) loses at most the last 30 seconds.
 
-1. Add a volume to the `server` service (service > Settings > Volumes, or right-click the service on the canvas), mounted at for example `/data`.
-2. Set the server variable `ROOMS_SNAPSHOT_PATH=/data/rooms.json`. The directory must exist and be writable; the file is created with mode 0600 because it contains room password hashes and salts. Never copy it anywhere public.
-3. The image runs as the non-root `node` user, and Railway mounts volumes owned by root, so the volume must be made writable by that user. Railway documents a `RAILWAY_RUN_UID=0` service variable that runs the container as root for this purpose; confirm against Railway's current volume docs before relying on it (it gives up the non-root user), or use whatever ownership option they document now. If the server can't write, it logs "Couldn't write the rooms snapshot" every 30 seconds and otherwise works as before.
+Production is set up this way (since 17 November 2026):
 
-Railway's docs also say a service with a volume has a short downtime on redeploy (the old deployment stops before the new one mounts the volume) rather than an overlap; that is what the snapshot needs, since the old process writes the file on SIGTERM and the new one reads it. Confirm this too. A corrupt or old-format file is ignored with a warning at boot.
+1. Volume `server-volume` (5 GB) on the `server` service, mounted at `/data`. CLI: `railway volume --service <server service id> add --mount-path /data` (the CLI wants the service ID, not its name).
+2. Server variable `ROOMS_SNAPSHOT_PATH=/data/rooms.json`. The file is created with mode 0600 because it contains room password hashes and salts and chat lines. Never copy it anywhere public.
+3. Server variable `RAILWAY_RUN_UID=0`. Railway mounts volumes as root, and this is its documented fix for images that run as a non-root user: the server container runs as root on Railway (the image itself still defaults to `node`; the web service stays non-root). If the server can't write, it logs "Couldn't write the rooms snapshot" every 30 seconds and otherwise works as before.
+
+Railway never runs two deployments of a service with a volume at once ("there will be a small amount of downtime when re-deploying a service that has a volume attached"), which is what the snapshot needs: the old process writes the file on SIGTERM and the new one reads it. Volumes also rule out replicas, so the server stays at one instance. A corrupt or old-format file is ignored with a warning at boot.
 
 ## Manual deploy
 
