@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
-import { auth, signOut } from "@/auth";
+import { auth } from "@/auth";
 import { CreateRoomButton } from "@/components/CreateRoomButton";
 import { Logo } from "@/components/Logo";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { JoinRoomForm } from "@/components/JoinRoomForm";
 import { LegalLinks } from "@/components/LegalLinks";
+import { RecentRooms } from "@/components/RecentRooms";
+import { SignOutButton } from "@/components/SignOutButton";
 import Link from "next/link";
 
 export default async function HomePage() {
@@ -38,19 +40,13 @@ export default async function HomePage() {
           )}
           <JoinRoomForm />
         </div>
+        <RecentRooms userId={session.user.id} />
         <InstallPrompt />
         <div className="mt-5 flex items-center justify-center gap-5 text-sm">
           <Link href="/account" className="text-label-2 transition hover:text-white">
             Account
           </Link>
-          <form
-            action={async () => {
-              "use server";
-              await signOut({ redirectTo: "/login" });
-            }}
-          >
-            <button className="text-label-2 transition hover:text-white">Sign out</button>
-          </form>
+          <SignOutButton className="text-label-2 transition hover:text-white" />
         </div>
         <LegalLinks className="mt-6" />
       </div>

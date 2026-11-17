@@ -10,6 +10,7 @@ import { LocalFilesProvider } from "./LocalFilesProvider";
 import { RoomProvider, type Self } from "./RoomProvider";
 import { RoomView } from "./RoomView";
 import { SoundCues } from "./SoundCues";
+import { StartsAt } from "./StartsAt";
 import { VoiceAudio } from "./VoiceAudio";
 import { destroyAllEntries } from "@/lib/local-entry";
 import { unlockAudio } from "@/lib/sounds";
@@ -169,6 +170,7 @@ export function RoomClient({ roomId, self }: { roomId: string; self: Self }) {
     return (
       <Centered>
         <h1 className="text-xl font-semibold">Join room {roomId}</h1>
+        <StartsAt startsAt={state.data.room.startsAt} exact className="mt-1 block text-sm font-medium text-white" />
         <p className="mt-2 text-sm text-label-2">
           You'll join as {self.name}
           {self.guest ? " (guest)" : ""}, muted and deafened. Unmute whenever you like; your browser only asks for the microphone then.
