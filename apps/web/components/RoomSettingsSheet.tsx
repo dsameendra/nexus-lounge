@@ -37,6 +37,7 @@ export function RoomSettingsSheet({ onClose }: { onClose: () => void }) {
             onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
             maxLength={40}
             placeholder="Give the room a name"
+            aria-label="Room name"
             className="h-12 w-full rounded-xl bg-panel-2 px-4 text-base outline-none placeholder:text-label-3 focus:ring-2 focus:ring-accent"
           />
         </section>

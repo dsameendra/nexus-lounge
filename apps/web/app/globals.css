@@ -53,8 +53,12 @@ button,
 
 /* In the base layer so utilities such as outline-none win and fields with their own ring don't get a second outline. */
 @layer base {
+  a:focus-visible,
   button:focus-visible,
   input:focus-visible,
+  select:focus-visible,
+  summary:focus-visible,
+  textarea:focus-visible,
   [tabindex]:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
@@ -110,9 +114,6 @@ button,
 .animate-sheet { animation: sheet-in 0.28s cubic-bezier(0.32, 0.72, 0, 1); }
 .animate-fade { animation: fade-in 0.2s ease-out; }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
-}
 
 @keyframes reaction-rise {
   0% { opacity: 0; transform: translate3d(0, 12px, 0) scale(0.6); }
@@ -125,6 +126,21 @@ button,
 }
 .animate-reaction { animation: reaction-rise 3.2s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
 .animate-pop { animation: pop-in 0.18s cubic-bezier(0.32, 0.72, 0, 1); }
+
+/* Reduced motion: no movement, and loops (spinners, pulses) stop instead of flickering. Reactions only fade, at full length, so they are still seen. */
+@keyframes reaction-still {
+  0%, 100% { opacity: 0; }
+  8%, 80% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-reaction { animation: reaction-still 3.2s linear forwards !important; }
+}
 
 /* Subtitles drawn by the browser inside local, torrent and link videos; data-sub-size is the viewer's text size. */
 video::cue {

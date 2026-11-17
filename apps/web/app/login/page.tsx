@@ -50,6 +50,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               minLength={2}
               maxLength={24}
               placeholder="Your name"
+              aria-label="Your name"
               className="h-12 w-full rounded-xl bg-panel-2 px-4 text-base outline-none placeholder:text-label-3 focus:ring-2 focus:ring-accent"
             />
             <button className="h-12 w-full rounded-xl bg-panel-2 font-semibold transition hover:bg-panel-3 active:scale-[0.99]">

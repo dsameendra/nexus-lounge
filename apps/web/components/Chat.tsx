@@ -23,7 +23,7 @@ export function Chat() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ul className="scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+      <ul aria-label="Messages" aria-live="polite" className="scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         {chatMessages.length === 0 && <li className="py-8 text-center text-sm text-label-2">No messages yet. Say hi 👋</li>}
         {chatMessages.map((message) => {
           const name = message.from?.name || message.from?.identity || "Unknown";
@@ -50,6 +50,7 @@ export function Chat() {
           onChange={(event) => setDraft(event.target.value)}
           maxLength={500}
           placeholder="Message"
+          aria-label="Message"
           className="h-11 min-w-0 flex-1 rounded-full bg-panel-2 px-4 text-base outline-none placeholder:text-label-3 focus:ring-2 focus:ring-accent"
         />
         <button
