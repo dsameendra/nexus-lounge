@@ -32,7 +32,8 @@ after(async () => {
 });
 
 const user = (sub: string, guest = false) => ({ sub, name: sub, image: null, guest });
-const fakeSocket = () => ({ readyState: 3, OPEN: 1, send() {} }) as unknown as WebSocket;
+// kickUser and adminCloseRoom close sockets and terminate them 1.5 s later, after the test may have ended.
+const fakeSocket = () => ({ readyState: 3, OPEN: 1, send() {}, close() {}, terminate() {} }) as unknown as WebSocket;
 const ok = (result: { ok: boolean }) => assert.equal(result.ok, true, JSON.stringify(result));
 const twitchVod = { type: "twitch" as const, id: "123456789", isLive: false };
 const local = { type: "local" as const, id: "0123456789abcdef0123456789abcdef", isLive: false };
