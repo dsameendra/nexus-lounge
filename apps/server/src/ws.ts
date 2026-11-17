@@ -3,6 +3,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { verifySessionToken, type SessionPayload } from "@nexus/shared/session-token";
 import { clientMessageSchema, isDeviceSource, type ClientMessage, type ServerMessage } from "@nexus/shared";
 import { config } from "./config.ts";
+import { sendChat, sendChatHistory } from "./chat.ts";
 import { removeFromVoice } from "./livekit.ts";
 import { guard, log } from "./log.ts";
 import { stopScreenShare, syncAllPermissions, syncPermissions } from "./permissions.ts";
@@ -80,6 +81,8 @@ function handle(roomId: string, user: SessionPayload, message: RoomMessage) {
       return rooms.playQueuedNow(roomId, user, message.queueId);
     case "reaction.send":
       return rooms.sendReaction(roomId, user, message.emoji);
+    case "chat.send":
+      return sendChat(roomId, user, message.text);
     case "presence.voice":
       return rooms.setVoiceState(roomId, user.sub, message.deafened);
     case "share.stop": {
@@ -170,6 +173,7 @@ export function attachWebSocket(server: Server, { heartbeatMs = 30_000, handler 
             return send(socket, { type: "error", message: joined === "removed" ? "You were removed from this room" : "Room not found", fatal: true });
           }
           session = { roomId: message.roomId, user };
+          sendChatHistory(message.roomId, user, socket);
           return;
         }
 

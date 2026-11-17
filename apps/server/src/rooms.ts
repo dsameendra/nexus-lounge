@@ -8,6 +8,7 @@ import {
   isScreenId,
   isUnsyncedSource,
   isQueueable,
+  type ChatLine,
   type PlaylistItem,
   type PlaylistSummary,
   type QueueItem,
@@ -47,6 +48,7 @@ interface StoredRoom {
   queue: QueueItem[];
   playlists: { summary: PlaylistSummary; items: PlaylistItem[] }[];
   featuredId: string | null;
+  chat: ChatLine[];
   connections: Map<string, Connection>;
   restrictions: Map<string, Restriction>;
   pending: Map<string, PendingRequest & { lastSeen: number }>;
@@ -87,6 +89,7 @@ export function createRoom(hostId: string, password?: string, name = ""): RoomIn
     queue: [],
     playlists: [],
     featuredId: null,
+    chat: [],
     connections: new Map(),
     restrictions: new Map(),
     pending: new Map(),
@@ -400,6 +403,7 @@ export function forgetUser(userId: string) {
     room.admitted.delete(userId);
     room.pending.delete(userId);
     room.restrictions.delete(userId);
+    room.chat = room.chat.filter((line) => line.from.id !== userId);
   }
 }
 
@@ -670,6 +674,11 @@ export function pruneReactionHistory() {
     if (recent.length === 0) reactionHistory.delete(key);
     else reactionHistory.set(key, recent);
   }
+}
+
+// The stored room, for chat.ts.
+export function chatRoom(roomId: string) {
+  return rooms.get(roomId);
 }
 
 export function setVoiceState(roomId: string, userId: string, deafened: boolean): Result {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CHAT_MAX_LENGTH, chatLineSchema } from "./chat.ts";
 import { localFileSchema } from "./local-file.ts";
 import { PLAYLIST_ID } from "./parse-url.ts";
 import { sanitizeTrackers } from "./stremio.ts";
@@ -39,6 +40,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("queue.clear") }),
   z.object({ type: z.literal("queue.playNow"), queueId }),
   z.object({ type: z.literal("reaction.send"), emoji: reactionEmojiSchema }),
+  z.object({ type: z.literal("chat.send"), text: z.string().max(CHAT_MAX_LENGTH * 2) }),
   z.object({ type: z.literal("presence.voice"), deafened: z.boolean() }),
   z.object({ type: z.literal("share.stop"), userId: z.string() }),
   z.object({ type: z.literal("presence.watch"), streamId: streamId.nullable() }),
@@ -52,6 +54,8 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("kicked") }),
   z.object({ type: z.literal("playlist.items"), listId, items: z.array(playlistItemSchema) }),
   z.object({ type: z.literal("reaction"), id: z.string(), emoji: reactionEmojiSchema, from: z.object({ id: z.string(), name: z.string() }) }),
+  z.object({ type: z.literal("chat"), line: chatLineSchema }),
+  z.object({ type: z.literal("chat.history"), lines: z.array(chatLineSchema) }),
   z.object({ type: z.literal("pong"), clientTime: z.number(), serverTime: z.number() }),
   z.object({ type: z.literal("error"), message: z.string(), fatal: z.boolean().optional() }),
 ]);
