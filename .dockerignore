@@ -10,3 +10,6 @@
 .tmp-*
 docs
 e2e
+.claude
+.github
+eslint.config.mjs

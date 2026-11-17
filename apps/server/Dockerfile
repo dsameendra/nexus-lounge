@@ -8,4 +8,5 @@ RUN pnpm install --frozen-lockfile --filter @nexus/server...
 COPY packages/shared packages/shared
 COPY apps/server apps/server
 ENV NODE_ENV=production
+USER node
 CMD ["node", "apps/server/src/index.ts"]
