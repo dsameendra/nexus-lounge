@@ -50,6 +50,9 @@ export const displayNameSchema = z
 
 export const roomNameSchema = z.string().trim().max(40);
 
+export const SCHEDULE_MAX_AHEAD_MS = 30 * 24 * 60 * 60 * 1000;
+export const MAX_SCHEDULED_ROOMS_PER_HOST = 5;
+
 export const roomInfoSchema = z.object({
   id: roomIdSchema,
   name: z.string(),
@@ -58,6 +61,7 @@ export const roomInfoSchema = z.object({
   controllerIds: z.array(z.string()),
   createdAt: z.number(),
   hasPassword: z.boolean(),
+  startsAt: z.number().nullable().default(null),
 });
 export type RoomInfo = z.infer<typeof roomInfoSchema>;
 

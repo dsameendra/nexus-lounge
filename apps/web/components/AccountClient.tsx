@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { signOutAction } from "@/app/account/actions";
 import { AVATARS, avatarPath } from "@/lib/avatars";
 import { canRememberFiles, forgetFiles } from "@/lib/local-files";
+import { clearRecent } from "@/lib/recent-rooms";
 import { Avatar } from "./Avatar";
 import { CheckIcon } from "./Icons";
 import { LegalLinks } from "./LegalLinks";
+import { SignOutButton } from "./SignOutButton";
 import { StremioConnection } from "./StremioConnection";
 
 export function AccountClient({ name: initialName, image: initialImage, guest, id }: { name: string; image: string | null; guest: boolean; id: string }) {
@@ -57,6 +58,7 @@ export function AccountClient({ name: initialName, image: initialImage, guest, i
     setDeleteError(null);
     const response = await fetch("/api/account", { method: "DELETE" }).catch(() => null);
     if (response?.ok) {
+      clearRecent();
       window.location.href = "/login?deleted=1";
       return;
     }
@@ -152,9 +154,7 @@ export function AccountClient({ name: initialName, image: initialImage, guest, i
         )}
       </form>
 
-      <form action={signOutAction} className="mt-4">
-        <button className="h-11 w-full rounded-xl bg-panel font-semibold transition hover:bg-panel-2 active:scale-[0.99]">Sign out</button>
-      </form>
+      <SignOutButton formClassName="mt-4" className="h-11 w-full rounded-xl bg-panel font-semibold transition hover:bg-panel-2 active:scale-[0.99]" />
 
       <section className="mt-8 rounded-[var(--radius-sheet)] bg-panel p-5">
         <h2 className="font-semibold">Stremio</h2>

@@ -3,6 +3,8 @@ import type { WebSocket } from "ws";
 import {
   LIMITS,
   MAX_LOCAL_STREAMS_PER_USER,
+  MAX_SCHEDULED_ROOMS_PER_HOST,
+  SCHEDULE_MAX_AHEAD_MS,
   defaultRoomSettings,
   isDeviceSource,
   isScreenId,
@@ -78,6 +80,7 @@ export function createRoom(hostId: string, password?: string, name = ""): RoomIn
     controllerIds: [],
     createdAt: Date.now(),
     hasPassword: Boolean(password),
+    startsAt: null,
   };
   const salt = randomBytes(16);
   rooms.set(id, {
@@ -213,9 +216,17 @@ export function disconnect(roomId: string, userId: string, socket: WebSocket) {
   broadcast(roomId);
 }
 
+// A scheduled room stays until its start time plus the usual grace, then the start time is dropped.
+const scheduledAt = (room: StoredRoom) => (typeof room.info.startsAt === "number" ? room.info.startsAt : null);
+
 export function sweepEmptyRooms(now = Date.now()) {
   for (const [id, room] of rooms) {
-    if (room.emptySince !== null && now - room.emptySince > EMPTY_ROOM_TTL_MS) rooms.delete(id);
+    const startsAt = scheduledAt(room);
+    if (room.emptySince !== null && now - Math.max(room.emptySince, startsAt ?? 0) > EMPTY_ROOM_TTL_MS) rooms.delete(id);
+    else if (startsAt !== null && now - startsAt > EMPTY_ROOM_TTL_MS) {
+      room.info = { ...room.info, startsAt: null };
+      broadcast(id);
+    }
   }
 }
 
@@ -235,6 +246,15 @@ export function importRooms(saved: SavedRoom[], now = Date.now()) {
     if (rooms.has(room.info.id)) continue;
     rooms.set(room.info.id, { ...room, connections: new Map(), pending: new Map(), emptySince: now });
     count++;
+  }
+  return count;
+}
+
+function scheduledRoomsOf(hostId: string, except: string, now: number) {
+  let count = 0;
+  for (const room of rooms.values()) {
+    const startsAt = scheduledAt(room);
+    if (room.info.hostId === hostId && room.info.id !== except && startsAt !== null && now - startsAt <= EMPTY_ROOM_TTL_MS) count++;
   }
   return count;
 }
@@ -591,15 +611,23 @@ export function pruneStalePending() {
   }
 }
 
-export function updateSettings(roomId: string, user: SessionPayload, patch: Partial<RoomSettings> & { name?: string }): Result {
+export function updateSettings(roomId: string, user: SessionPayload, patch: Partial<RoomSettings> & { name?: string; startsAt?: number | null }): Result {
   const room = rooms.get(roomId);
   if (!room) return fail("Room not found");
   if (room.info.hostId !== user.sub) return fail("Only the room owner can change room settings");
 
-  const { name, ...settingsPatch } = patch;
+  const { name, startsAt, ...settingsPatch } = patch;
+  if (typeof startsAt === "number") {
+    const now = Date.now();
+    if (startsAt <= now) return fail("Pick a start time in the future");
+    if (startsAt > now + SCHEDULE_MAX_AHEAD_MS) return fail("Pick a start time within the next 30 days");
+    if (scheduledRoomsOf(user.sub, roomId, now) >= MAX_SCHEDULED_ROOMS_PER_HOST) {
+      return fail(`You can schedule up to ${MAX_SCHEDULED_ROOMS_PER_HOST} rooms at a time. Clear the start time of another room first.`);
+    }
+  }
   const defined = Object.fromEntries(Object.entries(settingsPatch).filter(([, value]) => value !== undefined));
   const settings = { ...room.info.settings, ...defined } as RoomSettings;
-  room.info = { ...room.info, settings, name: name ?? room.info.name };
+  room.info = { ...room.info, settings, name: name ?? room.info.name, startsAt: startsAt === undefined ? room.info.startsAt : startsAt };
 
   if (settings.guests === "open") {
     for (const id of room.pending.keys()) room.admitted.add(id);

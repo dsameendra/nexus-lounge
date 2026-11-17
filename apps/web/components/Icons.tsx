@@ -239,3 +239,15 @@ export const FillIcon = (p: P) => (
     <rect x="8" y="9" width="8" height="6" rx="1" fill="currentColor" stroke="none" opacity="0.5" />
   </Icon>
 );
+export const LockIcon = (p: P) => (
+  <Icon {...p}>
+    <rect x="5" y="10.5" width="14" height="10" rx="2" />
+    <path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3" />
+  </Icon>
+);
+export const CalendarIcon = (p: P) => (
+  <Icon {...p}>
+    <rect x="4" y="5.5" width="16" height="15" rx="2.5" />
+    <path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" />
+  </Icon>
+);
