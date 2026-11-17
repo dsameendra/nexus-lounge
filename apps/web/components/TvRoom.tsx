@@ -75,7 +75,7 @@ export function TvRoom() {
   const [focused, setFocused] = useState(false);
   const idleCursor = useIdleCursor();
   const [tvBrowser] = useState(isTvBrowser);
-  const { send, status, state, self } = useRoom();
+  const { send, status, state, self, restarting } = useRoom();
   const mode = state.members.find((member) => member.id === self.id)?.tvMode ?? "both";
   const playing = mode !== "here";
   const { effectiveId, stream, share } = useEffectiveSource();
@@ -178,8 +178,10 @@ export function TvRoom() {
         </button>
       )}
 
-      {status !== "open" && (
-        <div className="material absolute right-10 bottom-10 z-20 rounded-full px-6 py-3 text-2xl text-warn">Reconnecting…</div>
+      {(status !== "open" || restarting) && !(stream && isEmbedOnlySource(stream.source)) && (
+        <div role="status" className={`material absolute right-10 bottom-10 z-20 rounded-full px-6 py-3 text-2xl ${restarting ? "text-label-2" : "text-warn"}`}>
+          {restarting ? "Server restarting, reconnecting…" : "Reconnecting…"}
+        </div>
       )}
     </div>
   );

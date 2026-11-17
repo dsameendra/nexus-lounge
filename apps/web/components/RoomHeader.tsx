@@ -23,7 +23,7 @@ export function RoomHeader({
   onDeafenedChange: (value: boolean) => void;
   onLeave: () => void;
 }) {
-  const { state, status, isHost } = useRoom();
+  const { state, status, isHost, restarting } = useRoom();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [tvOpen, setTvOpen] = useState(false);
@@ -55,7 +55,13 @@ export function RoomHeader({
         <Logo size={28} />
         <span className="max-w-[40vw] truncate text-[15px] font-semibold tracking-tight">{title}</span>
         <span className="hidden rounded-md bg-white/10 px-2 py-0.5 font-mono text-xs text-label-2 sm:inline-block pl:hidden">{roomId}</span>
-        {status === "reconnecting" && <span className="text-xs text-warn">Reconnecting…</span>}
+        {restarting ? (
+          <span role="status" className="min-w-0 truncate text-xs text-label-2">
+            Server restarting, reconnecting…
+          </span>
+        ) : (
+          status === "reconnecting" && <span className="text-xs text-warn">Reconnecting…</span>
+        )}
       </div>
       <div className="flex items-center gap-2">
         {!panelOpen && (
