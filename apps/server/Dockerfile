@@ -9,4 +9,5 @@ COPY packages/shared packages/shared
 COPY apps/server apps/server
 ENV NODE_ENV=production
 USER node
+ENTRYPOINT ["sh", "apps/server/docker-entrypoint.sh"]
 CMD ["node", "apps/server/src/index.ts"]

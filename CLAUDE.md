@@ -62,7 +62,7 @@ Virtual watch-party PWA: rooms with LiveKit voice/chat/screen share, synced YouT
 
 ## Tests
 `pnpm test` (all packages) and the browser suites in `e2e/` (`cd e2e && node run.mjs`; see its README). Add an e2e check for UI behaviour, and assert geometry (rects, `elementFromPoint`) rather than eyeballing screenshots.
-CI (`.github/workflows/ci.yml`): `check` (required on `main`) runs install, lint, typecheck, test and build; `docker` builds both Dockerfiles (non-root `node` user) and boots them.
+CI (`.github/workflows/ci.yml`): `check` runs install, lint, typecheck, test and build; `docker` builds both Dockerfiles (non-root `node` user) and boots them, including the server started as root with a root-owned volume (as on Railway with `RAILWAY_RUN_UID=0`), where `apps/server/docker-entrypoint.sh` chowns only the snapshot dir/file and drops to `node` via `setpriv`. Required on `main`: `check` and `docker`.
 
 ## Manual testing
 Run server and web with a LiveKit instance and Discord keys, or use guest login. Use two browser windows in one room. `AUTH_SECRET` must match between web and server.

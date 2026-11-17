@@ -93,6 +93,29 @@ jobs:
           echo "web /login answered $code"
           docker logs web
           [ "$code" != 000 ] && [ "$code" -lt 500 ]
+      - name: Started as root with a root-owned volume (Railway), the server drops to node and owns its snapshot
+        run: |
+          docker volume create snapshot
+          docker run --rm -u 0 -v snapshot:/data --entrypoint sh nexus-server:ci -c 'echo "{}" > /data/rooms.json'
+          docker run -d --name server-root -u 0 -p 4001:4000 -v snapshot:/data \
+            -e AUTH_SECRET=ci-secret-ci-secret -e LIVEKIT_URL=ws://localhost:7880 \
+            -e LIVEKIT_API_KEY=devkey -e LIVEKIT_API_SECRET=devsecret-devsecret-devsecret-devsecret \
+            -e ROOMS_SNAPSHOT_PATH=/data/rooms.json nexus-server:ci
+          ok=
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:4001/health; then ok=1; break; fi
+            sleep 2
+          done
+          test -n "$ok" || { docker logs server-root; exit 1; }
+          user=$(docker exec server-root stat -c %U /proc/1)
+          echo "server process runs as $user"
+          test "$user" = node
+          docker stop -t 10 server-root
+          test "$(docker inspect -f '{{.State.ExitCode}}' server-root)" = 0
+          owner=$(docker run --rm -v snapshot:/data --entrypoint stat nexus-server:ci -c '%U %a' /data/rooms.json)
+          echo "snapshot: $owner"
+          test "$owner" = "node 600"
+          docker run --rm -v snapshot:/data --entrypoint sh nexus-server:ci -c 'grep -q "\"version\":1" /data/rooms.json'
       - name: Clean up
         if: always()
-        run: docker rm -f server web || true
+        run: docker rm -f server web server-root || true
