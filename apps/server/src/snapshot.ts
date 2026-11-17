@@ -51,10 +51,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(v
 // Loose on purpose: fields this file doesn't know (added to StoredRoom later) pass through untouched.
 const savedRoomSchema = z
   .looseObject({
-    info: z.preprocess((info) => (isRecord(info) && isRecord(info.settings) ? { ...info, settings: { ...defaultRoomSettings, ...info.settings } } : info), roomInfoSchema),
+    info: z.preprocess((info) => (isRecord(info) && isRecord(info.settings) ? { ...info, settings: { ...defaultRoomSettings, ...info.settings } } : info), roomInfoSchema.loose()),
     passwordHash: z.object({ salt: buffer, hash: buffer }).optional(),
-    streams: list(streamSchema),
-    queue: list(queueItemSchema),
+    streams: list(streamSchema.loose()),
+    queue: list(queueItemSchema.loose()),
     playlists: list(z.object({ summary: playlistSummarySchema, items: list(playlistItemSchema) })),
     featuredId: z.string().nullable(),
     restrictions: z.map(z.string(), restrictionSchema),

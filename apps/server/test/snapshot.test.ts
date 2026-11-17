@@ -155,6 +155,22 @@ test("restored rooms get the full empty-room grace from the restore, then are sw
   assert.equal(rooms.hasRoom(id), false, "swept once nobody came back");
 });
 
+test("fields this version doesn't know about are carried through", () => {
+  const { id } = rooms.createRoom("future");
+  const file = JSON.parse(snapshot.serializeRooms()) as { rooms: Record<string, unknown>[] };
+  rooms.adminCloseRoom(id);
+  const room = file.rooms.find((candidate) => (candidate.info as { id: string }).id === id)!;
+  room.chat = [{ id: "m1", text: "hi" }];
+  room.seen = { $map: [["a", { $set: ["b"] }]] };
+  (room.info as Record<string, unknown>).startsAt = 123;
+  rooms.importRooms(snapshot.parseSnapshot(JSON.stringify({ ...file, rooms: [room] }))!);
+  const restored = byId(rooms.exportRooms(), id) as unknown as Record<string, unknown>;
+  assert.deepStrictEqual(restored.chat, [{ id: "m1", text: "hi" }]);
+  assert.deepStrictEqual(restored.seen, new Map([["a", new Set(["b"])]]));
+  assert.equal((restored.info as Record<string, unknown>).startsAt, 123);
+  assert.equal(rooms.getRoom(id)?.hostId, "future");
+});
+
 test("a playing clock is kept across a short restart and paused where it was after a long outage", () => {
   const { id } = rooms.createRoom("clock");
   const host = user("clock");
