@@ -35,7 +35,7 @@ export function allowFeedSource(jwt: string, secret: string) {
 
 export async function applyPermissions(roomId: string, identity: string, inputs: PublishInputs) {
   try {
-    await rooms.updateParticipant(roomId, identity, { permission: { canSubscribe: true, canPublishData: true, ...grantFor(inputs) } });
+    await rooms.updateParticipant(roomId, identity, { permission: { canSubscribe: true, canPublishData: false, ...grantFor(inputs) } });
   } catch {}
 }
 
@@ -49,7 +49,7 @@ export async function createLivekitToken(roomId: string, user: SessionPayload, i
   });
   const grant = grantFor(inputs);
   const sources = grant.canPublishSources.filter((source) => source !== TrackSource.UNKNOWN);
-  token.addGrant({ room: roomId, roomJoin: true, canSubscribe: true, canPublishData: true, canPublish: sources.length > 0, canPublishSources: sources });
+  token.addGrant({ room: roomId, roomJoin: true, canSubscribe: true, canPublishData: false, canPublish: sources.length > 0, canPublishSources: sources });
   const jwt = await token.toJwt();
   return grant.canPublishSources.length > sources.length ? allowFeedSource(jwt, config.LIVEKIT_API_SECRET) : jwt;
 }
