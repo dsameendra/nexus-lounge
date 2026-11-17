@@ -160,15 +160,32 @@ test("fields this version doesn't know about are carried through", () => {
   const file = JSON.parse(snapshot.serializeRooms()) as { rooms: Record<string, unknown>[] };
   rooms.adminCloseRoom(id);
   const room = file.rooms.find((candidate) => (candidate.info as { id: string }).id === id)!;
-  room.chat = [{ id: "m1", text: "hi" }];
+  room.notes = [{ id: "m1", text: "hi" }];
   room.seen = { $map: [["a", { $set: ["b"] }]] };
   (room.info as Record<string, unknown>).startsAt = 123;
   rooms.importRooms(snapshot.parseSnapshot(JSON.stringify({ ...file, rooms: [room] }))!);
   const restored = byId(rooms.exportRooms(), id) as unknown as Record<string, unknown>;
-  assert.deepStrictEqual(restored.chat, [{ id: "m1", text: "hi" }]);
+  assert.deepStrictEqual(restored.notes, [{ id: "m1", text: "hi" }]);
   assert.deepStrictEqual(restored.seen, new Map([["a", new Set(["b"])]]));
   assert.equal((restored.info as Record<string, unknown>).startsAt, 123);
   assert.equal(rooms.getRoom(id)?.hostId, "future");
+});
+
+test("chat history is restored line by line, and a room saved without one gets an empty history", () => {
+  const { id } = rooms.createRoom("chatty");
+  const { id: older } = rooms.createRoom("older");
+  const file = JSON.parse(snapshot.serializeRooms()) as { rooms: Record<string, unknown>[] };
+  rooms.adminCloseRoom(id);
+  rooms.adminCloseRoom(older);
+  const room = file.rooms.find((candidate) => (candidate.info as { id: string }).id === id)!;
+  const good = { id: "a1", from: { id: "u1", name: "Ann" }, text: "hello", at: 1 };
+  room.chat = [good, { id: "bad", text: "no sender" }, 42];
+  const old = file.rooms.find((candidate) => (candidate.info as { id: string }).id === older)!;
+  delete old.chat;
+  rooms.importRooms(snapshot.parseSnapshot(JSON.stringify({ ...file, rooms: [room, old] }))!);
+  const restored = rooms.exportRooms();
+  assert.deepStrictEqual((byId(restored, id) as unknown as { chat: unknown }).chat, [good]);
+  assert.deepStrictEqual((byId(restored, older) as unknown as { chat: unknown }).chat, []);
 });
 
 test("a playing clock is kept across a short restart and paused where it was after a long outage", () => {

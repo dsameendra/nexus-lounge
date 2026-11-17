@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { closeSync, fsyncSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { z } from "zod";
-import { defaultRoomSettings, expectedPosition, playlistItemSchema, playlistSummarySchema, queueItemSchema, restrictionSchema, roomInfoSchema, streamSchema } from "@nexus/shared";
+import { CHAT_HISTORY, chatLineSchema, defaultRoomSettings, expectedPosition, playlistItemSchema, playlistSummarySchema, queueItemSchema, restrictionSchema, roomInfoSchema, streamSchema } from "@nexus/shared";
 import { log } from "./log.ts";
 import { exportRooms, importRooms, type SavedRoom } from "./rooms.ts";
 import { onShutdown } from "./shutdown.ts";
@@ -61,6 +61,7 @@ const savedRoomSchema = z
     admitted: z.set(z.string()),
     known: z.set(z.string()),
     blocked: z.map(z.string(), z.enum(["removed", "declined"])),
+    chat: list(chatLineSchema).catch([]).transform((lines) => lines.slice(-CHAT_HISTORY)),
   })
   .refine((room) => room.info.hasPassword === Boolean(room.passwordHash), "password flag and hash disagree");
 
