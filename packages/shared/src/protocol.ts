@@ -26,7 +26,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("moderation.set"), userId: z.string(), muted: z.boolean().optional(), deafened: z.boolean().optional() }),
   z.object({ type: z.literal("moderation.kick"), userId: z.string() }),
   z.object({ type: z.literal("join.respond"), userId: z.string(), allow: z.boolean() }),
-  z.object({ type: z.literal("settings.update") }).extend(roomSettingsSchema.partial().shape).extend({ name: roomNameSchema.optional() }),
+  z.object({ type: z.literal("settings.update") }).extend(roomSettingsSchema.partial().shape).extend({ name: roomNameSchema.optional(), startsAt: z.number().int().min(0).nullable().optional() }),
   z.object({ type: z.literal("stream.move"), streamId, direction: z.enum(["up", "down", "next"]) }),
   z.object({ type: z.literal("queue.advance"), fromStreamId: streamId }),
   z.object({ type: z.literal("playlist.add"), listId: listId.regex(PLAYLIST_ID) }),
