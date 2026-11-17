@@ -181,9 +181,6 @@ importers:
       globals:
         specifier: ^17.14.0
         version: 17.14.0
-      typescript:
-        specifier: ~6.0.3
-        version: 6.0.3
       typescript-eslint:
         specifier: ^8.72.2
         version: 8.72.2(eslint@10.15.0(jiti@2.7.0))(typescript@6.0.3)

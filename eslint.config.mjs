@@ -5,6 +5,8 @@ import nextPlugin from "@next/eslint-plugin-next";
 import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 
+// typescript-eslint parses with its own TypeScript peer (6.x, installed by pnpm), not the packages' TypeScript 7.
+
 export default defineConfig([
   globalIgnores([
     "**/node_modules/",
