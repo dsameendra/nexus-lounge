@@ -121,15 +121,16 @@ export function attachWebSocket(server: Server, { heartbeatMs = 30_000, handler 
   heartbeat.unref();
 
   wss.on("connection", (socket) => {
-    if (closing) return socket.close(closing.code, closing.reason);
     let session: { roomId: string; user: SessionPayload } | null = null;
+    socket.on("error", (error) => log.warn({ err: error, roomId: session?.roomId }, "WebSocket connection error"));
+    if (closing) return socket.close(closing.code, closing.reason);
     let windowStart = Date.now();
     let count = 0;
     alive.add(socket);
     socket.on("pong", () => alive.add(socket));
-    socket.on("error", (error) => log.warn({ err: error, roomId: session?.roomId }, "WebSocket connection error"));
 
     socket.on("message", (raw) => {
+      alive.add(socket);
       let type: string | undefined;
       const fail = (error: unknown) => {
         log.error({ err: error, roomId: session?.roomId, type }, "WebSocket message failed");

@@ -42,6 +42,7 @@ class Client {
   state: RoomState | null = null;
   messages: ServerMessage[] = [];
   closed: { code: number; reason: string } | null = null;
+  ticket = "";
 
   constructor(url: string, options: WebSocket.ClientOptions = {}) {
     this.socket = new WebSocket(url, options);
@@ -74,8 +75,8 @@ class Client {
 async function joinRoom(url: string, roomId: string, sub: string, options?: WebSocket.ClientOptions) {
   const client = new Client(url, options);
   await client.open();
-  const ticket = signSessionToken({ sub, name: sub, image: null, guest: false, room: roomId }, SECRET);
-  client.send({ type: "join", roomId, ticket });
+  client.ticket = signSessionToken({ sub, name: sub, image: null, guest: false, room: roomId }, SECRET);
+  client.send({ type: "join", roomId, ticket: client.ticket });
   await client.until(() => client.state !== null);
   return client;
 }
@@ -108,7 +109,7 @@ test("a handler that throws or rejects does not take the server down", async () 
       [id, "presence.voice", "async boom"],
     ],
   );
-  assert.ok(!JSON.stringify(logs).includes("ticket"), "never logs message contents");
+  assert.ok(!JSON.stringify(logs).includes(client.ticket), "never logs the ticket");
 
   client.send({ type: "ping", clientTime: 1 });
   await client.until(() => client.messages.some((message) => message.type === "pong"));
