@@ -96,6 +96,10 @@ for (let i = 1; i <= 9; i++) await say(fp, `flood ${i}`);
 check(await visible(fp.getByRole("status").getByText(/too fast/)), "sending too fast shows a notice");
 await sleep(500);
 check((await texts(op)).filter((text) => text.startsWith("flood")).length < 9, "and not every line got through");
+const restored = await fp
+  .waitForFunction(() => document.querySelector("input[aria-label=Message]")?.value === "flood 9", null, { timeout: 5000 })
+  .then(() => true, () => false);
+check(restored, "the refused line goes back into the message box");
 
 await browser.close();
 const failed = results.filter((result) => !result.ok);

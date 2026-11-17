@@ -6,20 +6,33 @@ import { Avatar } from "./Avatar";
 import { useRoom } from "./RoomProvider";
 
 export function Chat() {
-  const { chat, sendChat, memberById } = useRoom();
+  const { chat, sendChat, memberById, lastError, self } = useRoom();
   const [draft, setDraft] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
-  const lastId = chat.at(-1)?.id;
+  // The last line sent, until it comes back: if the server refuses it instead (too fast), it goes back in the box.
+  const pending = useRef<{ text: string; at: number } | null>(null);
+  const last = chat.at(-1);
+  const lastId = last?.id;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [lastId]);
+    if (last?.from.id === self.id) pending.current = null;
+  }, [lastId, last?.from.id, self.id]);
+
+  useEffect(() => {
+    const sent = pending.current;
+    if (!lastError || !sent || lastError.at < sent.at) return;
+    pending.current = null;
+    setDraft((current) => current || sent.text);
+  }, [lastError]);
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
     const text = draft.trim();
     if (!text) return;
-    if (sendChat(text)) setDraft("");
+    if (!sendChat(text)) return;
+    pending.current = { text, at: Date.now() };
+    setDraft("");
   }
 
   return (
