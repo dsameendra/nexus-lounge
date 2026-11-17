@@ -14,7 +14,7 @@ await context.route("https://player.kick.com/**", (route) => { hits.push(route.r
 await p.goto(BASE); await p.click("text=Create room"); await p.waitForURL(/\/room\//);
 await p.getByRole("button", { name: "Join room" }).click();
 const add = async (url, mode) => {
-  await p.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
+  await p.getByRole("button", { name: /(?:Add a stream|Add)$/ }).first().click();
   await p.fill("input[placeholder='Paste a YouTube, Twitch or Kick link']", url);
   return mode;
 };

@@ -16,7 +16,7 @@ await page.goto(BASE); await page.click("text=Create room"); await page.waitForU
 await page.goto(`${page.url()}?debug`);
 await page.getByRole("button", { name: "Join room" }).click();
 const add = async (url) => {
-  await page.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
+  await page.getByRole("button", { name: /(?:Add a stream|Add)$/ }).first().click();
   await page.fill("input[placeholder='Paste a YouTube, Twitch or Kick link']", url);
   await page.getByRole("button", { name: "Add to library" }).click();
   await sleep(1500);

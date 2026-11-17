@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, fstatSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -77,9 +77,13 @@ test("export, write, restore: the rooms come back equal, with only live presence
 
   const path = join(dir, "round-trip.json");
   snapshot.writeSnapshot(path);
-  assert.equal(statSync(path).mode & 0o777, 0o600, "only the owner can read it");
+  const fd = openSync(path, "r");
+  const { mode } = fstatSync(fd);
+  const written = readFileSync(fd, "utf8");
+  closeSync(fd);
+  assert.equal(mode & 0o777, 0o600, "only the owner can read it");
   assert.deepEqual(readdirSync(dir).filter((name) => name.endsWith(".tmp")), [], "no temp file is left behind");
-  assert.ok(!readFileSync(path, "utf8").includes("s3cret"), "the password itself is never written");
+  assert.ok(!written.includes("s3cret"), "the password itself is never written");
 
   for (const room of rooms.exportRooms()) rooms.adminCloseRoom(room.info.id);
   assert.equal(rooms.hasRoom(id), false);

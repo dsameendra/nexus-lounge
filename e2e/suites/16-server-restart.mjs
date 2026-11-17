@@ -57,7 +57,7 @@ try {
   await op.waitForURL(/\/room\//);
   const url = op.url();
   await op.getByRole("button", { name: "Join room" }).click();
-  await op.getByRole("button", { name: /Add a stream|Add$/ }).first().click();
+  await op.getByRole("button", { name: /(?:Add a stream|Add)$/ }).first().click();
   await op.fill("input[placeholder='Paste a YouTube, Twitch or Kick link']", "https://www.youtube.com/watch?v=jNQXAC9IVRw");
   await op.getByRole("button", { name: "Play for everyone" }).click();
   const streams = op.locator("section[aria-label='Streams'] li");
