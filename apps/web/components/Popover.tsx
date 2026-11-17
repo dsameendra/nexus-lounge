@@ -30,7 +30,7 @@ export function Popover({
   // The trigger, when the menu was opened from the keyboard (it shows its focus ring). Pointer use keeps focus where it was.
   const [keyboard] = useState(() => {
     const active = document.activeElement;
-    return active instanceof HTMLElement && active.matches(":focus-visible") ? active : null;
+    return active instanceof HTMLButtonElement && active.matches(":focus-visible") ? active : null;
   });
 
   useLayoutEffect(() => {

@@ -116,7 +116,7 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
       socket.onclose = (event) => {
         clearInterval(pingTimer);
         if (closed) return;
-        // A planned restart reconnects like any other close; a "server restarting" notice would branch here.
+        // A planned restart reconnects like any other close, starting the backoff over; a "server restarting" notice would branch here.
         if (event.code === CLOSE_SERVICE_RESTART) attempt = 0;
         setStatus("reconnecting");
         retryTimer = setTimeout(connect, reconnectDelay(attempt++));
