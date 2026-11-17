@@ -14,6 +14,7 @@ export default defineConfig([
     "**/dist/",
     "**/next-env.d.ts",
     "e2e/.out/",
+    "**/.tmp-*/",
     ".claude/",
     "**/* 2.*",
   ]),
