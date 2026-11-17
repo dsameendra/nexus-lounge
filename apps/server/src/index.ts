@@ -5,9 +5,9 @@ import { z } from "zod";
 import { MEMBER_REF, ROOM_ID, verifyAdminRequest, type AdminAct } from "@nexus/shared/admin-token";
 import { adminEnabled, adminIds, config } from "./config.ts";
 import { closeVoiceRoom, createLivekitToken, reconcileVoice, removeFromVoice } from "./livekit.ts";
-import { activeRoomOf, adminCloseRoom, adminOverview, adminRemoveMember, blockedRemovals, hasRoom, roomCount, checkEntry, checkRoomAccess, forgetUser, createRoom, getRoom, isMember, pruneReactionHistory, pruneStalePending, publishInputs, requestEntry } from "./rooms.ts";
-import { allowAttempt, approvePairing, dropPairings, createPairing, mintCredentials, pollPairing } from "./tv.ts";
-import { sweepEmptyRooms } from "./rooms.ts";
+import { activeRoomOf, adminCloseRoom, adminOverview, adminRemoveMember, blockedRemovals, hasRoom, roomCount, checkEntry, checkRoomAccess, forgetUser, createRoom, getRoom, isMember, pruneReactionHistory, pruneStalePending, publishInputs, requestEntry, sweepEmptyRooms } from "./rooms.ts";
+import { approvePairing, dropPairings, createPairing, mintCredentials, pollPairing } from "./tv.ts";
+import { allowAttempt } from "./rate-limit.ts";
 import { clientIp } from "./client-ip.ts";
 import { attachWebSocket } from "./ws.ts";
 
@@ -112,18 +112,25 @@ app.get<{ Params: { id: string } }>("/rooms/:id", async (request, reply) => {
   return room;
 });
 
-app.post<{ Params: { id: string } }>("/rooms/:id/livekit-token", async (request, reply) => {
+function roomAccess(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
   const user = authenticate(request);
-  if (!user) return reply.code(401).send({ error: "Unauthorized" });
+  if (!user) return { reply: reply.code(401).send({ error: "Unauthorized" }) };
   const room = roomIdSchema.safeParse(request.params.id).success ? getRoom(request.params.id) : undefined;
-  if (!room) return reply.code(404).send({ error: "Room not found" });
+  if (!room) return { reply: reply.code(404).send({ error: "Room not found" }) };
   const body = joinRoomRequestSchema.safeParse(request.body ?? {});
-  if (!body.success) return reply.code(400).send({ error: "Invalid request" });
+  if (!body.success) return { reply: reply.code(400).send({ error: "Invalid request" }) };
   if (body.data.password && (!allowAttempt(`pw:${user.sub}:${room.id}`, 8) || !allowAttempt(`pwip:${clientIp(request)}:${room.id}`, 30))) {
-    return reply.code(429).send({ error: "Too many attempts. Wait a moment." });
+    return { reply: reply.code(429).send({ error: "Too many attempts. Wait a moment." }) };
   }
   const access = checkRoomAccess(room.id, user.sub, body.data.password);
-  if (access === "password_required" || access === "wrong_password") return reply.code(403).send({ error: access });
+  if (access === "password_required" || access === "wrong_password") return { reply: reply.code(403).send({ error: access }) };
+  return { user, room };
+}
+
+app.post<{ Params: { id: string } }>("/rooms/:id/livekit-token", async (request, reply) => {
+  const access = roomAccess(request, reply);
+  if ("reply" in access) return access.reply;
+  const { user, room } = access;
   const entry = requestEntry(room.id, user);
   if (entry === "removed" || entry === "declined" || entry === "locked" || entry === "closed") return reply.code(403).send({ error: entry });
   if (entry === "pending") return reply.code(202).send({ status: "pending" });
@@ -165,17 +172,9 @@ app.post<{ Params: { id: string } }>("/rooms/:id/tv/approve", async (request, re
 });
 
 app.post<{ Params: { id: string } }>("/rooms/:id/tv/session", async (request, reply) => {
-  const user = authenticate(request);
-  if (!user) return reply.code(401).send({ error: "Unauthorized" });
-  const room = roomIdSchema.safeParse(request.params.id).success ? getRoom(request.params.id) : undefined;
-  if (!room) return reply.code(404).send({ error: "Room not found" });
-  const body = joinRoomRequestSchema.safeParse(request.body ?? {});
-  if (!body.success) return reply.code(400).send({ error: "Invalid request" });
-  if (body.data.password && (!allowAttempt(`pw:${user.sub}:${room.id}`, 8) || !allowAttempt(`pwip:${clientIp(request)}:${room.id}`, 30))) {
-    return reply.code(429).send({ error: "Too many attempts. Wait a moment." });
-  }
-  const access = checkRoomAccess(room.id, user.sub, body.data.password);
-  if (access === "password_required" || access === "wrong_password") return reply.code(403).send({ error: access });
+  const access = roomAccess(request, reply);
+  if ("reply" in access) return access.reply;
+  const { user, room } = access;
   const entry = checkEntry(room.id, user);
   if (entry === "pending") return reply.code(403).send({ error: "not_admitted" });
   if (entry !== "ok") return reply.code(403).send({ error: entry });
