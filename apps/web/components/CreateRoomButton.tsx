@@ -36,6 +36,7 @@ export function CreateRoomButton() {
         onChange={(event) => setName(event.target.value)}
         maxLength={40}
         placeholder="Room name (optional)"
+        aria-label="Name for the new room (optional)"
         className="h-12 w-full rounded-xl bg-panel-2 px-4 text-base outline-none placeholder:text-label-3 focus:ring-2 focus:ring-accent"
       />
       <input
@@ -44,6 +45,7 @@ export function CreateRoomButton() {
         onChange={(event) => setPassword(event.target.value)}
         maxLength={64}
         placeholder="Room password (optional)"
+        aria-label="Password for the new room (optional)"
         className="h-12 w-full rounded-xl bg-panel-2 px-4 text-base outline-none placeholder:text-label-3 focus:ring-2 focus:ring-accent"
       />
       <button

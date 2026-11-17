@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { focusables, returnFocus } from "./focus";
 
 export function Popover({
   x,
@@ -26,6 +27,11 @@ export function Popover({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+  // The trigger, when the menu was opened from the keyboard (it shows its focus ring). Pointer use keeps focus where it was.
+  const [keyboard] = useState(() => {
+    const active = document.activeElement;
+    return active instanceof HTMLElement && active.matches(":focus-visible") ? active : null;
+  });
 
   useLayoutEffect(() => {
     const box = ref.current?.getBoundingClientRect();
@@ -36,6 +42,15 @@ export function Popover({
       top: Math.max(margin, Math.min(placement === "above" ? y - box.height : y, window.innerHeight - box.height - margin)),
     });
   }, [x, y, placement]);
+
+  // From the keyboard, focus moves to the first item once the menu is placed, and back to the trigger on close.
+  const placed = position !== null;
+  useEffect(() => {
+    const menu = ref.current;
+    if (!keyboard || !placed || !menu) return;
+    focusables(menu)[0]?.focus({ preventScroll: true });
+    return () => returnFocus(keyboard, menu);
+  }, [keyboard, placed]);
 
   useEffect(() => {
     const away = (event: Event) => {
