@@ -5,7 +5,7 @@ export const metadata: Metadata = { title: "Privacy Policy · Nexus Lounge" };
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="26 October 2026">
+    <LegalPage title="Privacy Policy" updated="17 November 2026">
       <p>Nexus Lounge keeps as little about you as it can. There is no user database: this page explains exactly what is processed and for how long.</p>
 
       <section>
@@ -28,6 +28,9 @@ export default function PrivacyPage() {
         <ul>
           <li>Your sign-in lives in an encrypted session cookie in your browser. It isn&apos;t stored in a database.</li>
           <li>Rooms are kept in the server&apos;s memory only: members, chat messages, the stream list and queue, and moderation state. They are removed when the room ends and when the service restarts.</li>
+          <li>
+            Chat messages go through our server, not through LiveKit. The room keeps its last 100 messages, each with the sender&apos;s display name and ID and the time, for as long as the room exists, so people who join later or reload see them. If the operator turns on room snapshots, which keep rooms across a restart, these messages are also written to the snapshot file on the server until the room ends.
+          </li>
           <li>
             The operator can see, live, which rooms exist and who is in them (display name, whether signed in with Discord, room name and whether it has a password). The operator cannot see chat messages, passwords or voice. The operator can also close a room or remove a person from it. This view is not stored. The server's logs record only that an admin looked, with a shortened IP address, and hosting logs are kept by Railway for a limited time.
           </li>
@@ -57,7 +60,7 @@ export default function PrivacyPage() {
         <ul>
           <li>Change your display name and avatar, or sign out, from the account page.</li>
           <li>
-            Delete your account from the account page (while you&apos;re not in a room). This signs you out and removes your profile and your membership records from rooms. Because there is no database, there is nothing else to erase; signing in again with Discord simply starts fresh.
+            Delete your account from the account page (while you&apos;re not in a room). This signs you out and removes your profile, your membership records and your chat messages from rooms. Because there is no database, there is nothing else to erase; signing in again with Discord simply starts fresh.
           </li>
           <li>You can also remove the app&apos;s access from Discord under User Settings, Authorized Apps.</li>
         </ul>

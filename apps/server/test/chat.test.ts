@@ -232,3 +232,19 @@ test("TVs neither send nor receive; strangers and removed people get nothing", a
   assert.deepEqual(back.errors, ["You were removed from this room"]);
   [host, tv, stranger, back].forEach((client) => client.socket.close());
 });
+
+test("deleting an account removes that person's lines from the history", async () => {
+  const id = await createRoom("host");
+  const host = await join(id, "host");
+  const bob = await join(id, "bob");
+  bob.say("mine");
+  host.say("yours");
+  await host.until(() => host.lines.length === 2);
+  bob.socket.close();
+  await host.until(() => host.state!.members.length === 1);
+  const deleted = await fetch(`${base}/account/delete`, { method: "POST", headers: { authorization: bearer("bob").authorization } });
+  assert.equal(deleted.status, 200);
+  const late = await join(id, "late");
+  assert.deepEqual(late.history[0]!.map((line) => line.text), ["yours"]);
+  [host, late].forEach((client) => client.socket.close());
+});
