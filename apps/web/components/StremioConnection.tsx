@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DEFAULT_SERVER, normalizeServerUrl, statusMessage, useStremio } from "@/lib/stremio";
+import { DEFAULT_SERVER, statusMessage, useStremio } from "@/lib/stremio";
 import { CheckIcon } from "./Icons";
 
 // Whether this browser can reach the Stremio app on this computer, with the address it should use.

@@ -164,7 +164,7 @@ export function LocalPlayer({
   controlsSlot?: HTMLElement | null;
 }) {
   const files = useLocalFiles();
-  const { clock, send, canControlStream, self, state, isController } = useRoom();
+  const { clock, send, canControlStream, state, isController } = useRoom();
   const { localSound, mode: outputMode, setSound } = useTvOutput();
   const compactScreen = useMediaQuery(COMPACT_SCREEN);
   const phoneLand = useMediaQuery(PHONE_LANDSCAPE);

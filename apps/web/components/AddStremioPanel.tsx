@@ -108,8 +108,6 @@ export function AddStremioPanel({ onClose }: { onClose: () => void }) {
     onClose();
   }
 
-  const kindLabel = parsed?.kind === "torrent" ? "Torrent" : parsed?.kind === "link" ? "Video link" : null;
-
   return (
     <div className="space-y-4">
       <form
