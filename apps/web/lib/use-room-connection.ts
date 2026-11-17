@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { serverMessageSchema, type ClientMessage, type PlaylistItem, type ReactionEmoji, type RoomState } from "@nexus/shared";
+import { mergeChat, serverMessageSchema, type ChatLine, type ClientMessage, type PlaylistItem, type ReactionEmoji, type RoomState } from "@nexus/shared";
 import { reconnectDelay } from "./backoff";
 import { ClockSync } from "./clock";
 
@@ -13,6 +13,9 @@ export interface ReactionEvent {
   from: { id: string; name: string };
 }
 
+// `live` lines arrived while connected; history (on join or reconnect) never counts as unread.
+export type ChatEntry = ChatLine & { live?: boolean };
+
 export interface RoomConnection {
   state: RoomState | null;
   status: ConnectionStatus;
@@ -22,6 +25,8 @@ export interface RoomConnection {
   playlistItems: Record<string, PlaylistItem[]>;
   openPlaylist: (listId: string) => void;
   onReaction: (listener: (reaction: ReactionEvent) => void) => () => void;
+  chat: ChatEntry[];
+  sendChat: (text: string) => boolean;
 }
 
 const INITIAL_PINGS = 8;
@@ -34,6 +39,7 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [lastError, setLastError] = useState<RoomConnection["lastError"]>(null);
   const [playlistItems, setPlaylistItems] = useState<Record<string, PlaylistItem[]>>({});
+  const [chat, setChat] = useState<ChatEntry[]>([]);
   const clockRef = useRef<ClockSync>(new ClockSync());
   const socketRef = useRef<WebSocket | null>(null);
   const reactionListeners = useRef(new Set<(reaction: ReactionEvent) => void>());
@@ -48,6 +54,13 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
   const send = useCallback((message: ClientMessage) => {
     const socket = socketRef.current;
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+  }, []);
+
+  const sendChat = useCallback((text: string) => {
+    const socket = socketRef.current;
+    if (socket?.readyState !== WebSocket.OPEN) return false;
+    socket.send(JSON.stringify({ type: "chat.send", text } satisfies ClientMessage));
+    return true;
   }, []);
 
   const openPlaylist = useCallback(
@@ -97,6 +110,8 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
           setStatus("open");
         }
         if (message.type === "playlist.items") setPlaylistItems((previous) => ({ ...previous, [message.listId]: message.items }));
+        if (message.type === "chat") setChat((previous) => mergeChat(previous, [{ ...message.line, live: true }]));
+        if (message.type === "chat.history") setChat((previous) => mergeChat(previous, message.lines));
         if (message.type === "reaction") reactionListeners.current.forEach((listener) => listener(message));
         if (message.type === "kicked") {
           closed = true;
@@ -144,5 +159,5 @@ export function useRoomConnection(roomId: string, ticket: string, wsUrl: string)
     };
   }, [roomId, ticket, wsUrl]);
 
-  return { state, status, clock: clockRef.current, send, lastError, playlistItems, openPlaylist, onReaction };
+  return { state, status, clock: clockRef.current, send, lastError, playlistItems, openPlaylist, onReaction, chat, sendChat };
 }

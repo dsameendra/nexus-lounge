@@ -44,11 +44,13 @@ class Client {
   lines: ChatLine[] = [];
   history: ChatLine[][] = [];
   kicked = false;
+  order: string[] = [];
   private waiters: (() => void)[] = [];
 
   constructor() {
     this.socket.on("message", (raw) => {
       const message = JSON.parse(raw.toString()) as ServerMessage;
+      this.order.push(message.type);
       if (message.type === "state") this.state = message.state;
       if (message.type === "error") this.errors.push(message.message);
       if (message.type === "kicked") this.kicked = true;
@@ -86,10 +88,13 @@ async function connectWith(roomId: string, ticket: string) {
   return client;
 }
 
-async function join(roomId: string, sub: string, name = sub) {
+async function ticket(roomId: string, sub: string, name = sub) {
   const response = await fetch(`${base}/rooms/${roomId}/livekit-token`, { method: "POST", headers: bearer(sub, name), body: "{}" });
-  const { wsTicket } = (await response.json()) as { wsTicket: string };
-  const client = await connectWith(roomId, wsTicket);
+  return ((await response.json()) as { wsTicket: string }).wsTicket;
+}
+
+async function join(roomId: string, sub: string, name = sub) {
+  const client = await connectWith(roomId, await ticket(roomId, sub, name));
   await client.until(() => client.history.length === 1);
   return client;
 }
@@ -122,6 +127,7 @@ test("history is sent once on join, in order, and is not part of the state", asy
   const late = await join(id, "late");
   assert.deepEqual(late.history[0]!.map((line) => line.text), ["one", "two", "three"]);
   assert.deepEqual(late.history[0], host.lines);
+  assert.equal(late.order[0], "chat.history", "history arrives before the first state");
   assert.equal("chat" in (late.state as object), false, "the room state does not carry chat");
   host.say("four");
   await late.until(() => late.lines.length === 1);
@@ -155,7 +161,7 @@ test("validation: empty, too long and invisible characters", async () => {
 
   host.say("   ");
   await host.until(() => host.errors.length === 1);
-  host.say("​‍﻿ ‮");
+  host.say("\u200b\u200d\ufeff \u202e");
   await host.until(() => host.errors.length === 2);
   host.say("x".repeat(501));
   await host.until(() => host.errors.length === 3);
@@ -167,7 +173,7 @@ test("validation: empty, too long and invisible characters", async () => {
   await pause();
   assert.equal(host.lines.length, 0);
 
-  host.say(`hi​ there\u0007‮!${" ".repeat(600)}`);
+  host.say(`hi\u200b there\u0007\u202e!${" ".repeat(600)}`);
   await host.until(() => host.lines.length === 1);
   assert.equal(host.lines[0]!.text, "hi there!", "invisible and control characters removed, then trimmed");
   host.say("y".repeat(500));
@@ -193,7 +199,8 @@ test("each person is rate limited", async () => {
 test("TVs neither send nor receive; strangers and removed people get nothing", async () => {
   const id = await createRoom("host");
   const host = await join(id, "host");
-  const alice = await join(id, "alice");
+  const aliceTicket = await ticket(id, "alice");
+  const alice = await connectWith(id, aliceTicket);
   host.say("before");
   await host.until(() => host.lines.length === 1);
 
@@ -219,5 +226,9 @@ test("TVs neither send nor receive; strangers and removed people get nothing", a
   assert.deepEqual(host.lines.map((line) => line.text), ["before", "after"], "the TV and the stranger added nothing");
   assert.deepEqual(alice.lines.map((line) => line.text), ["before"], "a removed person gets no later lines");
   assert.equal(tv.lines.length, 0, "a TV gets no lines");
-  [host, tv, stranger].forEach((client) => client.socket.close());
+  const back = await connectWith(id, aliceTicket);
+  await pause();
+  assert.deepEqual(back.history, [], "a removed person's old ticket gets no history");
+  assert.deepEqual(back.errors, ["You were removed from this room"]);
+  [host, tv, stranger, back].forEach((client) => client.socket.close());
 });

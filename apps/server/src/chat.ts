@@ -38,8 +38,9 @@ export function sendChat(roomId: string, user: SessionPayload, text: string): Re
   return { ok: true };
 }
 
+// Sent just before the first state, so the chat opens with its history instead of announcing it as new.
 export function sendChatHistory(roomId: string, user: SessionPayload, socket: WebSocket) {
   const room = chatRoom(roomId);
-  if (!room || user.tv || socket.readyState !== socket.OPEN) return;
+  if (!room || user.tv || room.blocked.get(user.sub) === "removed" || socket.readyState !== socket.OPEN) return;
   socket.send(JSON.stringify({ type: "chat.history", lines: room.chat } satisfies ServerMessage));
 }

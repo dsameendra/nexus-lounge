@@ -5,11 +5,11 @@ import { appendChat, cleanChatText, mergeChat, type ChatLine } from "../src/chat
 const line = (id: string, at: number): ChatLine => ({ id, from: { id: "a", name: "A" }, text: id, at });
 
 test("cleanChatText trims, strips invisible characters and bounds the length", () => {
-  assert.equal(cleanChatText("  hi​\u0000 there ‮ "), "hi there");
-  assert.equal(cleanChatText(" ​﻿ "), null);
+  assert.equal(cleanChatText("  hi\u200b\u0000 there \u202e "), "hi there");
+  assert.equal(cleanChatText(" \u200b\ufeff "), null);
   assert.equal(cleanChatText("x".repeat(500)), "x".repeat(500));
   assert.equal(cleanChatText("x".repeat(501)), null);
-  assert.equal(cleanChatText(`${"x".repeat(500)}​​`), "x".repeat(500), "invisible padding doesn't count");
+  assert.equal(cleanChatText(`${"x".repeat(500)}\u200b\u200b`), "x".repeat(500), "invisible padding doesn't count");
   assert.equal(cleanChatText("emoji 👋 stays"), "emoji 👋 stays");
 });
 

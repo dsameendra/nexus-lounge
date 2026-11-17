@@ -168,12 +168,12 @@ export function attachWebSocket(server: Server, { heartbeatMs = 30_000, handler 
           if (!user || user.room !== message.roomId) {
             return send(socket, { type: "error", message: "Unauthorized", fatal: true });
           }
+          sendChatHistory(message.roomId, user, socket);
           const joined = rooms.connect(message.roomId, user, socket);
           if (joined !== "ok") {
             return send(socket, { type: "error", message: joined === "removed" ? "You were removed from this room" : "Room not found", fatal: true });
           }
           session = { roomId: message.roomId, user };
-          sendChatHistory(message.roomId, user, socket);
           return;
         }
 
