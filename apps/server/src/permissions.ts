@@ -1,4 +1,5 @@
 import { applyPermissions } from "./livekit.ts";
+import { guard } from "./log.ts";
 import * as rooms from "./rooms.ts";
 
 export function syncPermissions(roomId: string, user: { sub: string; guest: boolean }) {
@@ -13,5 +14,5 @@ export async function stopScreenShare(roomId: string, targetId: string) {
   const target = rooms.connectedUsers(roomId).find((user) => user.sub === targetId);
   if (!target) return;
   await applyPermissions(roomId, targetId, { ...rooms.publishInputs(roomId, target), canShare: false, canFeed: false });
-  setTimeout(() => void syncPermissions(roomId, target), 900);
+  setTimeout(() => guard("syncPermissions", () => syncPermissions(roomId, target), { roomId }), 900);
 }

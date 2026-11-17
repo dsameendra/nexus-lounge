@@ -9,9 +9,12 @@ import { activeRoomOf, adminCloseRoom, adminOverview, adminRemoveMember, blocked
 import { approvePairing, dropPairings, createPairing, mintCredentials, pollPairing } from "./tv.ts";
 import { allowAttempt } from "./rate-limit.ts";
 import { clientIp } from "./client-ip.ts";
+import { guard, setLogger } from "./log.ts";
+import { runShutdownHooks } from "./shutdown.ts";
 import { attachWebSocket } from "./ws.ts";
 
 const app = Fastify({ logger: true, trustProxy: (_address: string, hop: number) => hop < config.TRUST_PROXY_HOPS });
+setLogger(app.log);
 
 function authenticate(request: FastifyRequest) {
   const header = request.headers.authorization;
@@ -87,7 +90,7 @@ if (adminEnabled) {
     return actionReply(reply).send({ ok: true, voice });
   });
 
-  setInterval(() => void reconcileVoice(hasRoom, blockedRemovals()), 30_000).unref();
+  setInterval(() => guard("reconcileVoice", () => reconcileVoice(hasRoom, blockedRemovals())), 30_000).unref();
 }
 
 app.get("/health", async () => ({ ok: true }));
@@ -181,9 +184,41 @@ app.post<{ Params: { id: string } }>("/rooms/:id/tv/session", async (request, re
   return mintCredentials(room.id, user.name, user.sub);
 });
 
-attachWebSocket(app.server);
-setInterval(sweepEmptyRooms, 5 * 60 * 1000).unref();
-setInterval(pruneStalePending, 5000).unref();
-setInterval(pruneReactionHistory, 30_000).unref();
+const sockets = attachWebSocket(app.server);
+setInterval(() => guard("sweepEmptyRooms", sweepEmptyRooms), 5 * 60 * 1000).unref();
+setInterval(() => guard("pruneStalePending", pruneStalePending), 5000).unref();
+setInterval(() => guard("pruneReactionHistory", pruneReactionHistory), 30_000).unref();
+
+const RESTARTING = [1012, "Server restarting"] as const;
+// app.close() answers new requests with 503 from here on, then stops listening once this hook returns.
+app.addHook("preClose", async () => {
+  sockets.stopAccepting(...RESTARTING);
+  await runShutdownHooks();
+  await sockets.closeAll(...RESTARTING);
+});
+
+let stopping = false;
+async function shutdown(signal: NodeJS.Signals) {
+  if (stopping) return;
+  stopping = true;
+  app.log.info({ signal }, "shutting down");
+  setTimeout(() => {
+    app.log.error("shutdown timed out");
+    process.exit(1);
+  }, 5000).unref();
+  try {
+    await app.close();
+  } catch (error) {
+    app.log.error({ err: error }, "shutdown failed");
+    process.exit(1);
+  }
+  process.exit(0);
+}
 
 await app.listen({ port: config.PORT, host: "0.0.0.0" });
+
+// Rooms live only in this process, so a stray error must not take every room down with it.
+process.on("unhandledRejection", (reason) => app.log.error({ err: reason }, "unhandled rejection"));
+process.on("uncaughtException", (error) => app.log.fatal({ err: error }, "uncaught exception"));
+process.on("SIGTERM", (signal) => void shutdown(signal));
+process.on("SIGINT", (signal) => void shutdown(signal));
