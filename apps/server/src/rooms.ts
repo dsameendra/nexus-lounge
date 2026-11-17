@@ -28,6 +28,7 @@ import {
 import type { SessionPayload } from "@nexus/shared/session-token";
 import { memberRef } from "@nexus/shared/admin-token";
 import { fetchPlaylist } from "./playlists.ts";
+import { guard } from "./log.ts";
 import { fallbackTitle, fetchTitle } from "./titles.ts";
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -261,11 +262,12 @@ export function addStream(roomId: string, user: SessionPayload, source: MediaSou
   broadcast(roomId);
   if (device) return ok;
 
-  void fetchTitle(source).then((title) => {
+  guard("fetchTitle", async () => {
+    const title = await fetchTitle(source);
     if (!title || !room.streams.includes(stream)) return;
     stream.title = title;
     broadcast(roomId);
-  });
+  }, { roomId });
   return ok;
 }
 

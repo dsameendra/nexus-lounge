@@ -1,4 +1,4 @@
-import { launch, newPage, sleep } from "../lib.mjs";
+import { launch, newPage } from "../lib.mjs";
 import { mintSession } from "../session.mjs";
 const BASE = process.env.BASE ?? "http://localhost:3001";
 const results = [];

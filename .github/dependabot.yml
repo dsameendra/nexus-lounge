@@ -5,7 +5,31 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        patterns: ["*"]
+        exclude-patterns: [next-auth]
+        update-types: [minor, patch]
+  - package-ecosystem: npm
+    directory: /e2e
+    schedule:
+      interval: monthly
+    groups:
+      e2e-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    groups:
+      github-actions:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directories: [/apps/server, /apps/web]
+    schedule:
+      interval: monthly
+    ignore:
+      # Stay on the Node LTS line the app is tested with.
+      - dependency-name: node
+        update-types: [version-update:semver-major]

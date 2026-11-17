@@ -173,6 +173,7 @@ export function AddStreamSheet({ onClose }: { onClose: () => void }) {
             value={value}
             onChange={(event) => setValue(event.target.value)}
             placeholder="Paste a YouTube, Twitch or Kick link"
+            aria-label="YouTube, Twitch or Kick link"
             inputMode="url"
             autoCapitalize="off"
             autoCorrect="off"

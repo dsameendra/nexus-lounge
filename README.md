@@ -177,6 +177,10 @@ Two services built from the Dockerfiles in `apps/server` and `apps/web`, auto-de
 
 Every server deploy or restart ends all rooms, because they live in memory. Keep the server at a single instance.
 
+## Contributing
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks and the workflow.
+
 ## License
 
 Copyright (C) 2026 dsameendra

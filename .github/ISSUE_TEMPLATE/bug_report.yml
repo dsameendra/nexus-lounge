@@ -1,0 +1,69 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report security problems here. Use the private reporting link on the issue chooser instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Describe the problem. Screenshots or console errors help.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create a room
+        2. Add a stream
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: input
+    id: browser-device
+    attributes:
+      label: Browser and device
+      description: Browser and version, operating system, and device (phone, tablet, laptop, TV).
+      placeholder: Safari 18 on iPhone 15, Chrome 130 on Windows 11
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Source type
+      description: What the room was playing when it went wrong.
+      options:
+        - YouTube
+        - Twitch
+        - Kick
+        - Screen share
+        - Local video file
+        - Stremio or magnet
+        - Video link
+        - Not related to a stream
+    validations:
+      required: true
+  - type: dropdown
+    id: instance
+    attributes:
+      label: Instance
+      options:
+        - Hosted (nexuslounge.party)
+        - Self-hosted
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: For self-hosted instances, include how you run it. Do not paste secrets.

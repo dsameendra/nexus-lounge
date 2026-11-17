@@ -83,7 +83,7 @@ const rowAction = async (page, index, name) => {
   await row.getByRole("button", { name: /Actions for/ }).click();
   await page.getByRole("menuitem", { name }).click();
 };
-const openMenu = async (locator, page) => { await locator.scrollIntoViewIfNeeded(); await sleep(500); await locator.getByRole("button", { name: "More actions" }).click(); };
+const openMenu = async (locator) => { await locator.scrollIntoViewIfNeeded(); await sleep(500); await locator.getByRole("button", { name: "More actions" }).click(); };
 const idAt = async (page, index) => page.locator("section[aria-label='Up next'] li").nth(index).getAttribute("data-queue-id");
 const titleAt = async (page, index) => (await page.locator("section[aria-label='Up next'] li").nth(index).locator("p").first().innerText()).trim();
 const third = await idAt(op, 2);
@@ -111,11 +111,11 @@ check(await until(async () => (await queueRows.count()) === before - 2), "Remove
 
 console.log("Live streams are not queueable");
 const twitchCard = op.locator("section[aria-label='Streams'] li", { hasText: CHANNEL }).first();
-await openMenu(twitchCard, op);
+await openMenu(twitchCard);
 check((await op.getByRole("menuitem", { name: "Add to queue" }).count()) === 0, "a live stream has no Add to queue action");
 await op.keyboard.press("Escape");
 const zoo = op.locator("section[aria-label='Streams'] li", { hasText: "Me at the zoo" }).first();
-await openMenu(zoo, op);
+await openMenu(zoo);
 await op.getByRole("menuitem", { name: "Play next" }).click();
 check(await until(async () => (await titleAt(op, 0)).includes("Me at the zoo")), "a library video can be queued with Play next (goes to the front)");
 await op.getByRole("button", { name: /^Clear$/ }).click();
@@ -130,7 +130,7 @@ check(await until(async () => (await op.getByRole("button", { name: /Official Bl
 console.log("Auto-advance uses the queue");
 await addStream(op, "https://www.youtube.com/watch?v=jNQXAC9IVRw", "Play for everyone");
 const bunny = op.locator("section[aria-label='Streams'] li", { hasText: "Big Buck Bunny" }).first();
-await openMenu(bunny, op);
+await openMenu(bunny);
 await op.getByRole("menuitem", { name: "Add to queue" }).click();
 check(await until(async () => (await queueRows.count()) === 1), "Big Buck Bunny is queued behind the 19 second zoo video");
 check(await until(async () => (await op.locator("section[aria-label='Streams'] li", { hasText: "Up next" }).first().innerText()).includes("Big Buck")), "its card is marked Up next");

@@ -7,6 +7,7 @@ COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile --filter @nexus/web...
 COPY packages/shared packages/shared
 COPY apps/web apps/web
-RUN pnpm --filter @nexus/web build
+RUN pnpm --filter @nexus/web build && chown -R node:node apps/web/.next
 ENV NODE_ENV=production
+USER node
 CMD ["sh", "-c", "cd apps/web && exec node_modules/.bin/next start -H 0.0.0.0 -p ${PORT:-3000}"]

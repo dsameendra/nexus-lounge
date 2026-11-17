@@ -9,7 +9,8 @@ Virtual watch-party PWA: rooms with LiveKit voice/chat/screen share, synced YouT
 
 ## Commands
 - `pnpm install`, `pnpm dev` (web 3000, server 4000), `pnpm typecheck`, `pnpm build`
-- `pnpm --filter @nexus/shared test`, `pnpm --filter @nexus/server test`
+- `pnpm lint` (ESLint flat config in `eslint.config.mjs`, all packages and `e2e/`; no formatter)
+- `pnpm test` runs every package's `test` script; one package: `pnpm --filter @nexus/server test`
 - `pnpm livekit` runs LiveKit locally (Docker; stop it when not needed).
 
 ## Conventions
@@ -57,7 +58,8 @@ Virtual watch-party PWA: rooms with LiveKit voice/chat/screen share, synced YouT
 - Railway services `server` and `web` are connected to GitHub and deploy on every push to `main`. Config templates and steps: `docs/railway-deploy.md`, `docs/railway/`.
 
 ## Tests
-`pnpm --filter @nexus/shared test`, `pnpm --filter @nexus/server test`, and the browser suites in `e2e/` (`cd e2e && node run.mjs`; see its README). Add an e2e check for UI behaviour, and assert geometry (rects, `elementFromPoint`) rather than eyeballing screenshots.
+`pnpm test` (all packages) and the browser suites in `e2e/` (`cd e2e && node run.mjs`; see its README). Add an e2e check for UI behaviour, and assert geometry (rects, `elementFromPoint`) rather than eyeballing screenshots.
+CI (`.github/workflows/ci.yml`): `check` (required on `main`) runs install, lint, typecheck, test and build; `docker` builds both Dockerfiles (non-root `node` user) and boots them.
 
 ## Manual testing
 Run server and web with a LiveKit instance and Discord keys, or use guest login. Use two browser windows in one room. `AUTH_SECRET` must match between web and server.
