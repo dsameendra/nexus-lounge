@@ -5,7 +5,7 @@ export const metadata: Metadata = { title: "Privacy Policy · Nexus Lounge" };
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="26 October 2026">
+    <LegalPage title="Privacy Policy" updated="17 November 2026">
       <p>Nexus Lounge keeps as little about you as it can. There is no user database: this page explains exactly what is processed and for how long.</p>
 
       <section>
@@ -27,7 +27,7 @@ export default function PrivacyPage() {
         <h2>Where it is kept</h2>
         <ul>
           <li>Your sign-in lives in an encrypted session cookie in your browser. It isn&apos;t stored in a database.</li>
-          <li>Rooms are kept in the server&apos;s memory only: members, chat messages, the stream list and queue, and moderation state. They are removed when the room ends and when the service restarts.</li>
+          <li>Rooms are kept in the server&apos;s memory only: members, chat messages, the stream list and queue, and moderation state. They are removed when the room ends and when the service restarts. A host can give a room a start time; the room is then kept until shortly after that time even when nobody is in it.</li>
           <li>
             The operator can see, live, which rooms exist and who is in them (display name, whether signed in with Discord, room name and whether it has a password). The operator cannot see chat messages, passwords or voice. The operator can also close a room or remove a person from it. This view is not stored. The server's logs record only that an admin looked, with a shortened IP address, and hosting logs are kept by Railway for a limited time.
           </li>
@@ -37,6 +37,9 @@ export default function PrivacyPage() {
           </li>
           <li>
             Video files you add from your own device are never uploaded or stored. The room sees the file&apos;s name, size and length and a short fingerprint (a hash of a few small slices) used to check that two people have the same file. If friends without the file are watching, your browser sends them a live picture and sound through LiveKit, relayed the same way as a screen share and not recorded. On Chrome and Edge the browser can remember which file you picked (a reference kept in your browser, never sent to us) so it can reopen after a refresh; you can clear these on your account page.
+          </li>
+          <li>
+            Recent rooms: the home page lists up to 8 rooms you entered from this browser. For each it keeps the room code, its name and start time as you last saw them, and when you visited, together with your account ID so another person signing in here doesn&apos;t see your list. It is kept in your browser&apos;s local storage, never holds passwords or join tickets, and is cleared when you sign out or delete your account; you can also remove rooms from it one by one. When you open the home page, your browser asks our server once whether each listed room still exists, the same check as joining with a code.
           </li>
           <li>Preferences such as volume, captions, fit or fill and your TV output choice are saved in your browser&apos;s local storage and never sent to us.</li>
         </ul>
